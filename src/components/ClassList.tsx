@@ -15,7 +15,8 @@ import {
   HeartHandshake,
   Check,
   X,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Activity
 } from 'lucide-react';
 import { Student, ClassName, Gender } from '../types';
 import { googleSignIn, initAuth } from '../lib/firebase';
@@ -27,6 +28,7 @@ interface ClassListProps {
   onUpdateStudent: (id: string, student: Partial<Student>) => Promise<void>;
   onDeleteStudent: (id: string) => Promise<void>;
   onGenerateReportCard: (student: Student) => void;
+  onOpenProfile: (student: Student) => void;
   teacherClasses: ClassName[];
   isAdmin: boolean;
 }
@@ -37,6 +39,7 @@ export default function ClassList({
   onUpdateStudent, 
   onDeleteStudent, 
   onGenerateReportCard,
+  onOpenProfile,
   teacherClasses,
   isAdmin
 }: ClassListProps) {
@@ -434,14 +437,23 @@ export default function ClassList({
                 </div>
 
                 {/* Card Action Buttons */}
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-                  <button
-                    onClick={() => onGenerateReportCard(student)}
-                    className="text-indigo-600 font-bold text-xs hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <BookOpen className="h-3 w-3" />
-                    <span>GENERATE REPORT</span>
-                  </button>
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex gap-2.5">
+                    <button
+                      onClick={() => onGenerateReportCard(student)}
+                      className="text-indigo-600 font-bold text-xs hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <BookOpen className="h-3 w-3" />
+                      <span>REPORTS</span>
+                    </button>
+                    <button
+                      onClick={() => onOpenProfile(student)}
+                      className="text-emerald-600 font-bold text-xs hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Activity className="h-3 w-3" />
+                      <span>360° PROFILE</span>
+                    </button>
+                  </div>
 
                   <div className="flex gap-2 items-center">
                     {canModify && (

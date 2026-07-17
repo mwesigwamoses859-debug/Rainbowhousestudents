@@ -1,8 +1,10 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { GoogleGenAI } from '@google/genai';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
+import webpush from 'web-push';
 
 const app = express();
 const PORT = 3000;
@@ -23,6 +25,9 @@ interface DatabaseSchema {
   sms?: any[];
   documents?: any[];
   timetable?: any[];
+  vapidKeys?: { publicKey: string; privateKey: string };
+  pushSubscriptions?: any[];
+  pushAlerts?: any[];
 }
 
 function getDatabase(): DatabaseSchema {
@@ -369,6 +374,12 @@ function getDatabase(): DatabaseSchema {
   if (!parsed.sms) parsed.sms = [];
   if (!parsed.documents) parsed.documents = [];
   if (!parsed.timetable) parsed.timetable = [];
+  if (!parsed.pushSubscriptions) parsed.pushSubscriptions = [];
+  if (!parsed.pushAlerts) parsed.pushAlerts = [];
+  if (!parsed.vapidKeys) {
+    parsed.vapidKeys = webpush.generateVAPIDKeys();
+    fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2));
+  }
   
   return parsed;
 }
@@ -378,7 +389,14 @@ function saveDatabase(data: DatabaseSchema) {
 }
 
 // Ensure database is initialized
-getDatabase();
+const db = getDatabase();
+if (db.vapidKeys) {
+  webpush.setVapidDetails(
+    'mailto:mwesigwamoses859@gmail.com',
+    db.vapidKeys.publicKey,
+    db.vapidKeys.privateKey
+  );
+}
 
 // --- API ROUTES ---
 
@@ -494,6 +512,29 @@ app.post('/api/marks', (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing required mark fields' });
   }
 
+  // Server-side lock check
+  const requesterUsername = req.headers['x-teacher-username'] as string;
+  if (requesterUsername && requesterUsername !== 'admin') {
+    const teacher = db.teachers?.find(t => t.username === requesterUsername);
+    if (teacher) {
+      const student = db.students?.find(s => s.id === studentId);
+      const studentClass = student?.className;
+      if (!studentClass) {
+        return res.status(400).json({ success: false, message: 'Pupil not found in register' });
+      }
+      if (!teacher.classes.includes(studentClass)) {
+        return res.status(403).json({ success: false, message: `Access Denied: Grade ${studentClass} is not assigned to you.` });
+      }
+      if (!teacher.subjects.includes(subject)) {
+        return res.status(403).json({ success: false, message: `Access Denied: Subject ${subject} is not assigned to you.` });
+      }
+      const activeTerms = teacher.activeTerms || [1, 2, 3];
+      if (!activeTerms.includes(Number(term))) {
+        return res.status(403).json({ success: false, message: `Access Denied: Term ${term} is not currently active for you.` });
+      }
+    }
+  }
+
   // Check if mark already exists for student, subject, term, year
   const existingMarkIndex = db.marks.findIndex(
     m => m.studentId === studentId && 
@@ -529,6 +570,31 @@ app.post('/api/marks/bulk', (req, res) => {
   
   if (!Array.isArray(marks)) {
     return res.status(400).json({ success: false, message: 'Expected marks array' });
+  }
+
+  // Server-side lock check
+  const requesterUsername = req.headers['x-teacher-username'] as string;
+  if (requesterUsername && requesterUsername !== 'admin') {
+    const teacher = db.teachers?.find(t => t.username === requesterUsername);
+    if (teacher) {
+      for (const item of marks) {
+        const student = db.students?.find(s => s.id === item.studentId);
+        const studentClass = student?.className;
+        if (!studentClass) {
+          return res.status(400).json({ success: false, message: `Pupil with ID ${item.studentId} not found in register` });
+        }
+        if (!teacher.classes.includes(studentClass)) {
+          return res.status(403).json({ success: false, message: `Access Denied: Grade ${studentClass} is not assigned to you.` });
+        }
+        if (!teacher.subjects.includes(item.subject)) {
+          return res.status(403).json({ success: false, message: `Access Denied: Subject ${item.subject} is not assigned to you.` });
+        }
+        const activeTerms = teacher.activeTerms || [1, 2, 3];
+        if (!activeTerms.includes(Number(item.term))) {
+          return res.status(403).json({ success: false, message: `Access Denied: Term ${item.term} is not currently active for you.` });
+        }
+      }
+    }
   }
 
   marks.forEach(item => {
@@ -682,21 +748,181 @@ app.post('/api/interactions', (req, res) => {
 });
 
 // 9. SMS outbox
+async function sendRealSMS(to: string, message: string): Promise<{ success: boolean; gateway: string; messageId?: string; error?: string }> {
+  // 1. Try Africa's Talking (East Africa's premier SMS gateway, e.g. Uganda)
+  const atApiKey = process.env.AFRICAS_TALKING_API_KEY;
+  const atUsername = process.env.AFRICAS_TALKING_USERNAME;
+  if (atApiKey && atUsername) {
+    try {
+      const isSandbox = atUsername.toLowerCase() === 'sandbox';
+      const url = isSandbox 
+        ? 'https://api.sandbox.africastalking.com/version1/messaging' 
+        : 'https://api.africastalking.com/version1/messaging';
+        
+      const params = new URLSearchParams();
+      params.append('username', atUsername);
+      params.append('to', to);
+      params.append('message', message);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'apiKey': atApiKey,
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString()
+      });
+      
+      if (response.ok) {
+        const data: any = await response.json();
+        const recipients = data?.SMSMessageData?.Recipients || [];
+        if (recipients.length > 0) {
+          const first = recipients[0];
+          const isSuccess = ['Success', 'Pending', 'Success (Sent)'].includes(first.status);
+          if (isSuccess) {
+            return {
+              success: true,
+              gateway: "Africa's Talking",
+              messageId: first.messageId
+            };
+          } else {
+            return {
+              success: false,
+              gateway: "Africa's Talking",
+              error: first.status || 'Failed transmission status'
+            };
+          }
+        } else {
+          return {
+            success: false,
+            gateway: "Africa's Talking",
+            error: 'No recipients returned by gateway'
+          };
+        }
+      } else {
+        const errText = await response.text();
+        return {
+          success: false,
+          gateway: "Africa's Talking",
+          error: `HTTP ${response.status}: ${errText}`
+        };
+      }
+    } catch (err: any) {
+      return {
+        success: false,
+        gateway: "Africa's Talking",
+        error: err.message || String(err)
+      };
+    }
+  }
+
+  // 2. Try Twilio (Alternative international gateway)
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioFrom = process.env.TWILIO_FROM_NUMBER;
+  if (twilioSid && twilioAuthToken && twilioFrom) {
+    try {
+      const url = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
+      const credentials = Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64');
+      
+      const params = new URLSearchParams();
+      params.append('To', to);
+      params.append('From', twilioFrom);
+      params.append('Body', message);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString()
+      });
+      
+      if (response.ok) {
+        const data: any = await response.json();
+        return {
+          success: true,
+          gateway: 'Twilio',
+          messageId: data.sid
+        };
+      } else {
+        const errText = await response.text();
+        return {
+          success: false,
+          gateway: 'Twilio',
+          error: `HTTP ${response.status}: ${errText}`
+        };
+      }
+    } catch (err: any) {
+      return {
+        success: false,
+        gateway: 'Twilio',
+        error: err.message || String(err)
+      };
+    }
+  }
+
+  // 3. Fallback to Sandbox Simulation (for offline local development or when missing credentials)
+  return {
+    success: true,
+    gateway: 'Sandbox Simulator',
+    messageId: `SANDBOX-MSG-${crypto.randomBytes(4).toString('hex').toUpperCase()}`
+  };
+}
+
+app.get('/api/sms/gateway-status', (req, res) => {
+  const hasAT = !!(process.env.AFRICAS_TALKING_API_KEY && process.env.AFRICAS_TALKING_USERNAME);
+  const hasTwilio = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER);
+  
+  let activeGateway = 'Sandbox Simulator';
+  if (hasAT) {
+    activeGateway = "Africa's Talking";
+  } else if (hasTwilio) {
+    activeGateway = 'Twilio';
+  }
+  
+  res.json({
+    activeGateway,
+    hasAT,
+    hasTwilio,
+    atUsername: process.env.AFRICAS_TALKING_USERNAME || null,
+    twilioFrom: process.env.TWILIO_FROM_NUMBER || null
+  });
+});
+
 app.get('/api/sms', (req, res) => {
   const db = getDatabase();
   res.json(db.sms || []);
 });
 
-app.post('/api/sms', (req, res) => {
+app.post('/api/sms', async (req, res) => {
   const db = getDatabase();
   if (!db.sms) db.sms = [];
 
+  const { studentId, guardianName, phoneNumber, messageBody } = req.body;
+  if (!phoneNumber || !messageBody) {
+    return res.status(400).json({ success: false, message: 'phoneNumber and messageBody are required.' });
+  }
+
+  // Send real SMS (or fallback sandbox)
+  const result = await sendRealSMS(phoneNumber, messageBody);
+
   const newSMS = {
-    ...req.body,
-    id: `sms-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
+    id: `sms-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    studentId: studentId || null,
+    guardianName: guardianName || 'Parent / Guardian',
+    phoneNumber,
+    messageBody,
+    status: result.success ? 'Delivered' : 'Failed',
+    gatewayUsed: result.gateway,
+    messageId: result.messageId || null,
+    errorMessage: result.error || null,
+    dateSent: new Date().toISOString().split('T')[0]
   };
 
-  db.sms.push(newSMS);
+  db.sms.unshift(newSMS); // Prepend so it appears at top of outbox logs
   saveDatabase(db);
   res.status(201).json(newSMS);
 });
@@ -769,7 +995,7 @@ app.post('/api/teachers', (req, res) => {
   const db = getDatabase();
   if (!db.teachers) db.teachers = [];
 
-  const { username, name, password, subjects, classes } = req.body;
+  const { username, name, password, subjects, classes, activeTerms } = req.body;
   if (!username || !name) {
     return res.status(400).json({ success: false, message: 'Username and Name are required' });
   }
@@ -780,7 +1006,8 @@ app.post('/api/teachers', (req, res) => {
     name,
     password: password || 'teacher123',
     subjects: subjects || [],
-    classes: classes || []
+    classes: classes || [],
+    activeTerms: activeTerms || [1, 2, 3]
   };
 
   if (existingIndex !== -1) {
@@ -824,6 +1051,130 @@ app.post('/api/students/promote-bulk', (req, res) => {
 
   saveDatabase(db);
   res.json({ success: true, promotedCount: count });
+});
+
+// 15. Push Notifications Subsystem
+app.get('/api/push/vapid-public-key', (req, res) => {
+  const db = getDatabase();
+  if (db.vapidKeys) {
+    res.json({ publicKey: db.vapidKeys.publicKey });
+  } else {
+    res.status(500).json({ success: false, message: 'VAPID keys not configured.' });
+  }
+});
+
+app.post('/api/push/subscribe', (req, res) => {
+  const db = getDatabase();
+  const { subscription, username } = req.body;
+
+  if (!subscription || !subscription.endpoint) {
+    return res.status(400).json({ success: false, message: 'Invalid subscription object.' });
+  }
+
+  if (!db.pushSubscriptions) {
+    db.pushSubscriptions = [];
+  }
+
+  // Check if endpoint already subscribed
+  const existingIndex = db.pushSubscriptions.findIndex(s => s.subscription.endpoint === subscription.endpoint);
+  
+  const subscriptionRecord = {
+    id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    subscription,
+    username: username || 'anonymous',
+    subscribedAt: new Date().toISOString()
+  };
+
+  if (existingIndex !== -1) {
+    db.pushSubscriptions[existingIndex] = subscriptionRecord;
+  } else {
+    db.pushSubscriptions.push(subscriptionRecord);
+  }
+
+  saveDatabase(db);
+  res.json({ success: true, message: 'Subscription successfully registered.' });
+});
+
+app.get('/api/push/subscriptions', (req, res) => {
+  const db = getDatabase();
+  res.json({ success: true, subscriptions: db.pushSubscriptions || [] });
+});
+
+app.get('/api/push/history', (req, res) => {
+  const db = getDatabase();
+  res.json({ success: true, alerts: db.pushAlerts || [] });
+});
+
+app.post('/api/push/send', async (req, res) => {
+  const db = getDatabase();
+  const { title, body, tag, clickAction } = req.body;
+
+  if (!title || !body) {
+    return res.status(400).json({ success: false, message: 'Title and body are required.' });
+  }
+
+  const subscriptions = db.pushSubscriptions || [];
+  const payload = {
+    title,
+    body,
+    tag: tag || 'emis-alert',
+    data: {
+      clickAction: clickAction || '/'
+    }
+  };
+
+  let sentCount = 0;
+  let failedCount = 0;
+  const subscriptionsToRemove: string[] = [];
+
+  const sendPromises = subscriptions.map(async (subRecord) => {
+    try {
+      await webpush.sendNotification(subRecord.subscription, JSON.stringify(payload));
+      sentCount++;
+    } catch (error: any) {
+      console.error(`Error sending push notification to ${subRecord.username}:`, error);
+      failedCount++;
+      // If subscription has expired or is no longer valid, we should prune it
+      if (error.statusCode === 410 || error.statusCode === 404) {
+        subscriptionsToRemove.push(subRecord.subscription.endpoint);
+      }
+    }
+  });
+
+  await Promise.all(sendPromises);
+
+  // Prune dead subscriptions
+  if (subscriptionsToRemove.length > 0) {
+    db.pushSubscriptions = subscriptions.filter(s => !subscriptionsToRemove.includes(s.subscription.endpoint));
+  }
+
+  // Record the alert in history
+  if (!db.pushAlerts) {
+    db.pushAlerts = [];
+  }
+
+  const alertRecord = {
+    id: `push-alert-${Date.now()}`,
+    title,
+    body,
+    tag: tag || 'emis-alert',
+    clickAction: clickAction || '/',
+    sentAt: new Date().toISOString(),
+    recipientCount: sentCount + failedCount,
+    successCount: sentCount,
+    failureCount: failedCount
+  };
+
+  db.pushAlerts.unshift(alertRecord); // latest first
+  saveDatabase(db);
+
+  res.json({
+    success: true,
+    sentCount,
+    failedCount,
+    totalSubscriptions: db.pushSubscriptions.length,
+    alert: alertRecord
+  });
 });
 
 // 14. Backup & Recovery API
@@ -994,6 +1345,139 @@ app.delete('/api/backups/:id', (req, res) => {
   } catch (err: any) {
     console.error("Backup deletion error:", err);
     res.status(500).json({ success: false, message: `Deletion failed: ${err.message}` });
+  }
+});
+
+// --- GEMINI CHAT BACKEND SERVICES ---
+let genAIInstance: any = null;
+function getGenAI() {
+  if (!genAIInstance) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY environment variable is missing.");
+    }
+    genAIInstance = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+  }
+  return genAIInstance;
+}
+
+function getSystemInstruction(role: string, db: DatabaseSchema) {
+  const studentSummary = db.students.map(s => ({
+    id: s.id,
+    name: `${s.surname} ${s.otherNames}`,
+    gender: s.gender,
+    class: s.className,
+    guardian: s.guardianName,
+    communityWorker: s.communityWorker,
+    zone: s.zoneInNansana,
+    scholarship: s.hasScholarship ? 'Yes' : 'No'
+  }));
+
+  const marksSummary = db.marks.map(m => {
+    const student = db.students.find(s => s.id === m.studentId);
+    return {
+      studentName: student ? `${student.surname} ${student.otherNames}` : m.studentId,
+      subject: m.subject,
+      score: m.score,
+      term: m.term,
+      year: m.year
+    };
+  });
+
+  const supportSummary = (db.support || []).map((sup: any) => {
+    const student = db.students.find(s => s.id === sup.studentId);
+    return {
+      studentName: student ? `${student.surname} ${student.otherNames}` : sup.studentId,
+      needsList: sup.needsList || [],
+      notes: sup.notes || '',
+      status: sup.status || ''
+    };
+  });
+
+  const visitsSummary = (db.visits || []).map((v: any) => {
+    const student = db.students.find(s => s.id === v.studentId);
+    return {
+      studentName: student ? `${student.surname} ${student.otherNames}` : v.studentId,
+      date: v.date,
+      purpose: v.purpose,
+      observations: v.observations,
+      actionsTaken: v.actionsTaken
+    };
+  });
+
+  const contextData = {
+    students: studentSummary,
+    marks: marksSummary,
+    support: supportSummary,
+    homeVisits: visitsSummary
+  };
+
+  let roleInstruction = "";
+  if (role === 'academic') {
+    roleInstruction = "You are the Senior Academic Advisor for Nansana Community School in Uganda. Your role is to analyze student performance, suggest targeted Ugandan-curriculum-aligned remedial activities, assist in drafting academic report card comments, and suggest tutoring strategies. Use the provided student marks data to give precise, data-driven advice.";
+  } else if (role === 'social') {
+    roleInstruction = "You are a Community Social Worker in Nansana, Uganda. Your role is to advocate for student welfare, prepare for household visits, advise on scholarship outreach, suggest local NGO resources, and address safeguarding and emotional/social needs. Keep your tone supportive, community-centric, and focused on Ugandan cultural contexts and local challenges.";
+  } else {
+    roleInstruction = "You are the Lead School Administrator and Curriculum Coordinator for Nansana Community School. Your role is to assist teachers with lesson plans, timetable optimization, drafting school circulars/communications to parents, designing classroom projects, and managing teacher assignments. Provide professional, structured templates and administrative assistance.";
+  }
+
+  return `
+${roleInstruction}
+
+You have real-time access to the school database. Use this data whenever the user asks questions about specific students, marks, support programs, or home visits. Never make up data if a student is in the database; refer to the data below.
+
+CURRENT SCHOOL DATA IN CONTEXT:
+${JSON.stringify(contextData, null, 2)}
+
+Ensure your responses are clear, action-oriented, professional, and directly useful to teachers and community workers. Avoid dry, generic answers; offer specific, practical Ugandan school-context suggestions. Keep formatting clean and use Markdown formatting for lists and headers to look polished.
+  `.trim();
+}
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { messages, role, model } = req.body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ success: false, message: "Invalid or missing messages array." });
+    }
+
+    const db = getDatabase();
+    const systemInstruction = getSystemInstruction(role || 'admin', db);
+
+    const selectedModel = model || 'gemini-3.5-flash';
+
+    const contents = messages.map(msg => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }]
+    }));
+
+    const ai = getGenAI();
+    const response = await ai.models.generateContent({
+      model: selectedModel,
+      contents,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+      }
+    });
+
+    res.json({
+      success: true,
+      reply: response.text || "I'm sorry, I couldn't generate a response."
+    });
+  } catch (err: any) {
+    console.error("Gemini API Chat Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message || "An error occurred while communicating with Gemini."
+    });
   }
 });
 

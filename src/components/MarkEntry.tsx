@@ -23,11 +23,12 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
   const classesList: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
   const filteredClasses = isAdmin ? classesList : teacher.classes;
   const filteredSubjects = isAdmin ? SUBJECT_LIST : teacher.subjects;
+  const allowedTerms: (1 | 2 | 3)[] = isAdmin ? [1, 2, 3] : (teacher.activeTerms || [1, 2, 3]);
 
   // Selected parameters
   const [selectedClass, setSelectedClass] = useState<ClassName>(filteredClasses[0] || 'P.1');
   const [selectedSubject, setSelectedSubject] = useState<string>(filteredSubjects[0] || 'Mathematics');
-  const [selectedTerm, setSelectedTerm] = useState<1 | 2 | 3>(1);
+  const [selectedTerm, setSelectedTerm] = useState<1 | 2 | 3>(allowedTerms[0] || 1);
   const [selectedYear, setSelectedYear] = useState<number>(2026);
 
   // Synchronize selection with allowed permissions if they change
@@ -38,7 +39,10 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
     if (filteredSubjects.length > 0 && !filteredSubjects.includes(selectedSubject)) {
       setSelectedSubject(filteredSubjects[0]);
     }
-  }, [teacher, filteredClasses, filteredSubjects]);
+    if (allowedTerms.length > 0 && !allowedTerms.includes(selectedTerm)) {
+      setSelectedTerm(allowedTerms[0]);
+    }
+  }, [teacher, filteredClasses, filteredSubjects, allowedTerms]);
 
   // Buffer score state for editing
   const [scoreInputs, setScoreInputs] = useState<Record<string, string>>({});
@@ -95,6 +99,25 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
   const handleBulkSave = async () => {
     setSaving(true);
     setStatusMessage({ type: '', text: '' });
+
+    // Client-side Subject-Locked validation checks
+    if (!isAdmin) {
+      if (!filteredClasses.includes(selectedClass)) {
+        setStatusMessage({ type: 'error', text: `Access Denied: Grade ${selectedClass} is not assigned to your account.` });
+        setSaving(false);
+        return;
+      }
+      if (!filteredSubjects.includes(selectedSubject)) {
+        setStatusMessage({ type: 'error', text: `Access Denied: Subject ${selectedSubject} is not assigned to your account.` });
+        setSaving(false);
+        return;
+      }
+      if (!allowedTerms.includes(selectedTerm)) {
+        setStatusMessage({ type: 'error', text: `Access Denied: Term ${selectedTerm} is not currently active/unlocked for your account.` });
+        setSaving(false);
+        return;
+      }
+    }
 
     // Prepare list of marks to save
     const marksToSave: Omit<Mark, 'id'>[] = [];
@@ -155,6 +178,9 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
             {teacher.subjects.map(s => (
               <span key={s} className="px-2.5 py-0.5 bg-blue-100/60 text-blue-800 font-bold text-[10px] rounded-lg border border-blue-200/30">{s}</span>
             ))}
+            {allowedTerms.map(t => (
+              <span key={t} className="px-2.5 py-0.5 bg-purple-100/60 text-purple-800 font-bold text-[10px] rounded-lg border border-purple-200/30">Term {t} Active</span>
+            ))}
           </div>
         </div>
       )}
@@ -205,9 +231,13 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
             onChange={(e) => setSelectedTerm(Number(e.target.value) as any)}
             className="w-full px-3.5 py-2.5 border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer font-semibold"
           >
-            <option value={1}>Term 1</option>
-            <option value={2}>Term 2</option>
-            <option value={3}>Term 3</option>
+            {allowedTerms.length === 0 ? (
+              <option value="">No authorized terms</option>
+            ) : (
+              allowedTerms.map(term => (
+                <option key={term} value={term}>Term {term}</option>
+              ))
+            )}
           </select>
         </div>
 

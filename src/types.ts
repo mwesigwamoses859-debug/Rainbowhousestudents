@@ -42,6 +42,7 @@ export interface Teacher {
   name: string;
   subjects: string[];
   classes: ClassName[];
+  activeTerms?: (1 | 2 | 3)[];
 }
 
 export interface Subject {

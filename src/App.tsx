@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Teacher, Student, Mark } from './types';
+import { Teacher, Student, Mark, ClassName } from './types';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -16,11 +16,16 @@ import SchoolTimetable from './components/SchoolTimetable';
 import TeacherAssignmentHub from './components/TeacherAssignmentHub';
 import AutoPromotionEngine from './components/AutoPromotionEngine';
 import BackupRecovery from './components/BackupRecovery';
+import StudentProfileModal from './components/StudentProfileModal';
+import DocumentGenerator from './components/DocumentGenerator';
+import AiAssistant from './components/AiAssistant';
+import AcademicAnalytics from './components/AcademicAnalytics';
 import { 
   ShieldAlert, 
   BookOpen, 
   RefreshCw, 
   LayoutDashboard, 
+  Home,
   Users, 
   GraduationCap, 
   FileSpreadsheet, 
@@ -37,7 +42,10 @@ import {
   UserCheck,
   TrendingUp,
   Database,
-  Lock
+  Lock,
+  FileText,
+  Shield,
+  FileKey
 } from 'lucide-react';
 
 export default function App() {
@@ -46,9 +54,9 @@ export default function App() {
   
   // Secondary sub-tab states for grouped views
   const [studentsSubTab, setStudentsSubTab] = useState<'list' | 'upload'>('list');
-  const [academicsSubTab, setAcademicsSubTab] = useState<'marks' | 'timetable' | 'teachers' | 'promotion'>('marks');
-  const [examsSubTab, setExamsSubTab] = useState<'reports' | 'graduation' | 'idcards'>('reports');
-  const [settingsSubTab, setSettingsSubTab] = useState<'upload' | 'backup'>('upload');
+  const [academicsSubTab, setAcademicsSubTab] = useState<'marks' | 'timetable' | 'teachers' | 'promotion' | 'analytics'>('marks');
+  const [examsSubTab, setExamsSubTab] = useState<'reports' | 'graduation' | 'idcards' | 'docgen'>('reports');
+  const [settingsSubTab, setSettingsSubTab] = useState<'upload' | 'backup' | 'audit'>('upload');
 
   // Data State
   const [students, setStudents] = useState<Student[]>([]);
@@ -59,6 +67,29 @@ export default function App() {
 
   // Bell Notifications Dropdown State
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // 360-Degree Profile & Custom Documents state
+  const [selectedProfileStudent, setSelectedProfileStudent] = useState<Student | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [currentRole, setCurrentRole] = useState<string>('administrator');
+  const [auditLogs, setAuditLogs] = useState<any[]>([
+    { id: 1, timestamp: '2026-07-17 10:15:30', user: 'Admin Mukasa (administrator)', action: 'Approved Term 2 P.7 Mathematics marks', ip: '192.168.1.14' },
+    { id: 2, timestamp: '2026-07-17 09:44:12', user: 'Florence Namatovu (community_worker)', action: 'Registered home visit log for John Mukasa (st-1)', ip: '102.16.88.42' },
+    { id: 3, timestamp: '2026-07-16 16:30:00', user: 'Head Teacher Kibirige (head_teacher)', action: 'Generated completion certificates for Class P.7 candidates', ip: '192.168.1.2' },
+    { id: 4, timestamp: '2026-07-16 11:22:15', user: 'Bursar Nabakooza (bursar)', action: 'Allocated uniform & school meal support to Patience Atwine (st-6)', ip: '192.168.1.5' },
+  ]);
+
+  const addAuditLog = (action: string) => {
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const newLog = {
+      id: Date.now(),
+      timestamp,
+      user: teacher ? `${teacher.name} (${currentRole})` : `Guest (${currentRole})`,
+      action,
+      ip: '192.168.1.10'
+    };
+    setAuditLogs(prev => [newLog, ...prev]);
+  };
 
   // Report Card selection carrier
   const [selectedReportCardStudent, setSelectedReportCardStudent] = useState<Student | null>(null);
@@ -269,7 +300,10 @@ export default function App() {
     try {
       const response = await fetch('/api/marks/bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-teacher-username': teacher?.username || ''
+        },
         body: JSON.stringify({ marks: marksToSave }),
       });
 
@@ -306,7 +340,13 @@ export default function App() {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
-  const isAdmin = teacher.username === 'admin';
+  const isAdmin = currentRole === 'administrator';
+
+  const activeTeacherClasses = currentRole === 'administrator' || currentRole === 'head_teacher' || currentRole === 'bursar'
+    ? ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'] as ClassName[]
+    : currentRole === 'subject_teacher' 
+      ? ['P.5', 'P.6', 'P.7'] as ClassName[]
+      : teacher.classes;
 
   // Calculate Alerts Center dynamically to show in notification bell
   const notificationAlerts: { id: string; type: 'danger' | 'warning'; title: string; desc: string; icon: any; action: () => void }[] = [];
@@ -480,12 +520,35 @@ export default function App() {
             )}
           </div>
 
+          {/* System Role Selector */}
+          <div className="flex items-center gap-1.5 bg-[#051c3a] border border-white/10 px-3 py-1.5 rounded-xl text-white">
+            <span className="text-[10px] font-black uppercase tracking-wider text-sky-300">Active Role:</span>
+            <select
+              value={currentRole}
+              onChange={(e) => {
+                const newRole = e.target.value;
+                setCurrentRole(newRole);
+                addAuditLog(`Switched active system role to: ${newRole.toUpperCase()}`);
+              }}
+              className="bg-transparent text-xs font-black text-white focus:outline-none cursor-pointer border-none"
+            >
+              <option className="text-slate-850" value="administrator">Administrator</option>
+              <option className="text-slate-850" value="head_teacher">Head Teacher</option>
+              <option className="text-slate-850" value="subject_teacher">Subject Teacher</option>
+              <option className="text-slate-850" value="class_teacher">Class Teacher</option>
+              <option className="text-slate-850" value="community_worker">Community Worker</option>
+              <option className="text-slate-850" value="bursar">Bursar</option>
+              <option className="text-slate-850" value="parent_guardian">Parent/Guardian</option>
+              <option className="text-slate-850" value="data_entry">Data Entry Officer</option>
+            </select>
+          </div>
+
           {/* User Profile Card */}
           <div className="flex items-center gap-2.5">
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold leading-tight">{teacher.name}</p>
               <p className="text-[9px] text-sky-300 font-bold uppercase tracking-widest mt-0.5 leading-none">
-                {teacher.username === 'admin' ? 'Super Administrator' : 'Instructor'}
+                {currentRole.replace('_', ' ').toUpperCase()}
               </p>
             </div>
             <div className="relative">
@@ -546,7 +609,7 @@ export default function App() {
               </button>
             </div>
           ) : (
-            <div className="flex-1 pb-16">
+            <div className="flex-1 pb-24 md:pb-16">
               
               {/* Active Tab Router */}
               
@@ -600,7 +663,11 @@ export default function App() {
                       onUpdateStudent={handleUpdateStudent}
                       onDeleteStudent={handleDeleteStudent}
                       onGenerateReportCard={handleGenerateReportCardRedirect}
-                      teacherClasses={teacher.classes}
+                      onOpenProfile={(student) => {
+                        setSelectedProfileStudent(student);
+                        setIsProfileModalOpen(true);
+                      }}
+                      teacherClasses={activeTeacherClasses}
                       isAdmin={isAdmin}
                     />
                   ) : (
@@ -697,11 +764,11 @@ export default function App() {
                 </div>
               )}
 
-              {/* 4. Reports Tab (grouped: Report cards, P.7 Graduation list, Printable Pupil IDs & Completion Certificates) */}
+              {/* 4. Reports Tab (grouped: Report cards, P.7 Graduation list, Printable Pupil IDs & Completion Certificates, Custom Document Creator) */}
               {activeTab === 'reports' && (
                 <div className="p-8 space-y-6">
                   {/* Secondary Inner Toggles */}
-                  <div className="flex bg-white/80 p-1.5 rounded-xl gap-1 self-start w-fit border border-slate-200 no-print">
+                  <div className="flex flex-wrap bg-white/80 p-1.5 rounded-xl gap-1 self-start w-fit border border-slate-200 no-print">
                     <button
                       onClick={() => setExamsSubTab('reports')}
                       className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -735,6 +802,17 @@ export default function App() {
                       <CreditCard className="h-4 w-4" />
                       <span>Pupil IDs & Certificates</span>
                     </button>
+                    <button
+                      onClick={() => setExamsSubTab('docgen')}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        examsSubTab === 'docgen'
+                          ? 'bg-[#0b2d59] text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <FileText className="h-4 w-4" />
+                      <span>Custom Document Creator</span>
+                    </button>
                   </div>
 
                   {examsSubTab === 'reports' && (
@@ -755,6 +833,13 @@ export default function App() {
                   {examsSubTab === 'idcards' && (
                     <StudentIdCards 
                       students={students}
+                    />
+                  )}
+
+                  {examsSubTab === 'docgen' && (
+                    <DocumentGenerator 
+                      students={students}
+                      marks={marks}
                     />
                   )}
                 </div>
@@ -783,6 +868,11 @@ export default function App() {
                 <GuardianCommunication 
                   students={students}
                 />
+              )}
+
+              {/* AI Assistant Tab */}
+              {activeTab === 'ai-chat' && (
+                <AiAssistant />
               )}
 
               {/* 9. Settings and Administration Panel */}
@@ -814,6 +904,17 @@ export default function App() {
                         <span>Backup & Recovery</span>
                       </button>
                     )}
+                    <button
+                      onClick={() => setSettingsSubTab('audit')}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        settingsSubTab === 'audit'
+                          ? 'bg-[#0b2d59] text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Shield className="h-4 w-4" />
+                      <span>System Audit Logs</span>
+                    </button>
                   </div>
 
                   {settingsSubTab === 'upload' ? (
@@ -824,8 +925,48 @@ export default function App() {
                         setStudentsSubTab('list');
                       }}
                     />
-                  ) : isAdmin ? (
+                  ) : settingsSubTab === 'backup' && isAdmin ? (
                     <BackupRecovery onRestoreSuccess={fetchData} />
+                  ) : settingsSubTab === 'audit' ? (
+                    <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                        <div>
+                          <h3 className="font-extrabold text-slate-900 text-sm md:text-base">System Audit Logs</h3>
+                          <p className="text-slate-500 text-xs mt-0.5">Real-time security trail and user actions log for accountability.</p>
+                        </div>
+                        <span className="px-3 py-1 bg-sky-50 text-sky-700 text-[10px] md:text-xs font-bold rounded-lg uppercase tracking-wider">
+                          Active Session Safeguards
+                        </span>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs text-slate-600 border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-150 text-slate-700 font-extrabold uppercase">
+                              <th className="p-3">Timestamp</th>
+                              <th className="p-3">Operator</th>
+                              <th className="p-3">Action logged</th>
+                              <th className="p-3 font-mono">IP Address</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-sans">
+                            {auditLogs.map((log) => (
+                              <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="p-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">{log.timestamp}</td>
+                                <td className="p-3 whitespace-nowrap">
+                                  <span className="font-bold text-slate-800">{log.user.split(' ')[0]}</span>
+                                  <span className="ml-1 text-[9px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 uppercase font-semibold">
+                                    {log.user.includes('(') ? log.user.split('(')[1].replace(')', '') : 'staff'}
+                                  </span>
+                                </td>
+                                <td className="p-3 font-medium text-slate-700">{log.action}</td>
+                                <td className="p-3 font-mono text-[11px] text-slate-400">{log.ip}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   ) : (
                     <div className="p-8 bg-white rounded-2xl border border-slate-100 shadow-sm text-center max-w-md mx-auto space-y-4">
                       <Lock className="h-12 w-12 text-slate-300 mx-auto" />
@@ -857,6 +998,51 @@ export default function App() {
 
         </main>
 
+      </div>
+
+      {/* 360-Degree Pupil Profile Modal popup */}
+      {isProfileModalOpen && selectedProfileStudent && (
+        <StudentProfileModal 
+          student={selectedProfileStudent}
+          isOpen={isProfileModalOpen}
+          marks={marks}
+          onUpdateStudent={handleUpdateStudent}
+          onClose={() => {
+            setIsProfileModalOpen(false);
+            setSelectedProfileStudent(null);
+          }}
+        />
+      )}
+
+      {/* Ergonomic Mobile Bottom Tab Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#06182c] border-t border-[#0f243c] h-16 flex justify-around items-center px-2 shadow-[0_-5px_20px_rgba(0,0,0,0.3)] no-print">
+        {[
+          { id: 'dashboard', name: 'Dashboard', icon: Home, action: () => handleSetTab('dashboard') },
+          { id: 'classes', name: 'Students', icon: Users, action: () => handleSetTab('classes') },
+          { id: 'marks', name: 'Academics', icon: GraduationCap, action: () => handleSetTab('marks') },
+          { id: 'reports', name: 'Reports', icon: FileSpreadsheet, action: () => handleSetTab('reports') },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id || 
+            (tab.id === 'classes' && activeTab === 'upload') ||
+            (tab.id === 'marks' && activeTab === 'timetable') ||
+            (tab.id === 'reports' && (activeTab === 'graduation' || activeTab === 'idcards'));
+
+          return (
+            <button
+              key={tab.id}
+              onClick={tab.action}
+              className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-center transition-all duration-150 cursor-pointer ${
+                isActive 
+                  ? 'text-[#FF5E4D] font-black' 
+                  : 'text-slate-300 font-bold hover:text-white'
+              }`}
+            >
+              <Icon className={`h-5 w-5 shrink-0 mb-1 ${isActive ? 'text-[#FF5E4D]' : 'text-slate-400'}`} />
+              <span className="text-[10px] tracking-wider uppercase font-sans block leading-none">{tab.name}</span>
+            </button>
+          );
+        })}
       </div>
 
     </div>

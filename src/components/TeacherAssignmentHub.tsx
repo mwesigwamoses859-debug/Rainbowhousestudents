@@ -50,6 +50,7 @@ export default function TeacherAssignmentHub({
   const [password, setPassword] = useState('');
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedClasses, setSelectedClasses] = useState<ClassName[]>([]);
+  const [selectedTerms, setSelectedTerms] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
   
   const [status, setStatus] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
@@ -62,6 +63,7 @@ export default function TeacherAssignmentHub({
     setPassword('');
     setSelectedSubjects([]);
     setSelectedClasses([]);
+    setSelectedTerms([1, 2, 3]);
     setShowForm(true);
     setStatus({ type: '', text: '' });
   };
@@ -75,6 +77,7 @@ export default function TeacherAssignmentHub({
     setPassword((teacher as any).password || 'teacher123');
     setSelectedSubjects(teacher.subjects);
     setSelectedClasses(teacher.classes);
+    setSelectedTerms(teacher.activeTerms || [1, 2, 3]);
     setShowForm(true);
     setStatus({ type: '', text: '' });
   };
@@ -94,6 +97,15 @@ export default function TeacherAssignmentHub({
       setSelectedClasses(prev => prev.filter(c => c !== className));
     } else {
       setSelectedClasses(prev => [...prev, className]);
+    }
+  };
+
+  // Toggle active term selection
+  const handleToggleTerm = (term: 1 | 2 | 3) => {
+    if (selectedTerms.includes(term)) {
+      setSelectedTerms(prev => prev.filter(t => t !== term));
+    } else {
+      setSelectedTerms(prev => [...prev, term].sort());
     }
   };
 
@@ -117,7 +129,8 @@ export default function TeacherAssignmentHub({
         name: name.trim(),
         password: password.trim() || 'teacher123',
         subjects: selectedSubjects,
-        classes: selectedClasses
+        classes: selectedClasses,
+        activeTerms: selectedTerms
       });
       
       setStatus({ 
@@ -335,6 +348,35 @@ export default function TeacherAssignmentHub({
               </div>
             </div>
 
+            {/* Authorized Terms Selection */}
+            <div>
+              <label className="block text-xs font-black text-slate-500 mb-2 uppercase tracking-wider flex items-center gap-1.5">
+                <CheckCircle className="h-3.5 w-3.5 text-[#032b5e]" />
+                <span>Authorized Active Terms (Subject-Locked Mark Entry)</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {([1, 2, 3] as const).map(term => {
+                  const isChecked = selectedTerms.includes(term);
+                  return (
+                    <button
+                      key={term}
+                      type="button"
+                      onClick={() => handleToggleTerm(term)}
+                      className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all text-xs font-semibold cursor-pointer ${
+                        isChecked 
+                          ? 'bg-indigo-50/50 border-indigo-400 text-indigo-900 shadow-sm' 
+                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600'
+                      }`}
+                    >
+                      {isChecked ? <CheckSquare className="h-4.5 w-4.5 text-indigo-600" /> : <Square className="h-4.5 w-4.5 text-slate-300" />}
+                      <span>Term {term}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1.5">Selected terms define which school terms this teacher is authorized to enter marks for, preventing unauthorized data modification during closed evaluation periods.</p>
+            </div>
+
             {/* Action buttons */}
             <div className="flex items-center justify-end gap-3.5 pt-4 border-t border-slate-100">
               <button
@@ -371,13 +413,14 @@ export default function TeacherAssignmentHub({
                   <th className="px-6 py-4">Auth Username</th>
                   <th className="px-6 py-4">Assigned Subjects</th>
                   <th className="px-6 py-4">Assigned Grades</th>
+                  <th className="px-6 py-4">Active Terms</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-medium">
                 {teachers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-slate-400 italic">No curriculum personnel recorded.</td>
+                    <td colSpan={6} className="p-8 text-center text-slate-400 italic">No curriculum personnel recorded.</td>
                   </tr>
                 ) : (
                   teachers.map(teacher => (
@@ -418,6 +461,21 @@ export default function TeacherAssignmentHub({
                             teacher.classes.map(c => (
                               <span key={c} className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-md border border-emerald-200/20">
                                 {c}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {teacher.username === 'admin' ? (
+                            <span className="text-xs text-[#032b5e] font-bold italic">All Terms (Global Access)</span>
+                          ) : !teacher.activeTerms || teacher.activeTerms.length === 0 ? (
+                            <span className="text-slate-400 italic text-[11px]">No terms active</span>
+                          ) : (
+                            teacher.activeTerms.map(t => (
+                              <span key={t} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-bold text-[10px] rounded-md border border-indigo-200/20">
+                                Term {t}
                               </span>
                             ))
                           )}

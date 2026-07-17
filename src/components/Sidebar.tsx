@@ -4,8 +4,7 @@ import {
   GraduationCap, 
   Calendar, 
   FileSpreadsheet, 
-  BadgeCent, 
-  BookOpen, 
+  HeartHandshake, 
   Megaphone, 
   Settings,
   LogOut,
@@ -29,13 +28,14 @@ export default function Sidebar({ activeTab, setActiveTab, teacher, onLogout }: 
     { id: 'marks', name: 'Academics', icon: GraduationCap },
     { id: 'attendance', name: 'Attendance', icon: Calendar },
     { id: 'reports', name: 'Examinations', icon: FileSpreadsheet },
-    { id: 'cases', name: 'Finance', icon: BadgeCent },
+    { id: 'cases', name: 'Community Hub', icon: HeartHandshake },
     { id: 'communication', name: 'Communications', icon: Megaphone },
+    { id: 'ai-chat', name: 'AI Assistant', icon: Sparkles },
     { id: 'upload', name: 'Settings', icon: Settings },
   ];
 
   return (
-    <aside id="app_sidebar" className="w-64 bg-[#06182c] text-[#a5b4fc] min-h-[calc(100vh-70px)] flex flex-col justify-between shrink-0 shadow-xl no-print select-none border-r border-[#0f243c]">
+    <aside id="app_sidebar" className="hidden md:flex w-64 bg-[#06182c] text-[#a5b4fc] min-h-[calc(100vh-70px)] flex-col justify-between shrink-0 shadow-xl no-print select-none border-r border-[#0f243c]">
       
       {/* Navigation Menu */}
       <div className="py-4">

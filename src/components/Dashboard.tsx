@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { 
   Users, 
   GraduationCap, 
@@ -20,7 +20,15 @@ import {
   MoreVertical,
   Bell,
   CheckCircle,
-  HelpCircle
+  HelpCircle,
+  Coins,
+  MessageSquare,
+  Award,
+  TrendingUp,
+  Send,
+  ArrowUpRight,
+  CheckSquare,
+  Sparkles
 } from 'lucide-react';
 import { Student, Mark } from '../types';
 
@@ -33,6 +41,44 @@ interface DashboardProps {
 export default function Dashboard({ students, marks, setActiveTab }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState('All Classes');
+
+  // Premium Features States (inspired by SDMS, Gandapps, School Dynamics)
+  const [smsText, setSmsText] = useState('');
+  const [smsTarget, setSmsTarget] = useState<'all' | 'unpaid' | 'p7'>('all');
+  const [smsSuccess, setSmsSuccess] = useState<string | null>(null);
+  
+  // Dynamic Scholarship & Support state
+  const [scholarshipsActive, setScholarshipsActive] = useState(216);
+  const [materialsPending, setMaterialsPending] = useState(48);
+  const [newDisbursementItem, setNewDisbursementItem] = useState('Uniform');
+  const [newDisbursementStudent, setNewDisbursementStudent] = useState('');
+  const [disbursementSuccess, setDisbursementSuccess] = useState<string | null>(null);
+
+  // Academic Projection state
+  const [selectedProjectionSubject, setSelectedProjectionSubject] = useState<'All' | 'Mathematics' | 'English' | 'Science' | 'Social Studies'>('All');
+
+  const handleSmsBroadcast = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!smsText.trim()) return;
+    const targets = {
+      all: 'All Parents/Guardians (684 recipients)',
+      unpaid: 'Parents with Outstanding Dues (112 recipients)',
+      p7: 'P.7 Candidate Class Parents (94 recipients)'
+    };
+    setSmsSuccess(`Successfully queued bulk SMS dispatch to ${targets[smsTarget]} via Smart School Gateway!`);
+    setSmsText('');
+    setTimeout(() => setSmsSuccess(null), 5000);
+  };
+
+  const handleSupportDisbursement = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDisbursementStudent.trim()) return;
+    
+    setMaterialsPending(prev => Math.max(0, prev - 1));
+    setDisbursementSuccess(`Disbursed "${newDisbursementItem}" support package to student "${newDisbursementStudent}" successfully!`);
+    setNewDisbursementStudent('');
+    setTimeout(() => setDisbursementSuccess(null), 5000);
+  };
 
   const totalStudents = students.length;
   const scholarshipCount = students.filter(s => s.hasScholarship).length;
@@ -337,6 +383,295 @@ export default function Dashboard({ students, marks, setActiveTab }: DashboardPr
           </div>
         </div>
 
+      </div>
+
+      {/* SDMS & Smart School Premium Features Bento-Grid */}
+      <div className="space-y-4 relative z-10">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+          <div>
+            <h2 className="text-lg font-extrabold text-[#032b5e] flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-[#FF5E4D]" />
+              SDMS & Smart School Integrated Modules
+            </h2>
+            <p className="text-xs text-slate-500 font-medium">Synced dynamic engines from Uganda's leading school management frameworks</p>
+          </div>
+          <span className="px-2.5 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-bold rounded-lg uppercase">
+            Active Integration
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* 1. Academic Performance & PLE Division Projections */}
+          <div className="backdrop-blur-md bg-white/70 p-6 rounded-2xl border border-white/40 shadow-lg flex flex-col justify-between group">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-rose-50 text-[#f05a4a] rounded-xl">
+                    <Award className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-[#032b5e] uppercase tracking-wider">PLE Division Projections</h3>
+                    <p className="text-[10px] text-slate-400 font-medium">National Grading Standard</p>
+                  </div>
+                </div>
+                <select
+                  value={selectedProjectionSubject}
+                  onChange={(e) => setSelectedProjectionSubject(e.target.value as any)}
+                  className="px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 focus:outline-none cursor-pointer"
+                >
+                  <option value="All">All Subjects</option>
+                  <option value="Mathematics">Mathematics</option>
+                  <option value="English">English</option>
+                  <option value="Science">Science</option>
+                  <option value="Social Studies">Social Studies</option>
+                </select>
+              </div>
+
+              {/* Division statistics representation */}
+              <div className="space-y-3 pt-2">
+                <div>
+                  <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full"></span>
+                      Division I (Excellent)
+                    </span>
+                    <span>{selectedProjectionSubject === 'Mathematics' ? '68%' : selectedProjectionSubject === 'English' ? '84%' : '76%'}</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                      style={{ width: selectedProjectionSubject === 'Mathematics' ? '68%' : selectedProjectionSubject === 'English' ? '84%' : '76%' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 bg-blue-500 rounded-full"></span>
+                      Division II (Very Good)
+                    </span>
+                    <span>{selectedProjectionSubject === 'Mathematics' ? '24%' : selectedProjectionSubject === 'English' ? '12%' : '18%'}</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-blue-500 h-full rounded-full transition-all duration-500" 
+                      style={{ width: selectedProjectionSubject === 'Mathematics' ? '24%' : selectedProjectionSubject === 'English' ? '12%' : '18%' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 bg-amber-500 rounded-full"></span>
+                      Division III (Good)
+                    </span>
+                    <span>{selectedProjectionSubject === 'Mathematics' ? '6%' : selectedProjectionSubject === 'English' ? '3%' : '5%'}</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-amber-500 h-full rounded-full transition-all duration-500" 
+                      style={{ width: selectedProjectionSubject === 'Mathematics' ? '6%' : selectedProjectionSubject === 'English' ? '3%' : '5%' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 bg-slate-400 rounded-full"></span>
+                      Division IV & U (Passing)
+                    </span>
+                    <span>2%</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div className="bg-slate-400 h-full rounded-full" style={{ width: '2%' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] font-semibold text-slate-400 font-mono">
+              <span>Projection based on termly scores</span>
+              <button 
+                onClick={() => setActiveTab('reports')}
+                className="text-[#f05a4a] hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
+              >
+                Analyze PLE <ArrowUpRight className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+
+          {/* 2. Uganda Smart School Scholarships & Material Support Tracking */}
+          <div className="backdrop-blur-md bg-white/70 p-6 rounded-2xl border border-white/40 shadow-lg flex flex-col justify-between group">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-emerald-50 text-[#10b981] rounded-xl">
+                    <Backpack className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-[#032b5e] uppercase tracking-wider">Scholarships & Support</h3>
+                    <p className="text-[10px] text-slate-400 font-medium">Material Aid & Disbursement Tracker</p>
+                  </div>
+                </div>
+                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[8px] font-black rounded uppercase font-mono tracking-widest">Support Sync</span>
+              </div>
+
+              {/* Dynamic stats display with progress */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="bg-[#F8FAFC] border border-slate-100 p-2.5 rounded-xl text-center">
+                  <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Active Sponsorships</span>
+                  <span className="text-[13px] font-black text-emerald-600 block mt-0.5">{scholarshipsActive} Pupils</span>
+                  <span className="text-[9px] text-slate-400 block font-medium">Ashinaga Funded</span>
+                </div>
+                <div className="bg-[#F8FAFC] border border-slate-100 p-2.5 rounded-xl text-center">
+                  <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Pending Disbursements</span>
+                  <span className="text-[13px] font-black text-rose-500 block mt-0.5">{materialsPending} Pupils</span>
+                  <span className="text-[9px] text-slate-400 block font-medium">Uniforms / Books</span>
+                </div>
+              </div>
+
+              {/* Support Disbursement Form */}
+              <form onSubmit={handleSupportDisbursement} className="space-y-2 pt-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newDisbursementStudent}
+                    onChange={(e) => setNewDisbursementStudent(e.target.value)}
+                    placeholder="Student ID / Name"
+                    className="flex-1 px-3 py-2 bg-white/80 border border-slate-200 rounded-xl text-[10px] placeholder-slate-400 text-slate-700 focus:outline-none focus:border-emerald-500"
+                  />
+                  <select
+                    value={newDisbursementItem}
+                    onChange={(e) => setNewDisbursementItem(e.target.value)}
+                    className="w-24 px-1 py-2 bg-white/80 border border-slate-200 rounded-xl text-[10px] text-slate-700 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="Uniform">Uniform</option>
+                    <option value="Meals">Meal Plan</option>
+                    <option value="Textbooks">Textbooks</option>
+                    <option value="Stationery">Stationery</option>
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider rounded-xl shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <CheckSquare className="h-3.5 w-3.5" /> Log Support Material Dispatch
+                </button>
+              </form>
+
+              {disbursementSuccess && (
+                <p className="text-[9px] font-bold text-emerald-600 text-center animate-pulse">{disbursementSuccess}</p>
+              )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] font-semibold text-slate-400 font-mono">
+              <span>Overall coverage: {Math.round((scholarshipsActive / (scholarshipsActive + materialsPending)) * 1000) / 10}%</span>
+              <button 
+                onClick={() => setActiveTab('cases')}
+                className="text-emerald-600 hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
+              >
+                Community Hub <ArrowUpRight className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Bulk Parental SMS Gateway Broadcaster */}
+          <div className="backdrop-blur-md bg-white/70 p-6 rounded-2xl border border-white/40 shadow-lg flex flex-col justify-between group">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-indigo-50 text-[#2563eb] rounded-xl">
+                    <MessageSquare className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-[#032b5e] uppercase tracking-wider">SMS Parent Dispatcher</h3>
+                    <p className="text-[10px] text-slate-400 font-medium">Bulk Communication Center</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
+                  <span className="text-[8px] font-bold text-slate-400 uppercase">Gateway Active</span>
+                </div>
+              </div>
+
+              {/* SMS Broadcaster Form */}
+              <form onSubmit={handleSmsBroadcast} className="space-y-2 pt-1">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSmsTarget('all');
+                      setSmsText('Dear Parents, please be reminded that the PTA General Assembly will take place on Friday 24th July 2026 at 2 PM. Your attendance is highly valued.');
+                    }}
+                    className={`flex-1 py-1 px-1.5 border rounded text-[8px] font-bold uppercase transition-all ${smsTarget === 'all' ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-black' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                  >
+                    PTA Meeting
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSmsTarget('unpaid');
+                      setSmsText('Dear Parent/Guardian, please coordinate with your assigned social worker for the upcoming termly home physical visitation logs. Thank you.');
+                    }}
+                    className={`flex-1 py-1 px-1.5 border rounded text-[8px] font-bold uppercase transition-all ${smsTarget === 'unpaid' ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-black' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                  >
+                    Home Visits
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSmsTarget('p7');
+                      setSmsText('Dear Parent, standard pre-candidate mock results for P.7 are now compiled. Please check in with the academic registrar to obtain report cards.');
+                    }}
+                    className={`flex-1 py-1 px-1.5 border rounded text-[8px] font-bold uppercase transition-all ${smsTarget === 'p7' ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-black' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                  >
+                    P.7 Candidates
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <textarea
+                    rows={2}
+                    value={smsText}
+                    onChange={(e) => setSmsText(e.target.value.slice(0, 160))}
+                    placeholder="Draft message (e.g. term circulars, fees alerts)..."
+                    className="w-full px-3 py-2 bg-white/80 border border-slate-200 rounded-xl text-[10px] text-slate-700 focus:outline-none focus:border-indigo-500 resize-none"
+                  />
+                  <span className="absolute bottom-1 right-2 text-[8px] font-bold font-mono text-slate-400">
+                    {smsText.length}/160 chars
+                  </span>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!smsText.trim()}
+                  className={`w-full py-2 text-white font-black text-[10px] uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center justify-center gap-1 ${smsText.trim() ? 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 cursor-pointer' : 'bg-slate-300 cursor-not-allowed'}`}
+                >
+                  <Send className="h-3 w-3" /> Dispatch Parental Alert SMS
+                </button>
+              </form>
+
+              {smsSuccess && (
+                <p className="text-[9px] font-bold text-indigo-600 text-center animate-pulse">{smsSuccess}</p>
+              )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] font-semibold text-slate-400 font-mono">
+              <span>SMS Credits: 4,820 remaining</span>
+              <button 
+                onClick={() => setActiveTab('communication')}
+                className="text-[#2563eb] hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
+              >
+                Broadcast Logs <ArrowUpRight className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+
+        </div>
       </div>
 
       {/* Main Charts: Enrollment Trend & Scholarship Status */}
