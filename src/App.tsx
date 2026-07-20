@@ -730,6 +730,17 @@ export default function App() {
                       <TrendingUp className="h-4 w-4" />
                       <span>Auto-Promotion Engine</span>
                     </button>
+                    <button
+                      onClick={() => setAcademicsSubTab('analytics')}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        academicsSubTab === 'analytics'
+                          ? 'bg-[#0b2d59] text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
+                      <span>PLE Academic Analytics</span>
+                    </button>
                   </div>
 
                   {academicsSubTab === 'marks' ? (
@@ -753,11 +764,17 @@ export default function App() {
                       currentTeacher={teacher}
                       isAdmin={isAdmin}
                     />
-                  ) : (
+                  ) : academicsSubTab === 'promotion' ? (
                     <AutoPromotionEngine 
                       students={students}
                       marks={marks}
                       onPromoteStudents={handlePromoteStudents}
+                      isAdmin={isAdmin}
+                    />
+                  ) : (
+                    <AcademicAnalytics 
+                      students={students}
+                      marks={marks}
                       isAdmin={isAdmin}
                     />
                   )}

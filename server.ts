@@ -749,122 +749,7 @@ app.post('/api/interactions', (req, res) => {
 
 // 9. SMS outbox
 async function sendRealSMS(to: string, message: string): Promise<{ success: boolean; gateway: string; messageId?: string; error?: string }> {
-  // 1. Try Africa's Talking (East Africa's premier SMS gateway, e.g. Uganda)
-  const atApiKey = process.env.AFRICAS_TALKING_API_KEY;
-  const atUsername = process.env.AFRICAS_TALKING_USERNAME;
-  if (atApiKey && atUsername) {
-    try {
-      const isSandbox = atUsername.toLowerCase() === 'sandbox';
-      const url = isSandbox 
-        ? 'https://api.sandbox.africastalking.com/version1/messaging' 
-        : 'https://api.africastalking.com/version1/messaging';
-        
-      const params = new URLSearchParams();
-      params.append('username', atUsername);
-      params.append('to', to);
-      params.append('message', message);
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'apiKey': atApiKey,
-          'Accept': 'application/json',
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: params.toString()
-      });
-      
-      if (response.ok) {
-        const data: any = await response.json();
-        const recipients = data?.SMSMessageData?.Recipients || [];
-        if (recipients.length > 0) {
-          const first = recipients[0];
-          const isSuccess = ['Success', 'Pending', 'Success (Sent)'].includes(first.status);
-          if (isSuccess) {
-            return {
-              success: true,
-              gateway: "Africa's Talking",
-              messageId: first.messageId
-            };
-          } else {
-            return {
-              success: false,
-              gateway: "Africa's Talking",
-              error: first.status || 'Failed transmission status'
-            };
-          }
-        } else {
-          return {
-            success: false,
-            gateway: "Africa's Talking",
-            error: 'No recipients returned by gateway'
-          };
-        }
-      } else {
-        const errText = await response.text();
-        return {
-          success: false,
-          gateway: "Africa's Talking",
-          error: `HTTP ${response.status}: ${errText}`
-        };
-      }
-    } catch (err: any) {
-      return {
-        success: false,
-        gateway: "Africa's Talking",
-        error: err.message || String(err)
-      };
-    }
-  }
-
-  // 2. Try Twilio (Alternative international gateway)
-  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-  const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioFrom = process.env.TWILIO_FROM_NUMBER;
-  if (twilioSid && twilioAuthToken && twilioFrom) {
-    try {
-      const url = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
-      const credentials = Buffer.from(`${twilioSid}:${twilioAuthToken}`).toString('base64');
-      
-      const params = new URLSearchParams();
-      params.append('To', to);
-      params.append('From', twilioFrom);
-      params.append('Body', message);
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Basic ${credentials}`,
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: params.toString()
-      });
-      
-      if (response.ok) {
-        const data: any = await response.json();
-        return {
-          success: true,
-          gateway: 'Twilio',
-          messageId: data.sid
-        };
-      } else {
-        const errText = await response.text();
-        return {
-          success: false,
-          gateway: 'Twilio',
-          error: `HTTP ${response.status}: ${errText}`
-        };
-      }
-    } catch (err: any) {
-      return {
-        success: false,
-        gateway: 'Twilio',
-        error: err.message || String(err)
-      };
-    }
-  }
-
-  // 3. Fallback to Sandbox Simulation (for offline local development or when missing credentials)
+  // Purely Sandbox Simulation mode for safety and privacy
   return {
     success: true,
     gateway: 'Sandbox Simulator',
@@ -873,22 +758,12 @@ async function sendRealSMS(to: string, message: string): Promise<{ success: bool
 }
 
 app.get('/api/sms/gateway-status', (req, res) => {
-  const hasAT = !!(process.env.AFRICAS_TALKING_API_KEY && process.env.AFRICAS_TALKING_USERNAME);
-  const hasTwilio = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER);
-  
-  let activeGateway = 'Sandbox Simulator';
-  if (hasAT) {
-    activeGateway = "Africa's Talking";
-  } else if (hasTwilio) {
-    activeGateway = 'Twilio';
-  }
-  
   res.json({
-    activeGateway,
-    hasAT,
-    hasTwilio,
-    atUsername: process.env.AFRICAS_TALKING_USERNAME || null,
-    twilioFrom: process.env.TWILIO_FROM_NUMBER || null
+    activeGateway: 'Sandbox Simulator (Local Simulation)',
+    hasAT: false,
+    hasTwilio: false,
+    atUsername: null,
+    twilioFrom: null
   });
 });
 

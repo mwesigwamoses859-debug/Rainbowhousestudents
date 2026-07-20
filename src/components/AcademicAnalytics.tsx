@@ -205,7 +205,10 @@ export default function AcademicAnalytics({ students, marks, isAdmin }: Academic
       avgAggregate: 0,
       atRiskCount: 0,
       subjectAverages: {},
-      genderBreakdown: { Male: { div1Rate: 0, avgAgg: 0 }, Female: { div1Rate: 0, avgAgg: 0 } }
+      genderBreakdown: { 
+        Male: { div1Rate: 0, avgAgg: 0, total: 0 }, 
+        Female: { div1Rate: 0, avgAgg: 0, total: 0 } 
+      }
     };
 
     const div1 = completeProjections.filter(p => p.division === 'Division I').length;
@@ -982,38 +985,13 @@ export default function AcademicAnalytics({ students, marks, isAdmin }: Academic
                               onClick={() => {
                                 const weakest = getWeakestSubject(p.scores);
                                 const text = getRemedialSMSText(`${p.student.surname} ${p.student.otherNames}`, p.division, weakest);
-                                const encodedText = encodeURIComponent(text);
-                                const parentPhone = p.student.guardianContact;
-                                const studentId = p.student.id;
-                                const guardianName = p.student.guardianName;
-                                
-                                if (window.confirm(`Draft SMS Intervention text to guardian ${p.student.guardianName} (${p.student.guardianContact})?\n\n"${text}"`)) {
-                                  // Open outbox to compose SMS with prefilled content or send directly
-                                  fetch('/api/sms', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                      studentId,
-                                      guardianName,
-                                      phoneNumber: parentPhone,
-                                      messageBody: text
-                                    })
-                                  }).then(res => {
-                                    if (res.ok) {
-                                      alert('Guardian alert sent & logged successfully in Outbox!');
-                                    } else {
-                                      alert('Failed to send SMS to gateway.');
-                                    }
-                                  }).catch(() => {
-                                    alert('Network error sending SMS.');
-                                  });
-                                }
+                                alert(`ACADEMIC ADVISORY NOTE DRAFT (Local Reference)\n\nGuardian Name: ${p.student.guardianName}\nContact Number: ${p.student.guardianContact}\nPupil Name: ${p.student.surname} ${p.student.otherNames}\n\nDraft Recommendation:\n"${text}"\n\nThis offline advisory note is designed to guide teachers during in-person guardian meetings or remedial support plan design.`);
                               }}
                               className="px-2 py-1.25 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                              title="Send warning alert SMS to parent"
+                              title="Generate offline advisory note for the guardian"
                             >
-                              <MessageSquare className="h-3 w-3" />
-                              <span>SMS Parent</span>
+                              <BookOpen className="h-3 w-3 text-amber-600" />
+                              <span>Advisory Note</span>
                             </button>
                           )}
                         </div>
