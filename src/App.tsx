@@ -9,9 +9,7 @@ import ReportCardView from './components/ReportCardView';
 import GraduationList from './components/GraduationList';
 import ExcelUpload from './components/ExcelUpload';
 import AttendanceSupport from './components/AttendanceSupport';
-import CaseManagement from './components/CaseManagement';
 import StudentIdCards from './components/StudentIdCards';
-import GuardianCommunication from './components/GuardianCommunication';
 import SchoolTimetable from './components/SchoolTimetable';
 import TeacherAssignmentHub from './components/TeacherAssignmentHub';
 import AutoPromotionEngine from './components/AutoPromotionEngine';
@@ -99,7 +97,13 @@ export default function App() {
     const savedTeacher = localStorage.getItem('school_sms_teacher');
     if (savedTeacher) {
       try {
-        setTeacher(JSON.parse(savedTeacher));
+        const parsed = JSON.parse(savedTeacher);
+        setTeacher(parsed);
+        if (parsed.username === 'admin') {
+          setCurrentRole('administrator');
+        } else {
+          setCurrentRole('class_teacher');
+        }
       } catch (err) {
         localStorage.removeItem('school_sms_teacher');
       }
@@ -145,6 +149,11 @@ export default function App() {
   const handleLoginSuccess = (loggedInTeacher: Teacher) => {
     setTeacher(loggedInTeacher);
     localStorage.setItem('school_sms_teacher', JSON.stringify(loggedInTeacher));
+    if (loggedInTeacher.username === 'admin') {
+      setCurrentRole('administrator');
+    } else {
+      setCurrentRole('class_teacher');
+    }
     setActiveTab('dashboard');
   };
 
@@ -227,12 +236,15 @@ export default function App() {
         body: JSON.stringify(studentData),
       });
 
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to register student.');
+      }
       const addedStudent = await response.json();
       
       setStudents(prev => [...prev, addedStudent]);
-    } catch (err) {
-      alert('Failed to register student. Please try again.');
+    } catch (err: any) {
+      alert(err.message || 'Failed to register student. Please try again.');
       throw err;
     }
   };
@@ -245,12 +257,15 @@ export default function App() {
         body: JSON.stringify(updatedData),
       });
 
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to save student details.');
+      }
       const updatedStudent = await response.json();
 
       setStudents(prev => prev.map(s => s.id === id ? updatedStudent : s));
-    } catch (err) {
-      alert('Failed to save student details. Please try again.');
+    } catch (err: any) {
+      alert(err.message || 'Failed to save student details. Please try again.');
       throw err;
     }
   };
@@ -289,6 +304,7 @@ export default function App() {
       if (data.success) {
         setStudents(prev => [...prev, ...data.students]);
       }
+      return data;
     } catch (err) {
       alert('Bulk import transaction failed. Please ensure file formatting matches the template.');
       throw err;
@@ -618,6 +634,8 @@ export default function App() {
                 <Dashboard 
                   students={students} 
                   marks={marks} 
+                  teacher={teacher || undefined}
+                  isAdmin={isAdmin}
                   setActiveTab={(tab) => {
                     setActiveTab(tab);
                     if (tab === 'classes') setStudentsSubTab('list');
@@ -672,6 +690,7 @@ export default function App() {
                     />
                   ) : (
                     <ExcelUpload 
+                      students={students}
                       onBulkAddStudents={handleBulkAddStudents}
                       onSuccessRedirect={() => {
                         setStudentsSubTab('list');
@@ -871,22 +890,6 @@ export default function App() {
                 />
               )}
 
-              {/* 6. Finance / Safeguarding Tab */}
-              {activeTab === 'cases' && (
-                <CaseManagement 
-                  students={students}
-                  teacherClasses={teacher.classes}
-                  isAdmin={isAdmin}
-                />
-              )}
-
-              {/* 8. Communications Hub Tab */}
-              {activeTab === 'communication' && (
-                <GuardianCommunication 
-                  students={students}
-                />
-              )}
-
               {/* AI Assistant Tab */}
               {activeTab === 'ai-chat' && (
                 <AiAssistant />
@@ -936,6 +939,7 @@ export default function App() {
 
                   {settingsSubTab === 'upload' ? (
                     <ExcelUpload 
+                      students={students}
                       onBulkAddStudents={handleBulkAddStudents}
                       onSuccessRedirect={() => {
                         setActiveTab('classes');

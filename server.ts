@@ -32,200 +32,9 @@ interface DatabaseSchema {
 
 function getDatabase(): DatabaseSchema {
   if (!fs.existsSync(DB_FILE)) {
-    // Generate pre-populated realistic Ugandan students
-    const initialStudents = [
-      {
-        id: 'st-1',
-        surname: 'Mukasa',
-        otherNames: 'John Bosco',
-        gender: 'Male',
-        dateOfBirth: '2014-04-12', // 12 years old (P.7)
-        className: 'P.7',
-        yearOfEntry: 2020,
-        photo: 'https://images.unsplash.com/photo-1544717297-fa95b6ee9643?w=150&h=150&fit=crop&q=80',
-        guardianName: 'Mukasa William',
-        guardianContact: '+256 702 445588',
-        communityWorker: 'Namatovu Florence',
-        workerContact: '+256 772 112233',
-        zoneInNansana: 'Gganda',
-        hasScholarship: true
-      },
-      {
-        id: 'st-2',
-        surname: 'Babirye',
-        otherNames: 'Sarah',
-        gender: 'Female',
-        dateOfBirth: '2015-08-22', // 10 years old (P.6)
-        className: 'P.6',
-        yearOfEntry: 2021,
-        photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop&q=80',
-        guardianName: 'Nassolo Harriet',
-        guardianContact: '+256 752 998877',
-        communityWorker: 'Kibirige Sula',
-        workerContact: '+256 701 445522',
-        zoneInNansana: 'Nabweru',
-        hasScholarship: false
-      },
-      {
-        id: 'st-3',
-        surname: 'Kato',
-        otherNames: 'Julius',
-        gender: 'Male',
-        dateOfBirth: '2014-11-03', // 11 years old (P.7)
-        className: 'P.7',
-        yearOfEntry: 2020,
-        photo: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&h=150&fit=crop&q=80',
-        guardianName: 'Ssekyanzi Peter',
-        guardianContact: '+256 782 554433',
-        communityWorker: 'Namatovu Florence',
-        workerContact: '+256 772 112233',
-        zoneInNansana: 'Kabulengwa',
-        hasScholarship: false
-      },
-      {
-        id: 'st-4',
-        surname: 'Namubiru',
-        otherNames: 'Dorothy',
-        gender: 'Female',
-        dateOfBirth: '2016-01-30', // 10 years old (P.5)
-        className: 'P.5',
-        yearOfEntry: 2022,
-        photo: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&h=150&fit=crop&q=80',
-        guardianName: 'Nsubuga Joseph',
-        guardianContact: '+256 703 121212',
-        communityWorker: 'Mirembe Agnes',
-        workerContact: '+256 756 223344',
-        zoneInNansana: 'Nansana West',
-        hasScholarship: true
-      },
-      {
-        id: 'st-5',
-        surname: 'Okello',
-        otherNames: 'Emmanuel',
-        gender: 'Male',
-        dateOfBirth: '2017-05-15', // 9 years old (P.4)
-        className: 'P.4',
-        yearOfEntry: 2023,
-        photo: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&h=150&fit=crop&q=80',
-        guardianName: 'Onyango Patrick',
-        guardianContact: '+256 774 445566',
-        communityWorker: 'Kibirige Sula',
-        workerContact: '+256 701 445522',
-        zoneInNansana: 'Nansana East',
-        hasScholarship: false
-      },
-      {
-        id: 'st-6',
-        surname: 'Atwine',
-        otherNames: 'Patience',
-        gender: 'Female',
-        dateOfBirth: '2018-09-05', // 7 years old (P.2)
-        className: 'P.2',
-        yearOfEntry: 2024,
-        photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&q=80',
-        guardianName: 'Karuhanga Fred',
-        guardianContact: '+256 701 889900',
-        communityWorker: 'Mirembe Agnes',
-        workerContact: '+256 756 223344',
-        zoneInNansana: 'Kazi Zone',
-        hasScholarship: true
-      },
-      {
-        id: 'st-7',
-        surname: 'Nsubuga',
-        otherNames: 'Sula',
-        gender: 'Male',
-        dateOfBirth: '2019-12-10', // 6 years old (P.1)
-        className: 'P.1',
-        yearOfEntry: 2025,
-        photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&q=80',
-        guardianName: 'Kato Ssenyonga',
-        guardianContact: '+256 771 223344',
-        communityWorker: 'Mirembe Agnes',
-        workerContact: '+256 756 223344',
-        zoneInNansana: 'West II',
-        hasScholarship: false
-      },
-      {
-        id: 'st-8',
-        surname: 'Nakato',
-        otherNames: 'Daphine',
-        gender: 'Female',
-        dateOfBirth: '2016-06-18', // 10 years old (P.5)
-        className: 'P.5',
-        yearOfEntry: 2022,
-        photo: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop&q=80',
-        guardianName: 'Nalweyiso Scovia',
-        guardianContact: '+256 755 776655',
-        communityWorker: 'Namatovu Florence',
-        workerContact: '+256 772 112233',
-        zoneInNansana: 'Nabweru',
-        hasScholarship: true
-      },
-      {
-        id: 'st-9',
-        surname: 'Ssewankambo',
-        otherNames: 'Mark',
-        gender: 'Male',
-        dateOfBirth: '2015-02-11', // 11 years old (P.6)
-        className: 'P.6',
-        yearOfEntry: 2021,
-        photo: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&h=150&fit=crop&q=80',
-        guardianName: 'Ssewankambo Henry',
-        guardianContact: '+256 702 334455',
-        communityWorker: 'Kibirige Sula',
-        workerContact: '+256 701 445522',
-        zoneInNansana: 'Kabulengwa',
-        hasScholarship: false
-      },
-      {
-        id: 'st-10',
-        surname: 'Kyobe',
-        otherNames: 'Arthur',
-        gender: 'Male',
-        dateOfBirth: '2018-03-08', // 8 years old (P.3)
-        className: 'P.3',
-        yearOfEntry: 2024,
-        photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&q=80',
-        guardianName: 'Kyobe Richard',
-        guardianContact: '+256 772 888777',
-        communityWorker: 'Kibirige Sula',
-        workerContact: '+256 701 445522',
-        zoneInNansana: 'Gganda',
-        hasScholarship: false
-      }
-    ];
-
-    // Pre-populate realistic grades/marks
-    const subjects = ['Mathematics', 'English', 'Science', 'Social Studies', 'Religious Education'];
+    // Start with a clean slate for the NGO's actual student records
+    const initialStudents: any[] = [];
     const initialMarks: any[] = [];
-    
-    // Fill in marks for some students to display beautiful report cards immediately
-    initialStudents.forEach(student => {
-      // P.7 and P.6 and P.5 students have marks
-      if (['P.5', 'P.6', 'P.7', 'P.4'].includes(student.className)) {
-        subjects.forEach(subject => {
-          // Generate a realistic score
-          let baseScore = 65;
-          if (student.surname === 'Mukasa') baseScore = 85; // Distinction level
-          if (student.surname === 'Babirye') baseScore = 74; // Credit level
-          if (student.surname === 'Atwine') baseScore = 52; // Pass level
-          
-          const randomOffset = Math.floor(Math.random() * 16) - 5; // -5 to +10
-          const score = Math.min(100, Math.max(0, baseScore + randomOffset));
-
-          initialMarks.push({
-            id: `mk-${student.id}-${subject.toLowerCase().replace(/ /g, '-')}`,
-            studentId: student.id,
-            subject,
-            score,
-            term: 1,
-            year: 2026,
-            teacherName: 'John Mukasa'
-          });
-        });
-      }
-    });
 
     const initialTeachers = [
       {
@@ -256,77 +65,9 @@ function getDatabase(): DatabaseSchema {
       support: [],
       visits: [],
       safeguarding: [],
-      interactions: [
-        {
-          id: 'int-1',
-          studentId: 'st-1',
-          date: '2026-06-10',
-          type: 'In-Person Meeting',
-          guardianName: 'Mukasa William',
-          summary: 'Discussed graduation prep for John Bosco. Guardian confirmed attendance for the term-end candidate prayer day.',
-          actionRequired: 'Ensure the graduation gown size is registered.',
-          loggedBy: 'Madam Namutebi Proscovia'
-        },
-        {
-          id: 'int-2',
-          studentId: 'st-2',
-          date: '2026-06-14',
-          type: 'Phone Call',
-          guardianName: 'Nassolo Harriet',
-          summary: 'Called Sarah\'s guardian regarding recent math performance. Guardian promised to monitor homework.',
-          actionRequired: 'Send remediation worksheet home.',
-          loggedBy: 'Mr. John Mukasa'
-        }
-      ],
-      sms: [
-        {
-          id: 'sms-1',
-          studentId: 'st-1',
-          guardianName: 'Mukasa William',
-          phoneNumber: '+256 702 445588',
-          messageBody: 'Dear Mukasa William, John Bosco has successfully completed all Term 1 baseline exams. View reports next week.',
-          status: 'Delivered',
-          dateSent: '2026-07-02'
-        },
-        {
-          id: 'sms-2',
-          studentId: 'st-2',
-          guardianName: 'Nassolo Harriet',
-          phoneNumber: '+256 752 998877',
-          messageBody: 'Dear Nassolo Harriet, please remember tomorrow\'s parent-teacher committee meeting at Nansana school.',
-          status: 'Delivered',
-          dateSent: '2026-07-10'
-        }
-      ],
-      documents: [
-        {
-          id: 'doc-1',
-          studentId: 'st-1',
-          studentName: 'Mukasa John Bosco',
-          title: 'Birth_Certificate_Mukasa_John',
-          category: 'Birth Certificate',
-          fileSize: '315.4 KB',
-          dateUploaded: '2026-02-15'
-        },
-        {
-          id: 'doc-2',
-          studentId: 'st-1',
-          studentName: 'Mukasa John Bosco',
-          title: 'Parent_Scholarship_Agreement_Term1_2026',
-          category: 'Guardian Consent',
-          fileSize: '1.2 MB',
-          dateUploaded: '2026-02-18'
-        },
-        {
-          id: 'doc-3',
-          studentId: 'st-2',
-          studentName: 'Babirye Sarah',
-          title: 'EMIS_Enrollment_Slip_Wakiso_ Sarah',
-          category: 'EMIS Registration',
-          fileSize: '480.2 KB',
-          dateUploaded: '2026-03-01'
-        }
-      ],
+      interactions: [],
+      sms: [],
+      documents: [],
       timetable: [
         {
           id: 'slot-1',
@@ -433,8 +174,33 @@ app.get('/api/students', (req, res) => {
   res.json(db.students);
 });
 
+const normalizeName = (val: string) => {
+  return (val || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+};
+
 app.post('/api/students', (req, res) => {
   const db = getDatabase();
+  const surname = req.body.surname || '';
+  const otherNames = req.body.otherNames || '';
+  const className = req.body.className || '';
+
+  const normSurname = normalizeName(surname);
+  const normOther = normalizeName(otherNames);
+
+  // Check if a student with the same surname + otherNames exists in the same class
+  const exists = db.students.some(s => 
+    s.className === className && 
+    normalizeName(s.surname) === normSurname && 
+    normalizeName(s.otherNames) === normOther
+  );
+
+  if (exists) {
+    return res.status(400).json({ 
+      success: false, 
+      message: `A student named "${surname} ${otherNames}" is already registered in Class ${className}. Duplicates are not allowed.` 
+    });
+  }
+
   const newStudent = {
     ...req.body,
     id: `st-${Date.now()}`
@@ -453,26 +219,64 @@ app.post('/api/students/bulk', (req, res) => {
     return res.status(400).json({ success: false, message: 'Expected an array of students' });
   }
 
-  const addedStudents = importedStudents.map((s, idx) => ({
-    id: `st-bulk-${Date.now()}-${idx}`,
-    surname: s.surname || 'Unknown',
-    otherNames: s.otherNames || '',
-    gender: s.gender || 'Male',
-    dateOfBirth: s.dateOfBirth || '2015-01-01',
-    className: s.className || 'P.1',
-    yearOfEntry: Number(s.yearOfEntry) || 2026,
-    photo: s.photo || '',
-    guardianName: s.guardianName || 'Unknown',
-    guardianContact: s.guardianContact || '',
-    communityWorker: s.communityWorker || '',
-    workerContact: s.workerContact || '',
-    zoneInNansana: s.zoneInNansana || 'Unknown',
-    hasScholarship: !!s.hasScholarship
-  }));
+  const addedStudents: any[] = [];
+  const skippedStudents: any[] = [];
 
-  db.students.push(...addedStudents);
-  saveDatabase(db);
-  res.status(201).json({ success: true, count: addedStudents.length, students: addedStudents });
+  importedStudents.forEach((s, idx) => {
+    const surname = s.surname || 'Unknown';
+    const otherNames = s.otherNames || '';
+    const className = s.className || 'P.1';
+
+    const normSurname = normalizeName(surname);
+    const normOther = normalizeName(otherNames);
+
+    // Check if duplicate exists in DB or in currently added batch
+    const existsInDb = db.students.some(existing => 
+      existing.className === className &&
+      normalizeName(existing.surname) === normSurname &&
+      normalizeName(existing.otherNames) === normOther
+    );
+
+    const existsInBatch = addedStudents.some(added => 
+      added.className === className &&
+      normalizeName(added.surname) === normSurname &&
+      normalizeName(added.otherNames) === normOther
+    );
+
+    if (existsInDb || existsInBatch) {
+      skippedStudents.push({ surname, otherNames, className, reason: 'Duplicate student name' });
+    } else {
+      addedStudents.push({
+        id: `st-bulk-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+        surname,
+        otherNames,
+        gender: s.gender || 'Male',
+        dateOfBirth: s.dateOfBirth || '2015-01-01',
+        className,
+        yearOfEntry: Number(s.yearOfEntry) || 2026,
+        photo: s.photo || '',
+        guardianName: s.guardianName || 'Unknown',
+        guardianContact: String(s.guardianContact || ''),
+        communityWorker: s.communityWorker || '',
+        workerContact: String(s.workerContact || ''),
+        zoneInNansana: s.zoneInNansana || 'Unknown',
+        hasScholarship: !!s.hasScholarship
+      });
+    }
+  });
+
+  if (addedStudents.length > 0) {
+    db.students.push(...addedStudents);
+    saveDatabase(db);
+  }
+
+  res.status(201).json({ 
+    success: true, 
+    count: addedStudents.length, 
+    skippedCount: skippedStudents.length,
+    students: addedStudents, 
+    skipped: skippedStudents 
+  });
 });
 
 app.put('/api/students/:id', (req, res) => {
@@ -482,6 +286,28 @@ app.put('/api/students/:id', (req, res) => {
   
   if (index === -1) {
     return res.status(404).json({ success: false, message: 'Student not found' });
+  }
+
+  // Check duplicate if name/class is modified
+  const surname = req.body.surname !== undefined ? req.body.surname : db.students[index].surname;
+  const otherNames = req.body.otherNames !== undefined ? req.body.otherNames : db.students[index].otherNames;
+  const className = req.body.className !== undefined ? req.body.className : db.students[index].className;
+
+  const normSurname = normalizeName(surname);
+  const normOther = normalizeName(otherNames);
+
+  const exists = db.students.some((s, i) => 
+    i !== index &&
+    s.className === className && 
+    normalizeName(s.surname) === normSurname && 
+    normalizeName(s.otherNames) === normOther
+  );
+
+  if (exists) {
+    return res.status(400).json({ 
+      success: false, 
+      message: `A student named "${surname} ${otherNames}" is already registered in Class ${className}. Duplicates are not allowed.` 
+    });
   }
   
   db.students[index] = { ...db.students[index], ...req.body, id }; // retain id
@@ -496,6 +322,22 @@ app.delete('/api/students/:id', (req, res) => {
   db.marks = db.marks.filter(m => m.studentId !== id); // Cascade delete marks
   saveDatabase(db);
   res.json({ success: true, message: 'Student and associated marks deleted successfully' });
+});
+
+app.post('/api/students/purge', (req, res) => {
+  const db = getDatabase();
+  
+  db.students = [];
+  db.marks = [];
+  db.attendance = [];
+  db.support = [];
+  db.visits = [];
+  db.safeguarding = [];
+  db.interactions = [];
+  db.documents = [];
+  
+  saveDatabase(db);
+  res.json({ success: true, message: 'All student records, marks, and associated records successfully purged.' });
 });
 
 // 3. Marks API
@@ -909,7 +751,7 @@ app.delete('/api/teachers/:username', (req, res) => {
 // 13. Automatic and Bulk Student Promotion Engine
 app.post('/api/students/promote-bulk', (req, res) => {
   const db = getDatabase();
-  const { promotions } = req.body; // Array of { studentId, nextClassName }
+  const { promotions } = req.body; // Array of { studentId, nextClassName, hasScholarship }
   
   if (!Array.isArray(promotions)) {
     return res.status(400).json({ success: false, message: 'Expected an array of promotions' });
@@ -920,6 +762,9 @@ app.post('/api/students/promote-bulk', (req, res) => {
     const student = db.students.find(s => s.id === p.studentId);
     if (student) {
       student.className = p.nextClassName;
+      if (typeof p.hasScholarship === 'boolean') {
+        student.hasScholarship = p.hasScholarship;
+      }
       count++;
     }
   });

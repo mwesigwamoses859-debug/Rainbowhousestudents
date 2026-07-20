@@ -11,7 +11,8 @@ import {
   RefreshCw,
   Database,
   Unplug,
-  ExternalLink
+  ExternalLink,
+  Trash2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Student } from '../types';
@@ -23,13 +24,15 @@ import {
   mapSheetRowsToStudents,
   listSharedFolderFiles
 } from '../lib/googleSheets';
+import { checkNameSimilarity } from '../utils/nameSimilarity';
 
 interface ExcelUploadProps {
+  students: Student[];
   onBulkAddStudents: (students: any[]) => Promise<void>;
   onSuccessRedirect: () => void;
 }
 
-export default function ExcelUpload({ onBulkAddStudents, onSuccessRedirect }: ExcelUploadProps) {
+export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedirect }: ExcelUploadProps) {
   // Tabs
   const [importSource, setImportSource] = useState<'excel' | 'google-sheets'>('excel');
 
@@ -361,15 +364,21 @@ export default function ExcelUpload({ onBulkAddStudents, onSuccessRedirect }: Ex
   const handleCommitImport = async () => {
     setImporting(true);
     try {
-      await onBulkAddStudents(parsedData);
+      const response: any = await onBulkAddStudents(parsedData);
+      
+      let successMsg = `Successfully imported ${response?.count || 0} students into the school system!`;
+      if (response?.skippedCount > 0) {
+        successMsg += ` ${response.skippedCount} duplicate name records were skipped to prevent repetitions.`;
+      }
+
       setStatusMessage({ 
         type: 'success', 
-        text: `Successfully imported ${parsedData.length} students into the school system!` 
+        text: successMsg
       });
       
       setTimeout(() => {
         onSuccessRedirect();
-      }, 1500);
+      }, 3000);
     } catch (err) {
       setStatusMessage({ type: 'error', text: 'Failed to import students. Please try again.' });
     } finally {
@@ -394,6 +403,42 @@ export default function ExcelUpload({ onBulkAddStudents, onSuccessRedirect }: Ex
           <span>Download Excel Template</span>
         </button>
       </div>
+
+      {/* Purge / Clear Slate Panel */}
+      {students.length > 0 && (
+        <div className="bg-red-50/50 border border-red-200/60 rounded-3xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h3 className="text-xs font-black uppercase tracking-wider text-red-800 flex items-center gap-1.5">
+              <Trash2 className="h-4 w-4 text-red-600" />
+              <span>Clean Slate Registry Option</span>
+            </h3>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              There are currently <strong className="text-slate-800 font-extrabold">{students.length} registered students</strong> in the system. If you want to replace them entirely with your spreadsheet, we suggest purging the current list first.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              if (confirm("⚠️ CRITICAL ACTION: Are you absolutely sure you want to completely clear the entire student registry and all associated marks, attendance, and welfare files? This cannot be undone!")) {
+                try {
+                  const res = await fetch('/api/students/purge', { method: 'POST' });
+                  if (res.ok) {
+                    alert("Registry successfully wiped. You can now import your clean roster.");
+                    window.location.reload();
+                  } else {
+                    alert("Failed to purge student records.");
+                  }
+                } catch (e) {
+                  alert("Error contacting server to clear records.");
+                }
+              }
+            }}
+            className="whitespace-nowrap inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all border border-red-700/20 hover:shadow-sm active:scale-95 cursor-pointer shadow-red-100"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            <span>Wipe Existing Students ({students.length})</span>
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b border-slate-200">
@@ -693,11 +738,40 @@ export default function ExcelUpload({ onBulkAddStudents, onSuccessRedirect }: Ex
             </div>
           </div>
 
+          {/* Duplicates warning box */}
+          {(() => {
+            const exactDuplicatesCount = parsedData.filter((row, idx) => {
+              const check = checkNameSimilarity(row.surname, row.otherNames, row.className, students);
+              const duplicateInExcel = parsedData.slice(0, idx).some(item => 
+                item.className === row.className &&
+                item.surname?.toLowerCase().trim() === row.surname?.toLowerCase().trim() &&
+                item.otherNames?.toLowerCase().trim() === row.otherNames?.toLowerCase().trim()
+              );
+              return check.isExactInClass || duplicateInExcel;
+            }).length;
+
+            if (exactDuplicatesCount > 0) {
+              return (
+                <div className="mx-5 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-950 font-semibold flex items-start gap-2.5 shadow-xs">
+                  <span className="text-base leading-none mt-0.5">⚠️</span>
+                  <div>
+                    <p className="font-extrabold">{exactDuplicatesCount} duplicate name records detected in this spreadsheet!</p>
+                    <p className="text-[10px] text-amber-800 font-medium mt-0.5">
+                      To prevent duplicates in Class registry, those rows are highlighted in red and will be automatically skipped during import. All other pupils are fully ready for import.
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           {/* Grid Preview Table */}
           <div className="overflow-x-auto max-h-96">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono sticky top-0">
+                  <th className="px-5 py-3">Import Validation</th>
                   <th className="px-5 py-3">Surname</th>
                   <th className="px-5 py-3">Other Names</th>
                   <th className="px-5 py-3">Gender</th>
@@ -710,25 +784,71 @@ export default function ExcelUpload({ onBulkAddStudents, onSuccessRedirect }: Ex
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-slate-600 font-sans">
-                {parsedData.slice(0, 50).map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-5 py-3.5 font-bold text-slate-850 uppercase">{row.surname}</td>
-                    <td className="px-5 py-3.5">{row.otherNames}</td>
-                    <td className="px-5 py-3.5 text-slate-500">{row.gender}</td>
-                    <td className="px-5 py-3.5 text-slate-500 font-mono">{row.dateOfBirth}</td>
-                    <td className="px-5 py-3.5 font-bold text-indigo-600">{row.className}</td>
-                    <td className="px-5 py-3.5 text-slate-500 font-mono">{row.yearOfEntry}</td>
-                    <td className="px-5 py-3.5 font-semibold text-slate-700">{row.zoneInNansana}</td>
-                    <td className="px-5 py-3.5">
-                      <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-mono ${
-                        row.hasScholarship ? 'bg-amber-50 text-amber-800 border border-amber-200 font-bold' : 'bg-slate-100 text-slate-400'
-                      }`}>
-                        {row.hasScholarship ? 'YES' : 'NO'}
+                {parsedData.slice(0, 50).map((row, idx) => {
+                  const check = checkNameSimilarity(row.surname, row.otherNames, row.className, students);
+                  const duplicateInExcel = parsedData.slice(0, idx).some(item => 
+                    item.className === row.className &&
+                    item.surname?.toLowerCase().trim() === row.surname?.toLowerCase().trim() &&
+                    item.otherNames?.toLowerCase().trim() === row.otherNames?.toLowerCase().trim()
+                  );
+
+                  let statusBadge = (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200/50 uppercase tracking-wide font-mono">
+                      ✓ Ready
+                    </span>
+                  );
+                  let rowBg = "hover:bg-slate-50/50 transition-colors";
+
+                  if (check.isExactInClass) {
+                    statusBadge = (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-red-50 text-red-700 border border-red-200/50 uppercase tracking-wide font-mono" title="Already registered in this class.">
+                        ✕ Duplicate (Skip)
                       </span>
-                    </td>
-                    <td className="px-5 py-3.5 text-slate-500 truncate max-w-xs">{row.guardianName}</td>
-                  </tr>
-                ))}
+                    );
+                    rowBg = "bg-red-50/25 hover:bg-red-50/45 transition-colors";
+                  } else if (duplicateInExcel) {
+                    statusBadge = (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-red-50 text-red-700 border border-red-200/50 uppercase tracking-wide font-mono" title="Repeated earlier in this sheet.">
+                        ✕ File Dup (Skip)
+                      </span>
+                    );
+                    rowBg = "bg-red-50/25 hover:bg-red-50/45 transition-colors";
+                  } else if (check.resembles && check.matchStudent) {
+                    const s = check.matchStudent;
+                    const isTypo = check.resemblanceType === 'typo';
+                    const msg = isTypo 
+                      ? `Resembles "${s.surname} ${s.otherNames}" in Class ${s.className}` 
+                      : `Similar name "${s.surname} ${s.otherNames}" in Class ${s.className}`;
+                    
+                    statusBadge = (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200/50 uppercase tracking-wide font-mono" title={msg}>
+                        ⚠️ Resembles {s.surname} ({s.className})
+                      </span>
+                    );
+                    rowBg = "bg-amber-50/15 hover:bg-amber-50/25 transition-colors";
+                  }
+
+                  return (
+                    <tr key={idx} className={rowBg}>
+                      <td className="px-5 py-3.5 whitespace-nowrap">{statusBadge}</td>
+                      <td className="px-5 py-3.5 font-bold text-slate-850 uppercase">{row.surname}</td>
+                      <td className="px-5 py-3.5">{row.otherNames}</td>
+                      <td className="px-5 py-3.5 text-slate-500">{row.gender}</td>
+                      <td className="px-5 py-3.5 text-slate-500 font-mono">{row.dateOfBirth}</td>
+                      <td className="px-5 py-3.5 font-bold text-indigo-600">{row.className}</td>
+                      <td className="px-5 py-3.5 text-slate-500 font-mono">{row.yearOfEntry}</td>
+                      <td className="px-5 py-3.5 font-semibold text-slate-700">{row.zoneInNansana}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-mono ${
+                          row.hasScholarship ? 'bg-amber-50 text-amber-800 border border-amber-200 font-bold' : 'bg-slate-100 text-slate-400'
+                        }`}>
+                          {row.hasScholarship ? 'YES' : 'NO'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-500 truncate max-w-xs">{row.guardianName}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

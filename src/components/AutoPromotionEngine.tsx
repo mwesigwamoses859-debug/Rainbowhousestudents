@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
   Award, 
@@ -17,7 +17,7 @@ import { Student, Mark, ClassName } from '../types';
 interface AutoPromotionEngineProps {
   students: Student[];
   marks: Mark[];
-  onPromoteStudents: (promotions: { studentId: string; nextClassName: any }[]) => Promise<void>;
+  onPromoteStudents: (promotions: { studentId: string; nextClassName: any; hasScholarship?: boolean }[]) => Promise<void>;
   isAdmin: boolean;
 }
 
@@ -36,6 +36,10 @@ export default function AutoPromotionEngine({
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [passThreshold, setPassThreshold] = useState<number>(50);
   const [requireAllSubjects, setRequireAllSubjects] = useState<boolean>(true);
+  
+  // Scholarship Nomination settings
+  const [scholarshipThreshold, setScholarshipThreshold] = useState<number>(75);
+  const [scholarshipAwards, setScholarshipAwards] = useState<Record<string, boolean>>({});
 
   // Status/Action State
   const [executing, setExecuting] = useState(false);
@@ -58,6 +62,29 @@ export default function AutoPromotionEngine({
   // Filter class list students
   const classStudents = students.filter(s => s.className === selectedClass);
 
+  // Prepopulate and track scholarship status changes based on average score or manual overrides
+  useEffect(() => {
+    const updatedAwards: Record<string, boolean> = {};
+    classStudents.forEach(student => {
+      const studentMarks = marks.filter(
+        m => m.studentId === student.id && 
+             m.term === selectedTerm && 
+             m.year === selectedYear
+      );
+      const totalScore = studentMarks.reduce((sum, m) => sum + m.score, 0);
+      const averageScore = studentMarks.length > 0 ? Math.round(totalScore / studentMarks.length) : 0;
+      const isEligible = averageScore >= scholarshipThreshold;
+      
+      // Keep existing manual choice if we have one, otherwise fall back to student's database status OR isEligible
+      if (scholarshipAwards[student.id] !== undefined) {
+        updatedAwards[student.id] = scholarshipAwards[student.id];
+      } else {
+        updatedAwards[student.id] = student.hasScholarship || isEligible;
+      }
+    });
+    setScholarshipAwards(updatedAwards);
+  }, [selectedClass, selectedTerm, selectedYear, scholarshipThreshold, students, marks]);
+
   // Calculate promotion stats for current class
   const compiledStudents = classStudents.map(student => {
     // Retrieve marks for student
@@ -75,6 +102,12 @@ export default function AutoPromotionEngine({
     // Average score
     const totalScore = studentMarks.reduce((sum, m) => sum + m.score, 0);
     const averageScore = studentMarks.length > 0 ? Math.round(totalScore / studentMarks.length) : 0;
+
+    // Scholarship Nomination Logic
+    const isScholarshipEligible = averageScore >= scholarshipThreshold;
+    const hasActiveScholarship = scholarshipAwards[student.id] !== undefined 
+      ? scholarshipAwards[student.id] 
+      : (student.hasScholarship || isScholarshipEligible);
 
     // Promotion eligibility rules
     let eligibility: 'Eligible' | 'Repeats' | 'Incomplete' = 'Incomplete';
@@ -102,6 +135,8 @@ export default function AutoPromotionEngine({
       isFullyAssessed,
       eligibility,
       reason,
+      isScholarshipEligible,
+      hasActiveScholarship,
       nextClass: getNextClass(student.className)
     };
   });
@@ -116,7 +151,7 @@ export default function AutoPromotionEngine({
       return;
     }
 
-    const confirmMsg = `Are you absolutely sure you want to promote ${eligibleList.length} eligible students of Class ${selectedClass} to their next class levels?\nThis will update their official grade records in the EMIS database.`;
+    const confirmMsg = `Are you absolutely sure you want to promote ${eligibleList.length} eligible students of Class ${selectedClass} to their next class levels?\nThis will update their official grade records and align any modified scholarship designations.`;
     if (!window.confirm(confirmMsg)) {
       return;
     }
@@ -126,7 +161,8 @@ export default function AutoPromotionEngine({
     try {
       const promotions = eligibleList.map(item => ({
         studentId: item.student.id,
-        nextClassName: item.nextClass
+        nextClassName: item.nextClass,
+        hasScholarship: scholarshipAwards[item.student.id] !== undefined ? scholarshipAwards[item.student.id] : item.student.hasScholarship
       }));
 
       await onPromoteStudents(promotions);
@@ -221,6 +257,26 @@ export default function AutoPromotionEngine({
               className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#FF5E4D]"
             />
             <p className="text-[10px] text-slate-400 leading-snug">Average term score of assessed subjects needed to qualify for next level promotion.</p>
+          </div>
+
+          {/* Promotion Criteria: Scholarship Nominee Threshold */}
+          <div className="space-y-1.5 pt-3 border-t border-slate-200/50">
+            <div className="flex justify-between items-center text-xs">
+              <label className="font-black text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                <GraduationCap className="h-3.5 w-3.5 text-indigo-500" />
+                <span>Scholarship Threshold</span>
+              </label>
+              <span className="font-extrabold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-500/10 font-mono">{scholarshipThreshold}%</span>
+            </div>
+            <input
+              type="range"
+              min={50}
+              max={95}
+              value={scholarshipThreshold}
+              onChange={(e) => setScholarshipThreshold(Number(e.target.value))}
+              className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+            />
+            <p className="text-[10px] text-slate-400 leading-snug">Average mark needed to qualify for or maintain NGO scholarship funding support.</p>
           </div>
 
           {/* Require all subjects check */}
@@ -319,7 +375,7 @@ export default function AutoPromotionEngine({
                   <p className="text-xs">No registered students in Class {selectedClass}.</p>
                 </div>
               ) : (
-                compiledStudents.map(({ student, averageScore, isFullyAssessed, eligibility, reason, nextClass }) => (
+                compiledStudents.map(({ student, averageScore, isFullyAssessed, eligibility, reason, isScholarshipEligible, hasActiveScholarship, nextClass }) => (
                   <div key={student.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/30 transition-all">
                     
                     {/* Student details */}
@@ -335,7 +391,29 @@ export default function AutoPromotionEngine({
                       </div>
                       <div>
                         <strong className="text-slate-800 text-xs block uppercase">{student.surname} {student.otherNames}</strong>
-                        <span className="text-[10px] text-slate-400 block font-mono">ID: {student.id} | Average: {averageScore}%</span>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+                          <span className="text-[10px] text-slate-400 font-mono">ID: {student.id} | Avg: {averageScore}%</span>
+                          <span className="text-slate-200">|</span>
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={hasActiveScholarship}
+                              onChange={(e) => {
+                                setScholarshipAwards(prev => ({
+                                  ...prev,
+                                  [student.id]: e.target.checked
+                                }));
+                              }}
+                              className="h-3.5 w-3.5 text-indigo-600 focus:ring-indigo-500 border-slate-300 rounded cursor-pointer"
+                            />
+                            <span className="text-[10px] font-extrabold text-slate-500 hover:text-slate-800 select-none">NGO Scholar</span>
+                          </label>
+                          {isScholarshipEligible && (
+                            <span className="text-[8px] font-black uppercase text-amber-700 bg-amber-400/20 border border-amber-400/30 px-1 py-0.2 rounded-md flex items-center gap-0.5 shadow-sm">
+                              ⭐ Nominee
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 

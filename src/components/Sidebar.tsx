@@ -28,8 +28,6 @@ export default function Sidebar({ activeTab, setActiveTab, teacher, onLogout }: 
     { id: 'marks', name: 'Academics', icon: GraduationCap },
     { id: 'attendance', name: 'Attendance', icon: Calendar },
     { id: 'reports', name: 'Examinations', icon: FileSpreadsheet },
-    { id: 'cases', name: 'Community Hub', icon: HeartHandshake },
-    { id: 'communication', name: 'Communications', icon: Megaphone },
     { id: 'ai-chat', name: 'AI Assistant', icon: Sparkles },
     { id: 'upload', name: 'Settings', icon: Settings },
   ];

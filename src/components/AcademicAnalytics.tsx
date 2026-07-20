@@ -17,10 +17,15 @@ import {
   HelpCircle,
   Percent,
   TrendingDown,
-  GraduationCap
+  GraduationCap,
+  FileText,
+  Download,
+  X,
+  Check
 } from 'lucide-react';
 import { Student, Mark, ClassName } from '../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { AnimatePresence, motion } from 'motion/react';
 
 interface AcademicAnalyticsProps {
   students: Student[];
@@ -112,6 +117,21 @@ export default function AcademicAnalytics({ students, marks, isAdmin }: Academic
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSimStudentId, setSelectedSimStudentId] = useState<string | null>(null);
   const [useSstReAveraging, setUseSstReAveraging] = useState(false);
+
+  // School Management Report PDF Generator states
+  const [showManagementReportModal, setShowManagementReportModal] = useState(false);
+  const [isPrintingManagementReport, setIsPrintingManagementReport] = useState(false);
+  const [reportTitle, setReportTitle] = useState('PRIMARY LEAVING EXAMINATION (PLE) FORECAST & REFORM PLAN');
+  const [signatureName, setSignatureName] = useState('Florence Namatovu');
+  const [signatureTitle, setSignatureTitle] = useState('Head Teacher / Studies Committee Chair');
+  const [customCommentary, setCustomCommentary] = useState('');
+  
+  // Custom inclusions
+  const [includeStats, setIncludeStats] = useState(true);
+  const [includeGenderBreakdown, setIncludeGenderBreakdown] = useState(true);
+  const [includeSubjectGaps, setIncludeSubjectGaps] = useState(true);
+  const [includeAtRiskList, setIncludeAtRiskList] = useState(true);
+  const [includeFullLedger, setIncludeFullLedger] = useState(false);
 
   // Custom simulation scores (for What-If)
   const [simScores, setSimScores] = useState<Record<string, number>>({
@@ -351,6 +371,31 @@ export default function AcademicAnalytics({ students, marks, isAdmin }: Academic
     })).filter(d => d.subject !== 'RE' || !useSstReAveraging);
   }, [stats.subjectAverages, useSstReAveraging]);
 
+  const dynamicDefaultCommentary = useMemo(() => {
+    const weakestSub = radarChartData.length > 0 
+      ? radarChartData.reduce((prev, curr) => prev.average < curr.average ? prev : curr).subject
+      : 'Mathematics';
+    const weakestAvg = radarChartData.length > 0
+      ? radarChartData.reduce((prev, curr) => prev.average < curr.average ? prev : curr).average
+      : 0;
+
+    return `Based on comprehensive assessment auditing for the ${selectedCohortClass} candidate cohort during Term ${selectedTerm} of the ${selectedYear} academic year, the predictive models indicate a projected Division I rate of ${stats.div1Rate}% and an overall pass rate of ${stats.overallPassRate}%, with an average aggregate performance score of ${stats.avgAggregate} (where lower aggregates denote higher academic standard).
+
+Academic metrics pinpoint ${weakestSub} as the most pronounced educational bottleneck, demonstrating a low cohort average score of ${weakestAvg}%. To resolve this quantitative performance gap, we recommend immediate weekend remedial coaching sessions, increased frequency of topic-specific study tests, and specialized peer-to-peer mentoring.
+
+Additionally, there are currently ${stats.atRiskCount} candidate(s) categorized under the At-Risk or Division U warning category. A dedicated studies directive has been established to support these individual pupils through targeted homework clubs and weekly studies counseling.`;
+  }, [selectedCohortClass, selectedTerm, selectedYear, stats, radarChartData]);
+
+  const handlePrintManagementReport = () => {
+    setIsPrintingManagementReport(true);
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        setIsPrintingManagementReport(false);
+      }, 300);
+    }, 150);
+  };
+
   // Format data for Division Distribution chart
   const distributionChartData = useMemo(() => {
     return [
@@ -407,6 +452,15 @@ export default function AcademicAnalytics({ students, marks, isAdmin }: Academic
               <option value={3}>Term 3</option>
             </select>
           </div>
+
+          <button
+            onClick={() => setShowManagementReportModal(true)}
+            className="p-2.5 bg-[#0b2d59] hover:bg-[#123e75] text-white rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold shadow-md"
+            title="Generate Formatted Management PDF Report"
+          >
+            <FileText className="h-4 w-4 text-amber-400" />
+            <span>Management PDF Report</span>
+          </button>
 
           <button
             onClick={() => window.print()}
@@ -1023,6 +1077,668 @@ export default function AcademicAnalytics({ students, marks, isAdmin }: Academic
         </div>
 
       </div>
+
+      {/* -------------------- MANAGEMENT REPORT MODAL & PRINT CONFIG -------------------- */}
+      
+      {/* Dynamic Style block for printing ONLY the management report */}
+      {isPrintingManagementReport && (
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            body * {
+              visibility: hidden !important;
+            }
+            #management-report-print-area, #management-report-print-area * {
+              visibility: visible !important;
+            }
+            #management-report-print-area {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
+              display: block !important;
+              background: white !important;
+              color: black !important;
+              padding: 0 !important;
+              margin: 0 !important;
+            }
+          }
+        ` }} />
+      )}
+
+      {/* Actual Hidden/Printable Management Report Canvas */}
+      <div id="management-report-print-area" className="hidden print:block bg-white text-slate-900 p-10 min-h-screen font-sans">
+        {/* Header Badge */}
+        <div className="border-b-4 border-slate-900 pb-4 text-center">
+          <div className="flex justify-between items-start">
+            <div className="text-left">
+              <h2 className="text-xl font-display font-black text-slate-900 uppercase">ASHINAGA UGANDA RAINBOW HOUSE</h2>
+              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Nansana Learning Center & Studies Directorate</p>
+              <p className="text-[9px] text-slate-500 mt-0.5">PO Box 11202, Kampala Uganda | info@ashinaga-rainbow.org</p>
+            </div>
+            <div className="text-right text-[10px] font-bold font-mono text-slate-600">
+              <p>DATE: {new Date().toLocaleDateString('en-GB')}</p>
+              <p>REF NO: ASH-PLE-MGT-{selectedCohortClass.replace('.', '')}-{selectedTerm}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Report Title */}
+        <div className="my-6 text-center">
+          <h1 className="text-sm font-extrabold uppercase tracking-wide text-slate-950 font-display">
+            {reportTitle}
+          </h1>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">
+            COHORT: {selectedCohortClass} Candidates | Term: Term {selectedTerm}, {selectedYear} | Audited: {stats.completeCount} Pupils
+          </p>
+        </div>
+
+        {/* Section 1: Executive Summary */}
+        <div className="space-y-2 mb-6">
+          <h3 className="text-xs font-bold text-slate-900 uppercase border-b border-slate-200 pb-1">I. Executive Summary &amp; Directives</h3>
+          <p className="text-[11px] text-slate-800 leading-relaxed whitespace-pre-wrap">
+            {customCommentary || dynamicDefaultCommentary}
+          </p>
+        </div>
+
+        {/* Section 2: Stats Grid */}
+        {includeStats && (
+          <div className="mb-6 space-y-2">
+            <h3 className="text-xs font-bold text-slate-900 uppercase border-b border-slate-200 pb-1">II. UNEB Division Performance Model</h3>
+            <div className="grid grid-cols-5 gap-3 pt-1 text-center">
+              <div className="border border-slate-200 p-2.5 rounded-lg">
+                <span className="text-[8px] text-slate-400 font-extrabold uppercase">Expected Div I</span>
+                <strong className="text-base font-black text-slate-800 block mt-0.5">{stats.div1Rate}%</strong>
+                <span className="text-[8px] text-slate-400 block mt-0.5">({stats.div1} pupils)</span>
+              </div>
+              <div className="border border-slate-200 p-2.5 rounded-lg">
+                <span className="text-[8px] text-slate-400 font-extrabold uppercase">Expected Div II</span>
+                <strong className="text-base font-black text-slate-800 block mt-0.5">
+                  {stats.completeCount > 0 ? Math.round((stats.div2 / stats.completeCount) * 100) : 0}%
+                </strong>
+                <span className="text-[8px] text-slate-400 block mt-0.5">({stats.div2} pupils)</span>
+              </div>
+              <div className="border border-slate-200 p-2.5 rounded-lg">
+                <span className="text-[8px] text-slate-400 font-extrabold uppercase">Expected Div III</span>
+                <strong className="text-base font-black text-slate-800 block mt-0.5">
+                  {stats.completeCount > 0 ? Math.round((stats.div3 / stats.completeCount) * 100) : 0}%
+                </strong>
+                <span className="text-[8px] text-slate-400 block mt-0.5">({stats.div3} pupils)</span>
+              </div>
+              <div className="border border-slate-200 p-2.5 rounded-lg">
+                <span className="text-[8px] text-slate-400 font-extrabold uppercase">Expected Div IV</span>
+                <strong className="text-base font-black text-slate-800 block mt-0.5">
+                  {stats.completeCount > 0 ? Math.round((stats.div4 / stats.completeCount) * 100) : 0}%
+                </strong>
+                <span className="text-[8px] text-slate-400 block mt-0.5">({stats.div4} pupils)</span>
+              </div>
+              <div className="border border-slate-200 p-2.5 rounded-lg">
+                <span className="text-[8px] text-slate-400 font-extrabold uppercase">Expected Div U</span>
+                <strong className="text-base font-black text-red-600 block mt-0.5">
+                  {stats.completeCount > 0 ? Math.round((stats.divU / stats.completeCount) * 100) : 0}%
+                </strong>
+                <span className="text-[8px] text-slate-400 block mt-0.5">({stats.divU} pupils)</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section 3: Subject Gaps */}
+        {includeSubjectGaps && (
+          <div className="mb-6 space-y-2">
+            <h3 className="text-xs font-bold text-slate-900 uppercase border-b border-slate-200 pb-1">III. Subject-by-Subject Gap Diagnosis</h3>
+            <div className="grid grid-cols-2 gap-4 pt-1">
+              <table className="w-full text-left text-[10px]">
+                <thead>
+                  <tr className="border-b border-slate-200 font-bold uppercase text-slate-500">
+                    <th className="pb-1">Core Subject</th>
+                    <th className="pb-1 text-center">Cohort Average</th>
+                    <th className="pb-1 text-center">Failed Candidates</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {Object.keys(stats.subjectAverages).map((sub) => {
+                    const data = (stats.subjectAverages as any)[sub];
+                    if (!data || (sub === 'Religious Education' && useSstReAveraging)) return null;
+                    return (
+                      <tr key={sub}>
+                        <td className="py-1">{sub}</td>
+                        <td className="py-1 text-center font-bold text-slate-900">{data.avg}%</td>
+                        <td className="py-1 text-center text-red-600">{data.failCount} failed</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-[10px] text-slate-600 leading-relaxed self-center">
+                <strong className="text-slate-850 font-bold uppercase block mb-1">Primary Academic Deficit</strong>
+                {radarChartData.length > 0 ? (
+                  <span>
+                    Our studies register pinpoints <span className="font-bold text-indigo-700">{radarChartData.reduce((prev, curr) => prev.average < curr.average ? prev : curr).subject}</span> as the primary bottleneck with a cohort average of <span className="font-bold">{radarChartData.reduce((prev, curr) => prev.average < curr.average ? prev : curr).average}%</span>. Action directives should focus resources on boosting quantitative competency in this domain prior to official UNEB examinations.
+                  </span>
+                ) : (
+                  'Insufficient subject average data.'
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section 4: Gender breakdown */}
+        {includeGenderBreakdown && (
+          <div className="mb-6 space-y-2">
+            <h3 className="text-xs font-bold text-slate-900 uppercase border-b border-slate-200 pb-1">IV. Demographics &amp; Gender Performance Equity</h3>
+            <div className="grid grid-cols-2 gap-4 text-[10px] pt-1">
+              <div className="border border-slate-200 p-2 rounded-lg flex justify-between items-center">
+                <div>
+                  <span className="font-bold text-blue-600 block">Male Candidate Demographics</span>
+                  <span className="text-slate-500">{stats.genderBreakdown.Male.total} Pupils | Avg Aggregate: {stats.genderBreakdown.Male.avgAgg || '--'}</span>
+                </div>
+                <span className="font-bold text-slate-850 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{stats.genderBreakdown.Male.div1Rate}% Div I</span>
+              </div>
+              <div className="border border-slate-200 p-2 rounded-lg flex justify-between items-center">
+                <div>
+                  <span className="font-bold text-pink-600 block">Female Candidate Demographics</span>
+                  <span className="text-slate-500">{stats.genderBreakdown.Female.total} Pupils | Avg Aggregate: {stats.genderBreakdown.Female.avgAgg || '--'}</span>
+                </div>
+                <span className="font-bold text-slate-850 bg-pink-50 px-2 py-0.5 rounded border border-pink-100">{stats.genderBreakdown.Female.div1Rate}% Div I</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section 5: At-Risk */}
+        {includeAtRiskList && (
+          <div className="mb-6 space-y-2">
+            <h3 className="text-xs font-bold text-slate-900 uppercase border-b border-slate-200 pb-1">V. Priority Intervention Cohort (At-Risk / Borderline Candidates)</h3>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-left text-[9px] border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 font-bold uppercase text-slate-500">
+                    <th className="px-3 py-1.5">Pupil Profile</th>
+                    <th className="px-3 py-1.5 text-center">Projected Div</th>
+                    <th className="px-3 py-1.5 text-center">Aggregate</th>
+                    <th className="px-3 py-1.5 text-center">Weakest Domain</th>
+                    <th className="px-3 py-1.5 text-right">Guardian Emergency Contact</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {cohortProjections
+                    .filter(p => p.isComplete && (p.readiness === 'At Risk' || p.readiness === 'Marginal'))
+                    .map((p) => {
+                      const weakest = getWeakestSubject(p.scores);
+                      return (
+                        <tr key={p.student.id}>
+                          <td className="px-3 py-1 font-bold text-slate-800 uppercase">
+                            {p.student.surname} {p.student.otherNames}
+                          </td>
+                          <td className="px-3 py-1 text-center font-bold text-amber-700">
+                            {p.division}
+                          </td>
+                          <td className="px-3 py-1 text-center font-mono font-bold">
+                            {p.aggregate}
+                          </td>
+                          <td className="px-3 py-1 text-center font-semibold text-slate-500">
+                            {weakest}
+                          </td>
+                          <td className="px-3 py-1 text-right font-mono">
+                            {p.student.guardianContact || '+256 702 445588'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  {cohortProjections.filter(p => p.isComplete && (p.readiness === 'At Risk' || p.readiness === 'Marginal')).length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-4 text-center text-slate-400 italic">
+                        Excellent! No borderline or at-risk pupils detected in this cohort projection.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Section 6: Full Ledger */}
+        {includeFullLedger && (
+          <div className="mb-6 space-y-2" style={{ pageBreakBefore: 'always' }}>
+            <h3 className="text-xs font-bold text-slate-900 uppercase border-b border-slate-200 pb-1">VI. Detailed Candidate Ledger</h3>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-left text-[9px] border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 font-bold uppercase text-slate-500">
+                    <th className="px-3 py-1.5">Pupil Profile</th>
+                    <th className="px-3 py-1.5 text-center">MATH</th>
+                    <th className="px-3 py-1.5 text-center">ENG</th>
+                    <th className="px-3 py-1.5 text-center">SCI</th>
+                    <th className="px-3 py-1.5 text-center">SST</th>
+                    <th className="px-3 py-1.5 text-center">Agg</th>
+                    <th className="px-3 py-1.5 text-right">Projected Division</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {cohortProjections.map((p) => (
+                    <tr key={p.student.id}>
+                      <td className="px-3 py-1 font-bold text-slate-800 uppercase">
+                        {p.student.surname} {p.student.otherNames}
+                      </td>
+                      <td className="px-3 py-1 text-center font-mono">{p.scores['Mathematics'] !== undefined ? `${p.scores['Mathematics']}%` : '--'}</td>
+                      <td className="px-3 py-1 text-center font-mono">{p.scores['English'] !== undefined ? `${p.scores['English']}%` : '--'}</td>
+                      <td className="px-3 py-1 text-center font-mono">{p.scores['Science'] !== undefined ? `${p.scores['Science']}%` : '--'}</td>
+                      <td className="px-3 py-1 text-center font-mono">{p.scores['Social Studies'] !== undefined ? `${p.scores['Social Studies']}%` : '--'}</td>
+                      <td className="px-3 py-1 text-center font-mono font-bold text-slate-800">{p.isComplete ? p.aggregate : '--'}</td>
+                      <td className="px-3 py-1 text-right font-bold font-mono">
+                        {p.isComplete ? p.division : 'Incomplete'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Signatures */}
+        <div className="mt-12 pt-6 border-t border-slate-200 flex justify-between items-end">
+          <div className="text-left">
+            <p className="text-[8px] text-slate-400 font-mono uppercase font-black">Authenticated Management Review</p>
+            <p className="text-[9px] text-slate-700 font-bold uppercase mt-1">EMIS Sync ID: ASH-PLE-REFORM-{selectedCohortClass.replace('.', '')}</p>
+          </div>
+
+          <div className="text-right">
+            <p className="font-serif italic text-slate-500 pr-2 font-black" style={{ fontSize: '18px' }}>
+              {signatureName.split(' ')[0]} {signatureName.split(' ')[1] || ''}
+            </p>
+            <div className="w-48 h-0.5 bg-slate-900 mt-1" />
+            <p className="text-[10px] font-extrabold text-slate-900 uppercase mt-1 leading-none">{signatureName}</p>
+            <p className="text-[8px] text-slate-500 font-medium leading-none mt-1">{signatureTitle}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Interactive WYSIWYG Management Report Modal Dialog */}
+      <AnimatePresence>
+        {showManagementReportModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm no-print">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="w-full max-w-6xl h-[92vh] bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-150 flex flex-col md:flex-row"
+            >
+              {/* Left Configurator Board (w-5/12) */}
+              <div className="md:w-5/12 bg-slate-50 p-6 flex flex-col justify-between overflow-y-auto border-r border-slate-200">
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-[#0b2d59] text-white rounded-xl">
+                        <FileText className="h-5 w-5 text-amber-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">Report Architect</h3>
+                        <p className="text-[10px] text-slate-400 font-medium">Custom Management PDF Report</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowManagementReportModal(false)}
+                      className="p-1.5 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-full transition-all cursor-pointer"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* Input Fields */}
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Document Main Title</label>
+                      <input
+                        type="text"
+                        value={reportTitle}
+                        onChange={(e) => setReportTitle(e.target.value)}
+                        placeholder="Report Main Title"
+                        className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs text-slate-700 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Signee Name</label>
+                        <input
+                          type="text"
+                          value={signatureName}
+                          onChange={(e) => setSignatureName(e.target.value)}
+                          placeholder="Presenter name"
+                          className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs text-slate-700 focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Signee Title</label>
+                        <input
+                          type="text"
+                          value={signatureTitle}
+                          onChange={(e) => setSignatureTitle(e.target.value)}
+                          placeholder="Presenter title"
+                          className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs text-slate-700 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center">
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">Management Directives &amp; Commentary</label>
+                        <button
+                          onClick={() => setCustomCommentary('')}
+                          className="text-[9px] font-extrabold text-indigo-600 hover:underline uppercase cursor-pointer"
+                        >
+                          Reset Default
+                        </button>
+                      </div>
+                      <textarea
+                        rows={7}
+                        value={customCommentary || dynamicDefaultCommentary}
+                        onChange={(e) => setCustomCommentary(e.target.value)}
+                        placeholder="Write custom school board remarks or management plans..."
+                        className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs text-slate-700 focus:outline-none resize-none font-sans"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Section Toggles */}
+                  <div className="space-y-2 pt-3 border-t border-slate-200">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inclusion Layout Controls</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 bg-white px-3 py-2 border border-slate-150 rounded-xl text-[11px] font-bold text-slate-700 cursor-pointer hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={includeStats}
+                          onChange={(e) => setIncludeStats(e.target.checked)}
+                          className="rounded text-indigo-600 focus:ring-0 cursor-pointer"
+                        />
+                        <span>Stats Panel</span>
+                      </label>
+                      <label className="flex items-center gap-2 bg-white px-3 py-2 border border-slate-150 rounded-xl text-[11px] font-bold text-slate-700 cursor-pointer hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={includeSubjectGaps}
+                          onChange={(e) => setIncludeSubjectGaps(e.target.checked)}
+                          className="rounded text-indigo-600 focus:ring-0 cursor-pointer"
+                        />
+                        <span>Gap Diagnosis</span>
+                      </label>
+                      <label className="flex items-center gap-2 bg-white px-3 py-2 border border-slate-150 rounded-xl text-[11px] font-bold text-slate-700 cursor-pointer hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={includeGenderBreakdown}
+                          onChange={(e) => setIncludeGenderBreakdown(e.target.checked)}
+                          className="rounded text-indigo-600 focus:ring-0 cursor-pointer"
+                        />
+                        <span>Gender Breakdown</span>
+                      </label>
+                      <label className="flex items-center gap-2 bg-white px-3 py-2 border border-slate-150 rounded-xl text-[11px] font-bold text-slate-700 cursor-pointer hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={includeAtRiskList}
+                          onChange={(e) => setIncludeAtRiskList(e.target.checked)}
+                          className="rounded text-indigo-600 focus:ring-0 cursor-pointer"
+                        />
+                        <span>Priority At-Risk</span>
+                      </label>
+                      <label className="col-span-2 flex items-center gap-2 bg-white px-3 py-2 border border-slate-150 rounded-xl text-[11px] font-bold text-slate-700 cursor-pointer hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={includeFullLedger}
+                          onChange={(e) => setIncludeFullLedger(e.target.checked)}
+                          className="rounded text-indigo-600 focus:ring-0 cursor-pointer"
+                        />
+                        <span>Detailed Candidate Ledger (A4 Appendices)</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Print Dispatch Buttons */}
+                <div className="space-y-2 pt-4 border-t border-slate-200">
+                  <button
+                    onClick={handlePrintManagementReport}
+                    className="w-full py-3 bg-[#0b2d59] hover:bg-[#153f75] text-white font-extrabold rounded-xl text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                  >
+                    <Download className="h-4 w-4 text-amber-400" />
+                    <span>Export &amp; Print PDF</span>
+                  </button>
+                  <button
+                    onClick={() => setShowManagementReportModal(false)}
+                    className="w-full py-2 bg-slate-200 hover:bg-slate-300 text-slate-600 font-extrabold rounded-xl text-xs uppercase cursor-pointer"
+                  >
+                    Discard Changes
+                  </button>
+                </div>
+              </div>
+
+              {/* Right WYSIWYG A4 Preview Board (w-7/12) */}
+              <div className="md:w-7/12 bg-slate-100 p-8 flex justify-center overflow-y-auto">
+                <div className="w-[100%] max-w-[210mm] bg-white shadow-xl p-8 border border-slate-200 text-slate-900 rounded-sm font-sans flex flex-col justify-between" style={{ minHeight: '297mm' }}>
+                  
+                  {/* Preview Content Inside Sheet */}
+                  <div>
+                    {/* Header */}
+                    <div className="border-b-2 border-slate-900 pb-3 text-center">
+                      <div className="flex justify-between items-start">
+                        <div className="text-left">
+                          <h2 className="text-sm font-display font-black text-slate-900 uppercase">ASHINAGA UGANDA RAINBOW HOUSE</h2>
+                          <p className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">Nansana Learning Center & Studies Directorate</p>
+                          <p className="text-[7px] text-slate-400 mt-0.5">PO Box 11202, Kampala Uganda | info@ashinaga-rainbow.org</p>
+                        </div>
+                        <div className="text-right text-[8px] font-bold font-mono text-slate-500">
+                          <p>DATE: {new Date().toLocaleDateString('en-GB')}</p>
+                          <p>REF NO: ASH-PLE-MGT-{selectedCohortClass.replace('.', '')}-{selectedTerm}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Title */}
+                    <div className="my-4 text-center">
+                      <h1 className="text-xs font-black uppercase tracking-wide text-slate-950 font-display">
+                        {reportTitle || 'PRIMARY LEAVING EXAMINATION (PLE) SUMMARY FORECAST'}
+                      </h1>
+                      <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                        COHORT: {selectedCohortClass} Candidates | Term: Term {selectedTerm}, {selectedYear} | Audited: {stats.completeCount} Pupils
+                      </p>
+                    </div>
+
+                    {/* Executive Summary Section */}
+                    <div className="space-y-1 mb-4">
+                      <h3 className="text-[10px] font-black text-slate-900 uppercase border-b border-slate-150 pb-0.5">I. Executive Summary &amp; Directives</h3>
+                      <p className="text-[9px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+                        {customCommentary || dynamicDefaultCommentary}
+                      </p>
+                    </div>
+
+                    {/* UNEB division stats */}
+                    {includeStats && (
+                      <div className="mb-4 space-y-1">
+                        <h3 className="text-[10px] font-black text-slate-900 uppercase border-b border-slate-150 pb-0.5">II. UNEB Division Performance Model</h3>
+                        <div className="grid grid-cols-5 gap-2 pt-0.5 text-center">
+                          <div className="border border-slate-150 p-1.5 rounded-md">
+                            <span className="text-[7px] text-slate-400 font-black uppercase block leading-none">Expected Div I</span>
+                            <strong className="text-xs font-black text-slate-800 block mt-0.5">{stats.div1Rate}%</strong>
+                            <span className="text-[7px] text-slate-400 block mt-0.5">({stats.div1} pupils)</span>
+                          </div>
+                          <div className="border border-slate-150 p-1.5 rounded-md">
+                            <span className="text-[7px] text-slate-400 font-black uppercase block leading-none">Expected Div II</span>
+                            <strong className="text-xs font-black text-slate-800 block mt-0.5">
+                              {stats.completeCount > 0 ? Math.round((stats.div2 / stats.completeCount) * 100) : 0}%
+                            </strong>
+                            <span className="text-[7px] text-slate-400 block mt-0.5">({stats.div2} pupils)</span>
+                          </div>
+                          <div className="border border-slate-150 p-1.5 rounded-md">
+                            <span className="text-[7px] text-slate-400 font-black uppercase block leading-none">Expected Div III</span>
+                            <strong className="text-xs font-black text-slate-800 block mt-0.5">
+                              {stats.completeCount > 0 ? Math.round((stats.div3 / stats.completeCount) * 100) : 0}%
+                            </strong>
+                            <span className="text-[7px] text-slate-400 block mt-0.5">({stats.div3} pupils)</span>
+                          </div>
+                          <div className="border border-slate-150 p-1.5 rounded-md">
+                            <span className="text-[7px] text-slate-400 font-black uppercase block leading-none">Expected Div IV</span>
+                            <strong className="text-xs font-black text-slate-800 block mt-0.5">
+                              {stats.completeCount > 0 ? Math.round((stats.div4 / stats.completeCount) * 100) : 0}%
+                            </strong>
+                            <span className="text-[7px] text-slate-400 block mt-0.5">({stats.div4} pupils)</span>
+                          </div>
+                          <div className="border border-slate-150 p-1.5 rounded-md">
+                            <span className="text-[7px] text-slate-400 font-black uppercase block leading-none">Expected Div U</span>
+                            <strong className="text-xs font-black text-red-600 block mt-0.5">
+                              {stats.completeCount > 0 ? Math.round((stats.divU / stats.completeCount) * 100) : 0}%
+                            </strong>
+                            <span className="text-[7px] text-slate-400 block mt-0.5">({stats.divU} pupils)</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Subject gap */}
+                    {includeSubjectGaps && (
+                      <div className="mb-4 space-y-1">
+                        <h3 className="text-[10px] font-black text-slate-900 uppercase border-b border-slate-150 pb-0.5">III. Subject-by-Subject Gap Diagnosis</h3>
+                        <div className="grid grid-cols-2 gap-3 pt-0.5">
+                          <table className="w-full text-left text-[8px]">
+                            <thead>
+                              <tr className="border-b border-slate-200 font-bold uppercase text-slate-400">
+                                <th className="pb-0.5">Subject</th>
+                                <th className="pb-0.5 text-center">Avg Score</th>
+                                <th className="pb-0.5 text-center">Failures</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-medium text-slate-600">
+                              {Object.keys(stats.subjectAverages).map((sub) => {
+                                const data = (stats.subjectAverages as any)[sub];
+                                if (!data || (sub === 'Religious Education' && useSstReAveraging)) return null;
+                                return (
+                                  <tr key={sub}>
+                                    <td className="py-0.5">{sub}</td>
+                                    <td className="py-0.5 text-center font-bold text-slate-800">{data.avg}%</td>
+                                    <td className="py-0.5 text-center text-red-600">{data.failCount} fail(s)</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+
+                          <div className="bg-slate-50 border border-slate-150 rounded-md p-2 text-[8px] text-slate-500 leading-normal">
+                            <strong className="text-slate-880 font-bold uppercase block mb-0.5">Academic Deficit Memo</strong>
+                            {radarChartData.length > 0 ? (
+                              <span>
+                                Key metrics highlight <span className="font-bold text-indigo-700">{radarChartData.reduce((prev, curr) => prev.average < curr.average ? prev : curr).subject}</span> as the primary bottleneck averaging <span className="font-bold">{radarChartData.reduce((prev, curr) => prev.average < curr.average ? prev : curr).average}%</span>. Interventions should prioritize quantitative competency prior to UNEB assessments.
+                              </span>
+                            ) : (
+                              'No bottleneck detected.'
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Gender Equity */}
+                    {includeGenderBreakdown && (
+                      <div className="mb-4 space-y-1">
+                        <h3 className="text-[10px] font-black text-slate-900 uppercase border-b border-slate-150 pb-0.5">IV. Demographics &amp; Gender Performance Equity</h3>
+                        <div className="grid grid-cols-2 gap-2 text-[8px] pt-0.5">
+                          <div className="border border-slate-150 p-1.5 rounded-md flex justify-between items-center">
+                            <div>
+                              <span className="font-bold text-blue-600 block">Boys ({stats.genderBreakdown.Male.total})</span>
+                              <span className="text-slate-400">Avg Aggregate: {stats.genderBreakdown.Male.avgAgg || '--'}</span>
+                            </div>
+                            <span className="font-bold text-slate-700 bg-blue-50 px-1.5 py-0.25 rounded border border-blue-100">{stats.genderBreakdown.Male.div1Rate}% Div I</span>
+                          </div>
+                          <div className="border border-slate-150 p-1.5 rounded-md flex justify-between items-center">
+                            <div>
+                              <span className="font-bold text-pink-600 block">Girls ({stats.genderBreakdown.Female.total})</span>
+                              <span className="text-slate-400">Avg Aggregate: {stats.genderBreakdown.Female.avgAgg || '--'}</span>
+                            </div>
+                            <span className="font-bold text-slate-700 bg-pink-50 px-1.5 py-0.25 rounded border border-pink-100">{stats.genderBreakdown.Female.div1Rate}% Div I</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* At Risk List */}
+                    {includeAtRiskList && (
+                      <div className="mb-4 space-y-1">
+                        <h3 className="text-[10px] font-black text-slate-900 uppercase border-b border-slate-150 pb-0.5">V. Priority Intervention Cohort (At-Risk / Borderline Pupils)</h3>
+                        <div className="border border-slate-150 rounded-md overflow-hidden">
+                          <table className="w-full text-left text-[8px] border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-150 font-bold uppercase text-slate-400">
+                                <th className="px-2 py-1">Pupil Name</th>
+                                <th className="px-2 py-1 text-center">Projected Div</th>
+                                <th className="px-2 py-1 text-center">Aggregate</th>
+                                <th className="px-2 py-1 text-center">Weakest Domain</th>
+                                <th className="px-2 py-1 text-right">Guardian Contact</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-slate-600 font-medium">
+                              {cohortProjections
+                                .filter(p => p.isComplete && (p.readiness === 'At Risk' || p.readiness === 'Marginal'))
+                                .slice(0, 8)
+                                .map((p) => {
+                                  const weakest = getWeakestSubject(p.scores);
+                                  return (
+                                    <tr key={p.student.id}>
+                                      <td className="px-2 py-0.5 font-bold text-slate-800 uppercase">{p.student.surname} {p.student.otherNames}</td>
+                                      <td className="px-2 py-0.5 text-center font-bold text-amber-700">{p.division}</td>
+                                      <td className="px-2 py-0.5 text-center font-mono font-bold">{p.aggregate}</td>
+                                      <td className="px-2 py-0.5 text-center">{weakest}</td>
+                                      <td className="px-2 py-0.5 text-right font-mono">{p.student.guardianContact || '+256 702 445588'}</td>
+                                    </tr>
+                                  );
+                                })}
+                              {cohortProjections.filter(p => p.isComplete && (p.readiness === 'At Risk' || p.readiness === 'Marginal')).length === 0 && (
+                                <tr>
+                                  <td colSpan={5} className="px-2 py-2 text-center text-slate-400 italic">No borderline or critical pupils found.</td>
+                                </tr>
+                              )}
+                              {cohortProjections.filter(p => p.isComplete && (p.readiness === 'At Risk' || p.readiness === 'Marginal')).length > 8 && (
+                                <tr>
+                                  <td colSpan={5} className="px-2 py-1 text-center text-[7px] text-slate-400 italic bg-slate-50">
+                                    * Showing first 8 records in active preview. All {cohortProjections.filter(p => p.isComplete && (p.readiness === 'At Risk' || p.readiness === 'Marginal')).length} records will print.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Detailed candidate ledger warning/info */}
+                    {includeFullLedger && (
+                      <div className="p-2 border border-dashed border-slate-300 rounded-md bg-indigo-50/50 flex items-center gap-1.5 text-[8px] text-slate-600">
+                        <Check className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                        <span><strong>Ledger Appendix Enabled:</strong> The complete candidate listing containing all {cohortProjections.length} student scores, aggregates, and division placements has been appended to the final printable document (will format automatically onto separate sheets).</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Signatures */}
+                  <div className="pt-3 border-t border-slate-200 flex justify-between items-end mt-4">
+                    <div className="text-left">
+                      <p className="text-[6px] text-slate-400 font-mono uppercase font-black">Authorized Record Node</p>
+                      <p className="text-[7px] text-slate-600 font-bold uppercase mt-0.5">REF: ASH-PLE-MGT-{selectedCohortClass.replace('.', '')}</p>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="w-36 h-0.25 bg-slate-800" />
+                      <p className="text-[8px] font-extrabold text-slate-900 uppercase mt-1 leading-none">{signatureName}</p>
+                      <p className="text-[7px] text-slate-400 font-medium leading-none mt-0.5">{signatureTitle}</p>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

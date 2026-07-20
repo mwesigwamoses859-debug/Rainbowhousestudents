@@ -21,6 +21,7 @@ import {
 import { Student, ClassName, Gender } from '../types';
 import { googleSignIn, initAuth } from '../lib/firebase';
 import { createAndExportStudentsSheet } from '../lib/googleSheets';
+import { checkNameSimilarity } from '../utils/nameSimilarity';
 
 interface ClassListProps {
   students: Student[];
@@ -130,6 +131,61 @@ export default function ClassList({
   const [formError, setFormError] = useState('');
   const [photoPreview, setPhotoPreview] = useState('');
 
+  // Handle Name Similarity Checking on typing
+  const [similarityWarning, setSimilarityWarning] = useState<{
+    message: string;
+    type: 'exact_class' | 'exact_school' | 'typo' | 'partial';
+    matchStudent?: any;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!formData.surname.trim() || !formData.otherNames.trim()) {
+      setSimilarityWarning(null);
+      return;
+    }
+
+    const check = checkNameSimilarity(
+      formData.surname,
+      formData.otherNames,
+      formData.className,
+      students,
+      editingStudent?.id
+    );
+
+    if (check.resembles && check.matchStudent) {
+      const match = check.matchStudent;
+      const fullName = `${match.surname} ${match.otherNames}`;
+      
+      if (check.isExactInClass) {
+        setSimilarityWarning({
+          message: `⚠️ CRITICAL: "${fullName}" is already registered in this class (Class ${match.className}). Duplicates are forbidden.`,
+          type: 'exact_class',
+          matchStudent: match
+        });
+      } else if (check.isExactSchool) {
+        setSimilarityWarning({
+          message: `⚠️ Notice: "${fullName}" is already registered in a different class (Class ${match.className}). Is this the same student or a sibling?`,
+          type: 'exact_school',
+          matchStudent: match
+        });
+      } else if (check.resemblanceType === 'typo') {
+        setSimilarityWarning({
+          message: `🔍 Resembling Name (Possible Typo): "${fullName}" is registered in Class ${match.className}. Did you mean this student?`,
+          type: 'typo',
+          matchStudent: match
+        });
+      } else {
+        setSimilarityWarning({
+          message: `🔍 Similar Name Detected: "${fullName}" is registered in Class ${match.className}. Please check for duplication.`,
+          type: 'partial',
+          matchStudent: match
+        });
+      }
+    } else {
+      setSimilarityWarning(null);
+    }
+  }, [formData.surname, formData.otherNames, formData.className, students, editingStudent]);
+
   // Handle Photo File Upload & Convert to Base64
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -199,6 +255,11 @@ export default function ClassList({
       return;
     }
 
+    if (similarityWarning && similarityWarning.type === 'exact_class') {
+      setFormError(`Cannot register: A student named "${formData.surname} ${formData.otherNames}" is already registered in Class ${formData.className}.`);
+      return;
+    }
+
     try {
       if (editingStudent) {
         await onUpdateStudent(editingStudent.id, formData);
@@ -206,8 +267,8 @@ export default function ClassList({
         await onAddStudent(formData);
       }
       setShowFormModal(false);
-    } catch (err) {
-      setFormError('Error saving student. Please try again.');
+    } catch (err: any) {
+      setFormError(err.message || 'Error saving student. Please try again.');
     }
   };
 
@@ -504,6 +565,28 @@ export default function ClassList({
               {formError && (
                 <div className="p-3 bg-red-50 text-red-700 border border-red-100 rounded-lg text-xs font-medium">
                   {formError}
+                </div>
+              )}
+
+              {similarityWarning && (
+                <div className={`p-3 border rounded-xl text-xs font-semibold flex items-start gap-2.5 transition-all duration-200 ${
+                  similarityWarning.type === 'exact_class'
+                    ? 'bg-red-50 text-red-800 border-red-200 shadow-sm'
+                    : similarityWarning.type === 'exact_school'
+                    ? 'bg-amber-50/70 text-amber-800 border-amber-200 shadow-sm'
+                    : 'bg-indigo-50 text-indigo-800 border-indigo-200 shadow-sm'
+                }`}>
+                  <span className="text-base mt-0.5 leading-none">⚠️</span>
+                  <div className="space-y-1">
+                    <p className="font-extrabold">{similarityWarning.message}</p>
+                    {similarityWarning.matchStudent && (
+                      <div className="text-[10px] opacity-90 font-mono flex gap-x-2 flex-wrap">
+                        <span>Student ID: {similarityWarning.matchStudent.id}</span>
+                        <span>•</span>
+                        <span>Guardian: {similarityWarning.matchStudent.guardianName || 'N/A'}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

@@ -30,15 +30,17 @@ import {
   CheckSquare,
   Sparkles
 } from 'lucide-react';
-import { Student, Mark } from '../types';
+import { Student, Mark, Teacher } from '../types';
 
 interface DashboardProps {
   students: Student[];
   marks: Mark[];
   setActiveTab: (tab: string) => void;
+  teacher?: Teacher;
+  isAdmin?: boolean;
 }
 
-export default function Dashboard({ students, marks, setActiveTab }: DashboardProps) {
+export default function Dashboard({ students, marks, setActiveTab, teacher, isAdmin = true }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState('All Classes');
 
@@ -80,14 +82,20 @@ export default function Dashboard({ students, marks, setActiveTab }: DashboardPr
     setTimeout(() => setDisbursementSuccess(null), 5000);
   };
 
-  const totalStudents = students.length;
-  const scholarshipCount = students.filter(s => s.hasScholarship).length;
+  const isTeacher = !isAdmin && teacher;
+  const teacherClasses = teacher?.classes || [];
+  const targetStudents = isTeacher ? students.filter(s => teacherClasses.includes(s.className)) : students;
+
+  const totalStudents = targetStudents.length;
+  const scholarshipCount = targetStudents.filter(s => s.hasScholarship).length;
+
+  const useRealData = students.length > 0;
 
   // Base data counts (fallbacks to make layout look exactly like screenshot on empty/small DB)
-  const displayTotal = totalStudents || 684;
-  const displayBoys = students.filter(s => s.gender === 'Male').length || 338;
-  const displayGirls = students.filter(s => s.gender === 'Female').length || 346;
-  const displayScholarships = scholarshipCount || 72;
+  const displayTotal = useRealData ? totalStudents : (isTeacher ? 0 : 684);
+  const displayBoys = useRealData ? targetStudents.filter(s => s.gender === 'Male').length : (isTeacher ? 0 : 338);
+  const displayGirls = useRealData ? targetStudents.filter(s => s.gender === 'Female').length : (isTeacher ? 0 : 346);
+  const displayScholarships = useRealData ? scholarshipCount : (isTeacher ? 0 : 72);
 
   const displayMalePercent = displayTotal > 0 ? Math.round((displayBoys / displayTotal) * 1000) / 10 : 49.4;
   const displayFemalePercent = displayTotal > 0 ? Math.round((displayGirls / displayTotal) * 1000) / 10 : 50.6;
@@ -99,10 +107,10 @@ export default function Dashboard({ students, marks, setActiveTab }: DashboardPr
   ];
   
   const classCounts = classes.reduce((acc, c) => {
-    const realCount = students.filter(s => s.className === c).length;
+    const realCount = targetStudents.filter(s => s.className === c).length;
     // fallback to screenshot data if empty
     const fallbacks = { 'P.1': 98, 'P.2': 102, 'P.3': 97, 'P.4': 96, 'P.5': 100, 'P.6': 97, 'P.7': 94 };
-    acc[c] = realCount || fallbacks[c];
+    acc[c] = useRealData ? realCount : (isTeacher ? (teacherClasses.includes(c) ? 45 : 0) : fallbacks[c]);
     return acc;
   }, {} as Record<string, number>);
 
@@ -205,8 +213,10 @@ export default function Dashboard({ students, marks, setActiveTab }: DashboardPr
     }
   ];
 
+  const filteredDefaultStudents = isTeacher ? defaultStudents.filter(ds => teacherClasses.includes(ds.className as any)) : defaultStudents;
+
   // Merge database students into the list, converting schema where needed
-  const databaseStudentsMapped = students.map(s => {
+  const databaseStudentsMapped = targetStudents.map(s => {
     return {
       id: s.id,
       surname: s.surname,
@@ -228,9 +238,9 @@ export default function Dashboard({ students, marks, setActiveTab }: DashboardPr
     };
   });
 
-  const mergedStudents = students.length === 0 
-    ? defaultStudents 
-    : [...databaseStudentsMapped, ...defaultStudents.filter(ds => !databaseStudentsMapped.some(d => `${d.surname} ${d.otherNames}` === `${ds.surname} ${ds.otherNames}`))];
+  const mergedStudents = targetStudents.length === 0 
+    ? filteredDefaultStudents 
+    : [...databaseStudentsMapped, ...filteredDefaultStudents.filter(ds => !databaseStudentsMapped.some(d => `${d.surname} ${d.otherNames}` === `${ds.surname} ${ds.otherNames}`))];
 
   // Process the merged list to ensure EVERY element has all computed properties for the table
   const processedStudents = mergedStudents.map((s: any) => {
@@ -313,19 +323,86 @@ export default function Dashboard({ students, marks, setActiveTab }: DashboardPr
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-[#032b5e] tracking-tight">
-            {getGreeting()}, Administrator
+            {getGreeting()}, {teacher ? teacher.name : 'Administrator'}
           </h1>
+          {teacher && !isAdmin && (
+            <p className="text-xs font-bold text-[#FF5E4D] uppercase tracking-widest mt-1.5 flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-[#FF5E4D] animate-pulse"></span>
+              My Class Desk • Nansana SMS Focus Portal
+            </p>
+          )}
         </div>
-        <div>
-          <button 
-            id="add_student_shortcut_btn"
-            onClick={() => setActiveTab('classes')}
-            className="px-5 py-2.5 bg-[#FF5E4D] hover:bg-[#e04f3f] text-white font-bold rounded-xl text-sm shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
-          >
-            <span className="text-lg leading-none">+</span> Add Student
-          </button>
-        </div>
+        {isAdmin ? (
+          <div>
+            <button 
+              id="add_student_shortcut_btn"
+              onClick={() => setActiveTab('classes')}
+              className="px-5 py-2.5 bg-[#FF5E4D] hover:bg-[#e04f3f] text-white font-bold rounded-xl text-sm shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+            >
+              <span className="text-lg leading-none">+</span> Add Student
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab('marks')}
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              <span>Enter Term Marks</span>
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Teacher Desk Meta Panel */}
+      {!isAdmin && teacher && (
+        <div className="bg-gradient-to-r from-indigo-900 to-[#032b5e] text-white p-6 rounded-3xl border border-white/10 shadow-lg space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <span className="px-2.5 py-0.5 bg-yellow-400 text-slate-900 text-[10px] font-black rounded-lg uppercase tracking-wider">
+                My Focus Portal
+              </span>
+              <h2 className="text-xl font-extrabold tracking-tight mt-1.5 flex items-center gap-2">
+                <span>Classes & Subjects Focus</span>
+              </h2>
+              <p className="text-sky-200 text-xs mt-0.5">Below are all metrics and rosters filtered exclusively to your assigned classes and subjects.</p>
+            </div>
+            <button
+              onClick={() => setActiveTab('marks')}
+              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5"
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+              <span>Audit Term Assessments</span>
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+            <div className="bg-white/10 p-4 rounded-2xl border border-white/5 space-y-1">
+              <span className="text-[10px] text-sky-200 font-bold uppercase tracking-wider">Assigned Class Grade Levels</span>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {teacher.classes.map(c => (
+                  <span key={c} className="px-2 py-0.5 bg-white/20 text-white rounded font-mono text-xs font-black">Class {c}</span>
+                ))}
+              </div>
+            </div>
+            
+            <div className="bg-white/10 p-4 rounded-2xl border border-white/5 space-y-1">
+              <span className="text-[10px] text-sky-200 font-bold uppercase tracking-wider">Teaching Subjects</span>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {teacher.subjects.map(s => (
+                  <span key={s} className="px-2 py-0.5 bg-white/20 text-white rounded text-[10px] font-bold">{s}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white/10 p-4 rounded-2xl border border-white/5 space-y-1">
+              <span className="text-[10px] text-sky-200 font-bold uppercase tracking-wider">Current Lock Status</span>
+              <p className="text-xs font-bold text-yellow-300 mt-1">Active Term Mappings Unlocked</p>
+            </div>
+          </div>
+        </div>
+      )}
 
 
       {/* KPI Row */}
@@ -400,7 +477,7 @@ export default function Dashboard({ students, marks, setActiveTab }: DashboardPr
           </span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="max-w-2xl mx-auto w-full">
           
           {/* 1. Academic Performance & PLE Division Projections */}
           <div className="backdrop-blur-md bg-white/70 p-6 rounded-2xl border border-white/40 shadow-lg flex flex-col justify-between group">
@@ -500,173 +577,6 @@ export default function Dashboard({ students, marks, setActiveTab }: DashboardPr
                 className="text-[#f05a4a] hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
               >
                 Analyze PLE <ArrowUpRight className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-
-          {/* 2. Uganda Smart School Scholarships & Material Support Tracking */}
-          <div className="backdrop-blur-md bg-white/70 p-6 rounded-2xl border border-white/40 shadow-lg flex flex-col justify-between group">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-emerald-50 text-[#10b981] rounded-xl">
-                    <Backpack className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-[#032b5e] uppercase tracking-wider">Scholarships & Support</h3>
-                    <p className="text-[10px] text-slate-400 font-medium">Material Aid & Disbursement Tracker</p>
-                  </div>
-                </div>
-                <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[8px] font-black rounded uppercase font-mono tracking-widest">Support Sync</span>
-              </div>
-
-              {/* Dynamic stats display with progress */}
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="bg-[#F8FAFC] border border-slate-100 p-2.5 rounded-xl text-center">
-                  <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Active Sponsorships</span>
-                  <span className="text-[13px] font-black text-emerald-600 block mt-0.5">{scholarshipsActive} Pupils</span>
-                  <span className="text-[9px] text-slate-400 block font-medium">Ashinaga Funded</span>
-                </div>
-                <div className="bg-[#F8FAFC] border border-slate-100 p-2.5 rounded-xl text-center">
-                  <span className="text-[9px] text-slate-400 font-extrabold uppercase block tracking-wider">Pending Disbursements</span>
-                  <span className="text-[13px] font-black text-rose-500 block mt-0.5">{materialsPending} Pupils</span>
-                  <span className="text-[9px] text-slate-400 block font-medium">Uniforms / Books</span>
-                </div>
-              </div>
-
-              {/* Support Disbursement Form */}
-              <form onSubmit={handleSupportDisbursement} className="space-y-2 pt-2">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newDisbursementStudent}
-                    onChange={(e) => setNewDisbursementStudent(e.target.value)}
-                    placeholder="Student ID / Name"
-                    className="flex-1 px-3 py-2 bg-white/80 border border-slate-200 rounded-xl text-[10px] placeholder-slate-400 text-slate-700 focus:outline-none focus:border-emerald-500"
-                  />
-                  <select
-                    value={newDisbursementItem}
-                    onChange={(e) => setNewDisbursementItem(e.target.value)}
-                    className="w-24 px-1 py-2 bg-white/80 border border-slate-200 rounded-xl text-[10px] text-slate-700 focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="Uniform">Uniform</option>
-                    <option value="Meals">Meal Plan</option>
-                    <option value="Textbooks">Textbooks</option>
-                    <option value="Stationery">Stationery</option>
-                  </select>
-                </div>
-                <button
-                  type="submit"
-                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider rounded-xl shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer"
-                >
-                  <CheckSquare className="h-3.5 w-3.5" /> Log Support Material Dispatch
-                </button>
-              </form>
-
-              {disbursementSuccess && (
-                <p className="text-[9px] font-bold text-emerald-600 text-center animate-pulse">{disbursementSuccess}</p>
-              )}
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] font-semibold text-slate-400 font-mono">
-              <span>Overall coverage: {Math.round((scholarshipsActive / (scholarshipsActive + materialsPending)) * 1000) / 10}%</span>
-              <button 
-                onClick={() => setActiveTab('cases')}
-                className="text-emerald-600 hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
-              >
-                Community Hub <ArrowUpRight className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-
-          {/* 3. Bulk Parental SMS Gateway Broadcaster */}
-          <div className="backdrop-blur-md bg-white/70 p-6 rounded-2xl border border-white/40 shadow-lg flex flex-col justify-between group">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-indigo-50 text-[#2563eb] rounded-xl">
-                    <MessageSquare className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-[#032b5e] uppercase tracking-wider">SMS Parent Dispatcher</h3>
-                    <p className="text-[10px] text-slate-400 font-medium">Bulk Communication Center</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
-                  <span className="text-[8px] font-bold text-slate-400 uppercase">Gateway Active</span>
-                </div>
-              </div>
-
-              {/* SMS Broadcaster Form */}
-              <form onSubmit={handleSmsBroadcast} className="space-y-2 pt-1">
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSmsTarget('all');
-                      setSmsText('Dear Parents, please be reminded that the PTA General Assembly will take place on Friday 24th July 2026 at 2 PM. Your attendance is highly valued.');
-                    }}
-                    className={`flex-1 py-1 px-1.5 border rounded text-[8px] font-bold uppercase transition-all ${smsTarget === 'all' ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-black' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                  >
-                    PTA Meeting
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSmsTarget('unpaid');
-                      setSmsText('Dear Parent/Guardian, please coordinate with your assigned social worker for the upcoming termly home physical visitation logs. Thank you.');
-                    }}
-                    className={`flex-1 py-1 px-1.5 border rounded text-[8px] font-bold uppercase transition-all ${smsTarget === 'unpaid' ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-black' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                  >
-                    Home Visits
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSmsTarget('p7');
-                      setSmsText('Dear Parent, standard pre-candidate mock results for P.7 are now compiled. Please check in with the academic registrar to obtain report cards.');
-                    }}
-                    className={`flex-1 py-1 px-1.5 border rounded text-[8px] font-bold uppercase transition-all ${smsTarget === 'p7' ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-black' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                  >
-                    P.7 Candidates
-                  </button>
-                </div>
-
-                <div className="relative">
-                  <textarea
-                    rows={2}
-                    value={smsText}
-                    onChange={(e) => setSmsText(e.target.value.slice(0, 160))}
-                    placeholder="Draft message (e.g. term circulars, fees alerts)..."
-                    className="w-full px-3 py-2 bg-white/80 border border-slate-200 rounded-xl text-[10px] text-slate-700 focus:outline-none focus:border-indigo-500 resize-none"
-                  />
-                  <span className="absolute bottom-1 right-2 text-[8px] font-bold font-mono text-slate-400">
-                    {smsText.length}/160 chars
-                  </span>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={!smsText.trim()}
-                  className={`w-full py-2 text-white font-black text-[10px] uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center justify-center gap-1 ${smsText.trim() ? 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 cursor-pointer' : 'bg-slate-300 cursor-not-allowed'}`}
-                >
-                  <Send className="h-3 w-3" /> Dispatch Parental Alert SMS
-                </button>
-              </form>
-
-              {smsSuccess && (
-                <p className="text-[9px] font-bold text-indigo-600 text-center animate-pulse">{smsSuccess}</p>
-              )}
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] font-semibold text-slate-400 font-mono">
-              <span>SMS Credits: 4,820 remaining</span>
-              <button 
-                onClick={() => setActiveTab('communication')}
-                className="text-[#2563eb] hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
-              >
-                Broadcast Logs <ArrowUpRight className="h-3 w-3" />
               </button>
             </div>
           </div>
