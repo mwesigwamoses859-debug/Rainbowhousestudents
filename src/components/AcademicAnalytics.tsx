@@ -26,6 +26,7 @@ import {
 import { Student, Mark, ClassName } from '../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { AnimatePresence, motion } from 'motion/react';
+import AshinagaLogo from './AshinagaLogo';
 
 interface AcademicAnalyticsProps {
   students: Student[];
@@ -412,14 +413,16 @@ Additionally, there are currently ${stats.atRiskCount} candidate(s) categorized 
       
       {/* Upper Control Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm no-print">
-        <div>
-          <h1 className="font-display text-2xl font-black text-slate-800 flex items-center gap-2">
-            <TrendingUp className="h-6 w-6 text-indigo-600" />
-            Academic Analytics &amp; PLE Projections
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Predictive UNEB division modeling based on terminal assessments and gap diagnosis
-          </p>
+        <div className="flex items-center gap-3">
+          <AshinagaLogo size={50} className="shrink-0 bg-white p-1 rounded-xl shadow-xs border border-slate-100" />
+          <div>
+            <h1 className="font-display text-2xl font-black text-slate-800 flex items-center gap-2">
+              Academic Analytics &amp; PLE Projections
+            </h1>
+            <p className="text-xs text-slate-400 mt-1">
+              Predictive UNEB division modeling based on terminal assessments and gap diagnosis
+            </p>
+          </div>
         </div>
 
         {/* Filters */}

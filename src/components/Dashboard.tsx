@@ -31,6 +31,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Student, Mark, Teacher } from '../types';
+import AshinagaLogo from './AshinagaLogo';
 
 interface DashboardProps {
   students: Student[];
@@ -225,16 +226,19 @@ export default function Dashboard({ students, marks, setActiveTab, teacher, isAd
       
       {/* Greetings Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold text-[#032b5e] tracking-tight">
-            {getGreeting()}, {teacher ? teacher.name : 'Administrator'}
-          </h1>
-          {teacher && !isAdmin && (
-            <p className="text-xs font-bold text-[#FF5E4D] uppercase tracking-widest mt-1.5 flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-[#FF5E4D] animate-pulse"></span>
-              My Class Desk • Nansana SMS Focus Portal
-            </p>
-          )}
+        <div className="flex items-center gap-4">
+          <AshinagaLogo size={52} className="shrink-0 bg-white p-1 rounded-2xl shadow-xs border border-slate-100" />
+          <div>
+            <h1 className="text-3xl font-extrabold text-[#032b5e] tracking-tight">
+              {getGreeting()}, {teacher ? teacher.name : 'Administrator'}
+            </h1>
+            {teacher && !isAdmin && (
+              <p className="text-xs font-bold text-[#FF5E4D] uppercase tracking-widest mt-1.5 flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-[#FF5E4D] animate-pulse"></span>
+                My Class Desk • Nansana SMS Focus Portal
+              </p>
+            )}
+          </div>
         </div>
         {isAdmin ? (
           <div>

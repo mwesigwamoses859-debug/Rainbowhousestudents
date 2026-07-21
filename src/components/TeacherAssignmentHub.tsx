@@ -14,6 +14,7 @@ import {
   Square
 } from 'lucide-react';
 import { Teacher, ClassName } from '../types';
+import AshinagaLogo from './AshinagaLogo';
 
 interface TeacherAssignmentHubProps {
   teachers: Teacher[];
@@ -155,11 +156,14 @@ export default function TeacherAssignmentHub({
     <div id="teacher_hub_container" className="p-8 space-y-6 font-sans max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-sky-100 pb-5">
-        <div>
-          <h1 className="font-display text-2xl font-black text-slate-800 flex items-center gap-2.5">
-            <span>Teacher Assignments & Subject Controls</span>
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">Assign curriculum instructors to specific subjects and grades to enforce focused grading scopes</p>
+        <div className="flex items-center gap-3">
+          <AshinagaLogo size={50} className="shrink-0 bg-white p-1 rounded-xl shadow-xs border border-slate-100" />
+          <div>
+            <h1 className="font-display text-2xl font-black text-slate-800 flex items-center gap-2.5">
+              <span>Teacher Assignments & Subject Controls</span>
+            </h1>
+            <p className="text-xs text-slate-400 mt-1">Assign curriculum instructors to specific subjects and grades to enforce focused grading scopes</p>
+          </div>
         </div>
 
         {isAdmin && !showForm && (

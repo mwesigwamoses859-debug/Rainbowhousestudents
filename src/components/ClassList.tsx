@@ -22,6 +22,7 @@ import { Student, ClassName, Gender } from '../types';
 import { googleSignIn, initAuth } from '../lib/firebase';
 import { createAndExportStudentsSheet } from '../lib/googleSheets';
 import { checkNameSimilarity } from '../utils/nameSimilarity';
+import AshinagaLogo from './AshinagaLogo';
 
 interface ClassListProps {
   students: Student[];
@@ -311,9 +312,12 @@ export default function ClassList({
     <div id="class_list_view" className="p-8 space-y-6 font-sans max-w-7xl mx-auto">
       {/* Header section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-sky-150 pb-5">
-        <div>
-          <h1 className="font-display text-2xl font-black text-slate-800">Student Database</h1>
-          <p className="text-xs text-slate-400 mt-1">Manage and view pupil details separately across classes P.1 to P.7</p>
+        <div className="flex items-center gap-3">
+          <AshinagaLogo size={50} className="shrink-0 bg-white p-1 rounded-xl shadow-xs border border-slate-100" />
+          <div>
+            <h1 className="font-display text-2xl font-black text-slate-800">Student Database</h1>
+            <p className="text-xs text-slate-400 mt-1">Manage and view pupil details separately across classes P.1 to P.7</p>
+          </div>
         </div>
         
         <div className="flex flex-wrap gap-2.5">

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, AlertTriangle, ShieldCheck, Search, QrCode, FileText, Sparkles, BookOpen, User, Calendar, RefreshCw, X } from 'lucide-react';
 import { Student, Mark } from '../types';
+import AshinagaLogo from './AshinagaLogo';
 
 interface ReportVerificationProps {
   students: Student[];
@@ -178,14 +179,12 @@ export default function ReportVerification({ students, marks, onClose }: ReportV
     <div className="bg-slate-50 border border-slate-200/80 rounded-3xl overflow-hidden shadow-xs transition-all">
       {/* Header Banner */}
       <div className="bg-[#0b2d59] p-6 text-white flex justify-between items-center relative overflow-hidden">
-        <div className="absolute right-0 top-0 opacity-10 pointer-events-none">
-          <QrCode className="h-44 w-44" />
+        <div className="absolute -right-4 -top-4 opacity-15 pointer-events-none">
+          <AshinagaLogo size={160} />
         </div>
         <div className="space-y-1.5 z-10">
           <div className="flex items-center gap-2">
-            <span className="p-1.5 bg-indigo-500/20 text-indigo-300 rounded-lg">
-              <ShieldCheck className="h-5 w-5" />
-            </span>
+            <AshinagaLogo size={32} />
             <span className="text-[10px] uppercase font-black tracking-widest font-mono text-indigo-300">
               Security Certification
             </span>

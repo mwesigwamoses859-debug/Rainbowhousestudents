@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { motion } from 'motion/react';
+import AshinagaLogo from './AshinagaLogo';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -128,14 +129,17 @@ export default function AiAssistant() {
     <div className="p-8 space-y-6">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 no-print">
-        <div>
-          <h2 className="text-xl font-black text-[#032b5e] uppercase tracking-tight flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-indigo-500 animate-pulse" />
-            Gemini Copilot Hub
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Analyze grades, draft circulars, plan social home visits, and coordinate community interventions using Gemini-grounded models.
-          </p>
+        <div className="flex items-center gap-3">
+          <AshinagaLogo size={50} className="shrink-0 bg-white p-1 rounded-xl shadow-xs border border-slate-100" />
+          <div>
+            <h2 className="text-xl font-black text-[#032b5e] uppercase tracking-tight flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-indigo-500 animate-pulse" />
+              Gemini Copilot Hub
+            </h2>
+            <p className="text-xs text-slate-400 mt-1">
+              Analyze grades, draft circulars, plan social home visits, and coordinate community interventions using Gemini-grounded models.
+            </p>
+          </div>
         </div>
       </div>
 

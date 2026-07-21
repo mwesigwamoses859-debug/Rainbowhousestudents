@@ -25,6 +25,7 @@ import {
   listSharedFolderFiles
 } from '../lib/googleSheets';
 import { checkNameSimilarity } from '../utils/nameSimilarity';
+import AshinagaLogo from './AshinagaLogo';
 
 interface ExcelUploadProps {
   students: Student[];
@@ -682,9 +683,12 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
     <div id="excel_upload_view" className="p-8 space-y-6 font-sans max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-sky-150 pb-5">
-        <div>
-          <h1 className="font-display text-2xl font-black text-slate-800">Student Roster Importer</h1>
-          <p className="text-xs text-slate-400 mt-1">Upload and register bulk student records via Excel files or direct Google Sheets connection</p>
+        <div className="flex items-center gap-3">
+          <AshinagaLogo size={50} className="shrink-0 bg-white p-1 rounded-xl shadow-xs border border-slate-100" />
+          <div>
+            <h1 className="font-display text-2xl font-black text-slate-800">Student Roster Importer</h1>
+            <p className="text-xs text-slate-400 mt-1">Upload and register bulk student records via Excel files or direct Google Sheets connection</p>
+          </div>
         </div>
 
         <button

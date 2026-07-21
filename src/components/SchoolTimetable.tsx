@@ -14,6 +14,7 @@ import {
   Printer
 } from 'lucide-react';
 import { Student, ClassName } from '../types';
+import AshinagaLogo from './AshinagaLogo';
 
 interface TimetableSlot {
   id: string;
@@ -124,12 +125,15 @@ export default function SchoolTimetable({ teacherClasses, isAdmin }: SchoolTimet
     <div id="school_timetable_view" className="p-8 space-y-6 font-sans max-w-7xl mx-auto print:p-0">
       {/* Header section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-sky-150 pb-5 print:hidden">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-50 text-sky-700 rounded-full text-[10px] font-black uppercase tracking-wider mb-2">
-            <Sparkles className="h-3 w-3 text-sky-500 animate-spin" /> School Schedule Engine
+        <div className="flex items-center gap-3">
+          <AshinagaLogo size={50} className="shrink-0 bg-white p-1 rounded-xl shadow-xs border border-slate-100" />
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-50 text-sky-700 rounded-full text-[10px] font-black uppercase tracking-wider mb-2">
+              <Sparkles className="h-3 w-3 text-sky-500 animate-spin" /> School Schedule Engine
+            </div>
+            <h1 className="font-display text-2xl font-black text-slate-800">Class Timetable & Term Scheduler</h1>
+            <p className="text-xs text-slate-400 mt-1">Design stream schedules, assign teachers to subjects, and print weekly timetables for Class stream streams.</p>
           </div>
-          <h1 className="font-display text-2xl font-black text-slate-800">Class Timetable & Term Scheduler</h1>
-          <p className="text-xs text-slate-400 mt-1">Design stream schedules, assign teachers to subjects, and print weekly timetables for Class stream streams.</p>
         </div>
 
         <div className="flex items-center gap-2">
