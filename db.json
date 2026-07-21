@@ -1,0 +1,92 @@
+{
+  "students": [],
+  "marks": [],
+  "teachers": [
+    {
+      "username": "admin",
+      "name": "Headteacher / Administrator",
+      "subjects": [
+        "All"
+      ],
+      "classes": [
+        "P.1",
+        "P.2",
+        "P.3",
+        "P.4",
+        "P.5",
+        "P.6",
+        "P.7"
+      ]
+    },
+    {
+      "username": "teacher1",
+      "name": "Mr. John Mukasa",
+      "subjects": [
+        "Mathematics",
+        "Science"
+      ],
+      "classes": [
+        "P.5",
+        "P.6",
+        "P.7"
+      ]
+    },
+    {
+      "username": "teacher2",
+      "name": "Mrs. Sarah Babirye",
+      "subjects": [
+        "English",
+        "Social Studies",
+        "Religious Education"
+      ],
+      "classes": [
+        "P.1",
+        "P.2",
+        "P.3",
+        "P.4"
+      ]
+    }
+  ],
+  "attendance": [],
+  "support": [],
+  "visits": [],
+  "safeguarding": [],
+  "interactions": [],
+  "sms": [],
+  "documents": [],
+  "timetable": [
+    {
+      "id": "slot-1",
+      "className": "P.7",
+      "day": "Monday",
+      "timeSlot": "08:30 - 09:30",
+      "subject": "Mathematics",
+      "teacherName": "Madam Namutebi Proscovia",
+      "roomName": "Main Stream A Room"
+    },
+    {
+      "id": "slot-2",
+      "className": "P.7",
+      "day": "Monday",
+      "timeSlot": "11:00 - 12:00",
+      "subject": "Integrated Science",
+      "teacherName": "Mr. John Mukasa",
+      "roomName": "Science Lab"
+    },
+    {
+      "id": "slot-3",
+      "className": "P.1",
+      "day": "Tuesday",
+      "timeSlot": "09:30 - 10:30",
+      "subject": "English Language",
+      "teacherName": "Mrs. Sarah Babirye",
+      "roomName": "P.1 Main Classroom"
+    }
+  ],
+  "vapidKeys": {
+    "publicKey": "BPn2TUHDeGnqewZds4vPrHfU_vwsUQJj63Eo-hiEv3z2btirw7JHa3kr6DyLiw5hhRayojZ4KZqZqnSlwZQgdQU",
+    "privateKey": "RrSr7yBxtmc1QB-w9VhoTAXAtOZtXE2LjgzPkS4z9As"
+  },
+  "pushSubscriptions": [],
+  "pushAlerts": []
+}

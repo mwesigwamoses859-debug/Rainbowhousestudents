@@ -184,26 +184,9 @@ app.post('/api/students', (req, res) => {
   const otherNames = req.body.otherNames || '';
   const className = req.body.className || '';
 
-  const normSurname = normalizeName(surname);
-  const normOther = normalizeName(otherNames);
-
-  // Check if a student with the same surname + otherNames exists in the same class
-  const exists = db.students.some(s => 
-    s.className === className && 
-    normalizeName(s.surname) === normSurname && 
-    normalizeName(s.otherNames) === normOther
-  );
-
-  if (exists) {
-    return res.status(400).json({ 
-      success: false, 
-      message: `A student named "${surname} ${otherNames}" is already registered in Class ${className}. Duplicates are not allowed.` 
-    });
-  }
-
   const newStudent = {
     ...req.body,
-    id: `st-${Date.now()}`
+    id: `st-${Date.now()}-${Math.floor(Math.random() * 1000)}`
   };
   db.students.push(newStudent);
   saveDatabase(db);
@@ -227,42 +210,22 @@ app.post('/api/students/bulk', (req, res) => {
     const otherNames = s.otherNames || '';
     const className = s.className || 'P.1';
 
-    const normSurname = normalizeName(surname);
-    const normOther = normalizeName(otherNames);
-
-    // Check if duplicate exists in DB or in currently added batch
-    const existsInDb = db.students.some(existing => 
-      existing.className === className &&
-      normalizeName(existing.surname) === normSurname &&
-      normalizeName(existing.otherNames) === normOther
-    );
-
-    const existsInBatch = addedStudents.some(added => 
-      added.className === className &&
-      normalizeName(added.surname) === normSurname &&
-      normalizeName(added.otherNames) === normOther
-    );
-
-    if (existsInDb || existsInBatch) {
-      skippedStudents.push({ surname, otherNames, className, reason: 'Duplicate student name' });
-    } else {
-      addedStudents.push({
-        id: `st-bulk-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
-        surname,
-        otherNames,
-        gender: s.gender || 'Male',
-        dateOfBirth: s.dateOfBirth || '2015-01-01',
-        className,
-        yearOfEntry: Number(s.yearOfEntry) || 2026,
-        photo: s.photo || '',
-        guardianName: s.guardianName || 'Unknown',
-        guardianContact: String(s.guardianContact || ''),
-        communityWorker: s.communityWorker || '',
-        workerContact: String(s.workerContact || ''),
-        zoneInNansana: s.zoneInNansana || 'Unknown',
-        hasScholarship: !!s.hasScholarship
-      });
-    }
+    addedStudents.push({
+      id: `st-bulk-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+      surname,
+      otherNames,
+      gender: s.gender || 'Male',
+      dateOfBirth: s.dateOfBirth || '2015-01-01',
+      className,
+      yearOfEntry: Number(s.yearOfEntry) || 2026,
+      photo: s.photo || '',
+      guardianName: s.guardianName || 'Unknown',
+      guardianContact: String(s.guardianContact || ''),
+      communityWorker: s.communityWorker || '',
+      workerContact: String(s.workerContact || ''),
+      zoneInNansana: s.zoneInNansana || 'Unknown',
+      hasScholarship: !!s.hasScholarship
+    });
   });
 
   if (addedStudents.length > 0) {
@@ -286,28 +249,6 @@ app.put('/api/students/:id', (req, res) => {
   
   if (index === -1) {
     return res.status(404).json({ success: false, message: 'Student not found' });
-  }
-
-  // Check duplicate if name/class is modified
-  const surname = req.body.surname !== undefined ? req.body.surname : db.students[index].surname;
-  const otherNames = req.body.otherNames !== undefined ? req.body.otherNames : db.students[index].otherNames;
-  const className = req.body.className !== undefined ? req.body.className : db.students[index].className;
-
-  const normSurname = normalizeName(surname);
-  const normOther = normalizeName(otherNames);
-
-  const exists = db.students.some((s, i) => 
-    i !== index &&
-    s.className === className && 
-    normalizeName(s.surname) === normSurname && 
-    normalizeName(s.otherNames) === normOther
-  );
-
-  if (exists) {
-    return res.status(400).json({ 
-      success: false, 
-      message: `A student named "${surname} ${otherNames}" is already registered in Class ${className}. Duplicates are not allowed.` 
-    });
   }
   
   db.students[index] = { ...db.students[index], ...req.body, id }; // retain id
@@ -1065,6 +1006,55 @@ app.delete('/api/backups/:id', (req, res) => {
   } catch (err: any) {
     console.error("Backup deletion error:", err);
     res.status(500).json({ success: false, message: `Deletion failed: ${err.message}` });
+  }
+});
+
+// Administrative system reset route
+app.post('/api/admin/reset', (req, res) => {
+  try {
+    const { clearStudents, clearMarks, clearTeachers, clearOtherLogs } = req.body;
+    const currentDb = getDatabase();
+    let logsWiped = [];
+
+    if (clearStudents) {
+      currentDb.students = [];
+      logsWiped.push('Students Registry');
+    }
+    if (clearMarks) {
+      currentDb.marks = [];
+      logsWiped.push('Academic Marks Ledger');
+    }
+    if (clearTeachers) {
+      // Clear all teachers except the master admin!
+      const adminTeacher = currentDb.teachers.find(t => t.username === 'admin') || {
+        username: "admin",
+        name: "Headteacher / Administrator",
+        subjects: ["All"],
+        classes: ["P.1", "P.2", "P.3", "P.4", "P.5", "P.6", "P.7"]
+      };
+      currentDb.teachers = [adminTeacher];
+      logsWiped.push('Teachers List (retaining Administrator)');
+    }
+    if (clearOtherLogs) {
+      currentDb.attendance = [];
+      currentDb.support = [];
+      currentDb.visits = [];
+      currentDb.safeguarding = [];
+      currentDb.interactions = [];
+      currentDb.sms = [];
+      currentDb.documents = [];
+      logsWiped.push('Attendance, Visitations & Safeguarding logs');
+    }
+
+    saveDatabase(currentDb);
+
+    res.json({
+      success: true,
+      message: `Successfully cleared database partitions: ${logsWiped.join(', ')}.`
+    });
+  } catch (err: any) {
+    console.error("Database reset error:", err);
+    res.status(500).json({ success: false, message: `System Reset failed: ${err.message}` });
   }
 });
 

@@ -15,7 +15,7 @@ import {
   Trash2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Student } from '../types';
+import { Student, Gender } from '../types';
 import { googleSignIn, logout as googleLogout, initAuth } from '../lib/firebase';
 import { 
   listSpreadsheets, 
@@ -174,85 +174,345 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         
-        const rawJson: any[] = XLSX.utils.sheet_to_json(worksheet);
+        // Convert to 2D array of formatted string values to preserve cell formatting exactly
+        const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
 
-        if (rawJson.length === 0) {
+        if (rawRows.length === 0) {
           setStatusMessage({ type: 'warning', text: 'The uploaded file appears to be empty.' });
           return;
         }
 
-        const sheetHeaders = Object.keys(rawJson[0]);
-        setHeaders(sheetHeaders);
+        const cleanHeader = (val: any): string => {
+          return String(val || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        };
 
-        // Helper to find a value by checking multiple potential header variations in a case-insensitive and space-insensitive way
-        const getExcelVal = (rowObj: any, possibleKeys: string[]): any => {
-          const rowKeys = Object.keys(rowObj);
-          const normalizedPossibles = possibleKeys.map(k => k.toLowerCase().replace(/[\s_-]/g, ''));
+        // Find the index of the header row dynamically
+        let headerRowIndex = -1;
+        let sheetHeaders: string[] = [];
+
+        // Scan rows to find a header row
+        for (let i = 0; i < Math.min(rawRows.length, 15); i++) {
+          const row = rawRows[i];
+          if (!Array.isArray(row) || row.length === 0) continue;
+
+          const cleanRow = row.map(cell => cleanHeader(cell));
           
-          for (const rKey of rowKeys) {
-            const normalizedRowKey = rKey.toLowerCase().replace(/[\s_-]/g, '');
-            if (normalizedPossibles.includes(normalizedRowKey)) {
-              return rowObj[rKey];
+          const expectedKeywords = [
+            'surname', 'lastname', 'familyname', 'sirname',
+            'othernames', 'firstname', 'givenname', 'givennames',
+            'gender', 'sex', 'sexgender',
+            'dateofbirth', 'dob', 'birthdate',
+            'class', 'classname', 'classlevel', 'grade', 'level',
+            'yearofentry', 'entryyear', 'admissionyear',
+            'zone', 'address', 'village', 'residence',
+            'guardian', 'parent', 'guardianname',
+            'scholarship', 'sponsored'
+          ];
+
+          const matchedCount = cleanRow.filter(cell => expectedKeywords.includes(cell)).length;
+
+          if (matchedCount >= 2) {
+            headerRowIndex = i;
+            sheetHeaders = row.map(cell => String(cell || '').trim());
+            break;
+          }
+        }
+
+        // Fallback: use first non-empty row if dynamic search failed
+        if (headerRowIndex === -1) {
+          for (let i = 0; i < rawRows.length; i++) {
+            const row = rawRows[i];
+            if (Array.isArray(row) && row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== '')) {
+              headerRowIndex = i;
+              sheetHeaders = row.map(cell => String(cell || '').trim());
+              break;
             }
           }
-          return undefined;
+        }
+
+        if (headerRowIndex === -1) {
+          setStatusMessage({ type: 'error', text: 'Could not detect any student data in the uploaded spreadsheet.' });
+          return;
+        }
+
+        setHeaders(sheetHeaders);
+
+        // Filter and get data rows following the header row
+        const dataRows = rawRows.slice(headerRowIndex + 1).filter(row => {
+          return Array.isArray(row) && row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== '');
+        });
+
+        // Map column indices for each field
+        const colIndices = {
+          surname: -1,
+          otherNames: -1,
+          gender: -1,
+          dateOfBirth: -1,
+          className: -1,
+          yearOfEntry: -1,
+          guardianName: -1,
+          guardianContact: -1,
+          communityWorker: -1,
+          workerContact: -1,
+          zoneInNansana: -1,
+          hasScholarship: -1,
+          combinedName: -1
         };
 
-        const getExcelValStr = (rowObj: any, possibleKeys: string[]): string => {
-          const val = getExcelVal(rowObj, possibleKeys);
-          return val !== undefined && val !== null ? String(val).trim() : '';
+        const sheetHeadersClean = sheetHeaders.map(h => cleanHeader(h));
+
+        const findColIdx = (possibleKeys: string[]): number => {
+          const cleanPossibles = possibleKeys.map(k => cleanHeader(k));
+          return sheetHeadersClean.findIndex(h => cleanPossibles.includes(h));
         };
 
-        const mappedStudents = rawJson.map(row => {
+        colIndices.surname = findColIdx(['surname', 'lastname', 'familyname', 'sirname', 'family', 'last', 'sur', 'sname']);
+        colIndices.otherNames = findColIdx(['othernames', 'firstname', 'givenname', 'givennames', 'othername', 'first', 'given', 'other', 'onames']);
+        colIndices.combinedName = findColIdx(['name', 'names', 'studentname', 'pupilname', 'fullname', 'pupilsname', 'studentsname', 'nameofpupil', 'nameofstudent', 'pupil', 'student', 'child', 'childname', 'childsname', 'pupilsnames', 'studentsnames', 'studentnames']);
+        colIndices.gender = findColIdx(['gender', 'sex', 'genderstatus', 'sexgender']);
+        colIndices.dateOfBirth = findColIdx(['dateofbirth', 'dob', 'birthdate', 'birthday', 'birth']);
+        colIndices.className = findColIdx(['classname', 'class', 'grade', 'level', 'classid']);
+        colIndices.yearOfEntry = findColIdx(['yearofentry', 'entryyear', 'year', 'joined', 'entry_year', 'admissionyear', 'admission_year']);
+        colIndices.zoneInNansana = findColIdx(['zoneinnansana', 'zone', 'address', 'area', 'village', 'wherestaying', 'residencezone', 'residence', 'homezone', 'location', 'residencezoneinnansana']);
+        colIndices.guardianName = findColIdx(['guardianname', 'guardian', 'parent', 'parentguardian', 'parentname', 'guardiannameorparentname']);
+        colIndices.guardianContact = findColIdx(['guardiancontact', 'guardianphone', 'contact', 'phone', 'parentcontact', 'parentphone', 'phone_number', 'phonenumber', 'guardiancontactphone']);
+        colIndices.communityWorker = findColIdx(['communityworker', 'worker', 'socialworker', 'communityworkername']);
+        colIndices.workerContact = findColIdx(['communityworkercontact', 'workercontact', 'workerphone', 'socialworkerphone', 'communityworkercontactphone']);
+        colIndices.hasScholarship = findColIdx(['scholarshipstatus', 'scholarship', 'sponsored', 'hasscholarship']);
+
+        // Auto-detect columns by inspecting cell values if index is still -1
+        const numRowsToCheck = Math.min(dataRows.length, 5);
+        if (numRowsToCheck > 0) {
+          for (let colIdx = 0; colIdx < sheetHeaders.length; colIdx++) {
+            const values: string[] = [];
+            for (let r = 0; r < numRowsToCheck; r++) {
+              const val = String(dataRows[r][colIdx] || '').trim();
+              if (val) values.push(val);
+            }
+            if (values.length === 0) continue;
+
+            // Gender auto-detect
+            if (colIndices.gender === -1) {
+              const isGenderCol = values.every(v => {
+                const lv = v.toLowerCase();
+                return lv === 'm' || lv === 'f' || lv === 'male' || lv === 'female';
+              });
+              if (isGenderCol) {
+                colIndices.gender = colIdx;
+                continue;
+              }
+            }
+
+            // Class auto-detect
+            if (colIndices.className === -1) {
+              const isClassCol = values.every(v => {
+                const normV = v.toUpperCase().replace(/[\s._-]/g, '');
+                return normV.startsWith('P') || normV.startsWith('PRIMARY') || /^[1-7]$/.test(normV);
+              });
+              if (isClassCol) {
+                colIndices.className = colIdx;
+                continue;
+              }
+            }
+
+            // Year of Entry auto-detect
+            if (colIndices.yearOfEntry === -1) {
+              const isYearCol = values.every(v => {
+                const num = Number(v);
+                return !isNaN(num) && num >= 2000 && num <= 2100;
+              });
+              if (isYearCol) {
+                colIndices.yearOfEntry = colIdx;
+                continue;
+              }
+            }
+
+            // DOB auto-detect
+            if (colIndices.dateOfBirth === -1) {
+              const isDobCol = values.every(v => {
+                const date = new Date(v);
+                return !isNaN(date.getTime()) && date.getFullYear() >= 2000 && date.getFullYear() <= new Date().getFullYear();
+              });
+              if (isDobCol) {
+                colIndices.dateOfBirth = colIdx;
+                continue;
+              }
+            }
+
+            // Scholarship auto-detect
+            if (colIndices.hasScholarship === -1) {
+              const isScholarshipCol = values.every(v => {
+                const lv = v.toLowerCase();
+                return lv === 'yes' || lv === 'no' || lv === 'true' || lv === 'false';
+              });
+              if (isScholarshipCol) {
+                colIndices.hasScholarship = colIdx;
+                continue;
+              }
+            }
+          }
+        }
+
+        // Fallback: If surname is not found, find first unmapped text column and use it as combined name
+        if (colIndices.surname === -1 && colIndices.combinedName === -1) {
+          let nameFallbackIdx = -1;
+          for (let colIdx = 0; colIdx < sheetHeaders.length; colIdx++) {
+            if (
+              colIdx === colIndices.gender ||
+              colIdx === colIndices.className ||
+              colIdx === colIndices.yearOfEntry ||
+              colIdx === colIndices.dateOfBirth ||
+              colIdx === colIndices.hasScholarship
+            ) {
+              continue;
+            }
+            const hasLetters = dataRows.some(row => /[a-zA-Z]/.test(String(row[colIdx] || '')));
+            if (hasLetters) {
+              nameFallbackIdx = colIdx;
+              break;
+            }
+          }
+          if (nameFallbackIdx !== -1) {
+            colIndices.combinedName = nameFallbackIdx;
+          }
+        }
+
+        const mappedStudents = dataRows.map(row => {
+          const getRowVal = (idx: number): string => {
+            if (idx === -1 || idx >= row.length) return '';
+            const cell = row[idx];
+            if (cell === undefined || cell === null) return '';
+            if (cell instanceof Date) {
+              return cell.toISOString().split('T')[0];
+            }
+            return String(cell).trim();
+          };
+
+          let surname = getRowVal(colIndices.surname);
+          let otherNames = getRowVal(colIndices.otherNames);
+          const combinedName = getRowVal(colIndices.combinedName);
+
+          // If surname was not found, try combined name
+          if (!surname && combinedName) {
+            const parts = combinedName.split(/\s+/).filter(Boolean);
+            if (parts.length > 1) {
+              surname = parts[0];
+              otherNames = parts.slice(1).join(' ');
+            } else if (parts.length === 1) {
+              surname = parts[0];
+              otherNames = '';
+            }
+          }
+
+          // If surname is found but otherNames is empty, and surname has spaces, split it
+          if (surname && !otherNames) {
+            const parts = surname.split(/\s+/).filter(Boolean);
+            if (parts.length > 1) {
+              surname = parts[0];
+              otherNames = parts.slice(1).join(' ');
+            }
+          }
+
+          if (!surname) {
+            surname = 'Unknown';
+          }
+
+          // Gender extraction
+          let genderRaw = getRowVal(colIndices.gender);
+          let gender: Gender = 'Male';
+          if (genderRaw) {
+            const gLower = genderRaw.toLowerCase();
+            if (gLower.startsWith('f') || gLower.includes('female')) {
+              gender = 'Female';
+            }
+          }
+
+          // DOB extraction
           let dobStr = '2015-01-01';
-          const rawDob = getExcelVal(row, ['Date of Birth', 'DateofBirth', 'DOB', 'birthdate', 'birth date']);
-          if (rawDob) {
-            if (rawDob instanceof Date) {
-              dobStr = rawDob.toISOString().split('T')[0];
+          const dobRaw = getRowVal(colIndices.dateOfBirth);
+          if (dobRaw) {
+            const dateVal = new Date(dobRaw);
+            if (!isNaN(dateVal.getTime())) {
+              dobStr = dateVal.toISOString().split('T')[0];
             } else {
-              const dateVal = new Date(rawDob);
-              if (!isNaN(dateVal.getTime())) {
-                dobStr = dateVal.toISOString().split('T')[0];
+              // Try regex format parse
+              const parts = dobRaw.split(/[-/.\s]+/);
+              if (parts.length === 3) {
+                // Check if YYYY-MM-DD or DD-MM-YYYY or MM-DD-YYYY
+                let d = Number(parts[0]);
+                let m = Number(parts[1]);
+                let y = Number(parts[2]);
+                if (parts[0].length === 4) {
+                  y = Number(parts[0]);
+                  d = Number(parts[2]);
+                }
+                if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                  if (m > 12 && d <= 12) {
+                    // swap
+                    const temp = m;
+                    m = d;
+                    d = temp;
+                  }
+                  const pad = (n: number) => String(n).padStart(2, '0');
+                  dobStr = `${y}-${pad(m)}-${pad(d)}`;
+                }
               }
             }
           }
 
-          let clName = getExcelValStr(row, ['Class Name', 'ClassName', 'Class', 'Class ID']) || 'P.1';
-          clName = clName.toUpperCase();
+          // Class Name extraction
+          let clName = getRowVal(colIndices.className) || 'P.1';
+          clName = clName.toUpperCase().replace(/[\s._-]/g, '');
+          if (clName.startsWith('PRIMARY')) {
+            clName = clName.replace('PRIMARY', 'P');
+          }
           if (clName.length === 2 && clName.startsWith('P')) {
             clName = `P.${clName[1]}`;
           }
+          if (!['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'].includes(clName)) {
+            clName = 'P.1';
+          }
 
-          const rawYear = getExcelVal(row, ['Year of Entry', 'YearofEntry', 'Entry Year', 'EntryYear', 'Year', 'Joined']);
-          const yearOfEntry = Number(rawYear) || new Date().getFullYear();
+          // Entry Year extraction
+          const yearRaw = getRowVal(colIndices.yearOfEntry);
+          const yearOfEntry = Number(yearRaw) || new Date().getFullYear();
 
-          const rawScholarship = getExcelVal(row, ['Scholarship Status', 'ScholarshipStatus', 'Scholarship', 'sponsored', 'has scholarship', 'has_scholarship']);
-          const hasScholarship = rawScholarship !== undefined && rawScholarship !== null && (
-            String(rawScholarship).toLowerCase().includes('yes') ||
-            rawScholarship === true ||
-            String(rawScholarship) === '1' ||
-            String(rawScholarship).toLowerCase() === 'true'
+          // Scholarship extraction
+          const scholarshipRaw = getRowVal(colIndices.hasScholarship);
+          const hasScholarship = scholarshipRaw !== '' && (
+            scholarshipRaw.toLowerCase().includes('yes') ||
+            scholarshipRaw.toLowerCase() === 'true' ||
+            scholarshipRaw === '1'
           );
 
+          // Residence Zone extraction
+          const zoneInNansana = getRowVal(colIndices.zoneInNansana) || 'Nansana';
+
+          // Guardian Name extraction
+          const guardianName = getRowVal(colIndices.guardianName) || 'Unknown';
+          const guardianContact = getRowVal(colIndices.guardianContact);
+          const communityWorker = getRowVal(colIndices.communityWorker);
+          const workerContact = getRowVal(colIndices.workerContact);
+
           return {
-            surname: getExcelValStr(row, ['Surname', 'SurName', 'Last Name', 'LastName', 'sirname', 'family name']) || 'Unknown',
-            otherNames: getExcelValStr(row, ['Other Names', 'OtherNames', 'First Name', 'FirstName', 'given name', 'givennames']) || '',
-            gender: getExcelValStr(row, ['Gender', 'Sex', 'Sex/Gender']) || 'Male',
+            surname,
+            otherNames,
+            gender,
             dateOfBirth: dobStr,
-            className: clName,
-            yearOfEntry: yearOfEntry,
+            className: clName as any,
+            yearOfEntry,
             photo: '',
-            guardianName: getExcelValStr(row, ['Guardian Name', 'GuardianName', 'Guardian', 'parent', 'parent/guardian']) || 'Unknown',
-            guardianContact: getExcelValStr(row, ['Guardian Contact', 'GuardianContact', 'Contact', 'Phone', 'Guardian Phone']),
-            communityWorker: getExcelValStr(row, ['Community Worker', 'CommunityWorker', 'Worker', 'social worker']),
-            workerContact: getExcelValStr(row, ['Community Worker Contact', 'CommunityWorkerContact', 'Worker Contact', 'WorkerContact', 'worker phone']),
-            zoneInNansana: getExcelValStr(row, ['Zone in Nansana', 'ZoneinNansana', 'Zone', 'Address', 'Area', 'Village', 'where staying']) || 'Nansana',
-            hasScholarship: hasScholarship
+            guardianName,
+            guardianContact,
+            communityWorker,
+            workerContact,
+            zoneInNansana,
+            hasScholarship
           };
         });
 
@@ -266,7 +526,7 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
       }
     };
 
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const handleClear = () => {
@@ -771,32 +1031,7 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
           </div>
 
           {/* Duplicates warning box */}
-          {(() => {
-            const exactDuplicatesCount = parsedData.filter((row, idx) => {
-              const check = checkNameSimilarity(row.surname, row.otherNames, row.className, students);
-              const duplicateInExcel = parsedData.slice(0, idx).some(item => 
-                item.className === row.className &&
-                item.surname?.toLowerCase().trim() === row.surname?.toLowerCase().trim() &&
-                item.otherNames?.toLowerCase().trim() === row.otherNames?.toLowerCase().trim()
-              );
-              return check.isExactInClass || duplicateInExcel;
-            }).length;
-
-            if (exactDuplicatesCount > 0) {
-              return (
-                <div className="mx-5 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-950 font-semibold flex items-start gap-2.5 shadow-xs">
-                  <span className="text-base leading-none mt-0.5">⚠️</span>
-                  <div>
-                    <p className="font-extrabold">{exactDuplicatesCount} duplicate name records detected in this spreadsheet!</p>
-                    <p className="text-[10px] text-amber-800 font-medium mt-0.5">
-                      To prevent duplicates in Class registry, those rows are highlighted in red and will be automatically skipped during import. All other pupils are fully ready for import.
-                    </p>
-                  </div>
-                </div>
-              );
-            }
-            return null;
-          })()}
+          {null}
 
           {/* Grid Preview Table */}
           <div className="overflow-x-auto max-h-96">
@@ -817,48 +1052,12 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
               </thead>
               <tbody className="divide-y divide-slate-50 text-slate-600 font-sans">
                 {parsedData.slice(0, 50).map((row, idx) => {
-                  const check = checkNameSimilarity(row.surname, row.otherNames, row.className, students);
-                  const duplicateInExcel = parsedData.slice(0, idx).some(item => 
-                    item.className === row.className &&
-                    item.surname?.toLowerCase().trim() === row.surname?.toLowerCase().trim() &&
-                    item.otherNames?.toLowerCase().trim() === row.otherNames?.toLowerCase().trim()
-                  );
-
                   let statusBadge = (
                     <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200/50 uppercase tracking-wide font-mono">
                       ✓ Ready
                     </span>
                   );
                   let rowBg = "hover:bg-slate-50/50 transition-colors";
-
-                  if (check.isExactInClass) {
-                    statusBadge = (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-red-50 text-red-700 border border-red-200/50 uppercase tracking-wide font-mono" title="Already registered in this class.">
-                        ✕ Duplicate (Skip)
-                      </span>
-                    );
-                    rowBg = "bg-red-50/25 hover:bg-red-50/45 transition-colors";
-                  } else if (duplicateInExcel) {
-                    statusBadge = (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-red-50 text-red-700 border border-red-200/50 uppercase tracking-wide font-mono" title="Repeated earlier in this sheet.">
-                        ✕ File Dup (Skip)
-                      </span>
-                    );
-                    rowBg = "bg-red-50/25 hover:bg-red-50/45 transition-colors";
-                  } else if (check.resembles && check.matchStudent) {
-                    const s = check.matchStudent;
-                    const isTypo = check.resemblanceType === 'typo';
-                    const msg = isTypo 
-                      ? `Resembles "${s.surname} ${s.otherNames}" in Class ${s.className}` 
-                      : `Similar name "${s.surname} ${s.otherNames}" in Class ${s.className}`;
-                    
-                    statusBadge = (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200/50 uppercase tracking-wide font-mono" title={msg}>
-                        ⚠️ Resembles {s.surname} ({s.className})
-                      </span>
-                    );
-                    rowBg = "bg-amber-50/15 hover:bg-amber-50/25 transition-colors";
-                  }
 
                   return (
                     <tr key={idx} className={rowBg}>

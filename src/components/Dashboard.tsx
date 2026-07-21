@@ -89,17 +89,17 @@ export default function Dashboard({ students, marks, setActiveTab, teacher, isAd
   const totalStudents = targetStudents.length;
   const scholarshipCount = targetStudents.filter(s => s.hasScholarship).length;
 
-  const useRealData = students.length > 0;
+  const useRealData = true;
 
-  // Base data counts (fallbacks to make layout look exactly like screenshot on empty/small DB)
-  const displayTotal = useRealData ? totalStudents : (isTeacher ? 0 : 684);
-  const displayBoys = useRealData ? targetStudents.filter(s => s.gender === 'Male').length : (isTeacher ? 0 : 338);
-  const displayGirls = useRealData ? targetStudents.filter(s => s.gender === 'Female').length : (isTeacher ? 0 : 346);
-  const displayScholarships = useRealData ? scholarshipCount : (isTeacher ? 0 : 72);
+  // Base data counts (using real database counts)
+  const displayTotal = totalStudents;
+  const displayBoys = targetStudents.filter(s => s.gender === 'Male').length;
+  const displayGirls = targetStudents.filter(s => s.gender === 'Female').length;
+  const displayScholarships = scholarshipCount;
 
-  const displayMalePercent = displayTotal > 0 ? Math.round((displayBoys / displayTotal) * 1000) / 10 : 49.4;
-  const displayFemalePercent = displayTotal > 0 ? Math.round((displayGirls / displayTotal) * 1000) / 10 : 50.6;
-  const displayScholarshipPercent = displayTotal > 0 ? Math.round((displayScholarships / displayTotal) * 1000) / 10 : 10.5;
+  const displayMalePercent = displayTotal > 0 ? Math.round((displayBoys / displayTotal) * 1000) / 10 : 0;
+  const displayFemalePercent = displayTotal > 0 ? Math.round((displayGirls / displayTotal) * 1000) / 10 : 0;
+  const displayScholarshipPercent = displayTotal > 0 ? Math.round((displayScholarships / displayTotal) * 1000) / 10 : 0;
 
   // Class distribution counts
   const classes: ('P.1' | 'P.2' | 'P.3' | 'P.4' | 'P.5' | 'P.6' | 'P.7')[] = [
@@ -114,104 +114,8 @@ export default function Dashboard({ students, marks, setActiveTab, teacher, isAd
     return acc;
   }, {} as Record<string, number>);
 
-  // Prepopulate standard Ugandan students list from screenshot as defaults/seeds
-  const defaultStudents = [
-    {
-      id: 'mock-1',
-      surname: 'Kato',
-      otherNames: 'Brian',
-      gender: 'Male',
-      dateOfBirth: '2015-04-12',
-      className: 'P.4',
-      yearOfEntry: 2022,
-      photo: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=80&w=150&h=150&fit=crop',
-      guardianName: 'Kato Moses',
-      guardianContact: '+256 701 112233',
-      communityWorker: 'Agnes',
-      workerContact: '+256 701 112233',
-      zoneInNansana: 'Kyebando',
-      hasScholarship: true,
-      scholarshipType: 'Full Scholarship',
-      stream: 'Blue',
-      status: 'Active'
-    },
-    {
-      id: 'mock-2',
-      surname: 'Nabukenya',
-      otherNames: 'Sarah',
-      gender: 'Female',
-      dateOfBirth: '2016-08-22',
-      className: 'P.3',
-      yearOfEntry: 2023,
-      photo: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&h=150&fit=crop',
-      guardianName: 'Nabukenya Jane',
-      guardianContact: '+256 702 445588',
-      communityWorker: 'Florence',
-      workerContact: '+256 702 445588',
-      zoneInNansana: 'Nansana',
-      hasScholarship: true,
-      scholarshipType: 'Partial Scholarship',
-      stream: 'Green',
-      status: 'Active'
-    },
-    {
-      id: 'mock-3',
-      surname: 'Ssempala',
-      otherNames: 'David',
-      gender: 'Male',
-      dateOfBirth: '2014-11-03',
-      className: 'P.5',
-      yearOfEntry: 2021,
-      photo: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&h=150&fit=crop',
-      guardianName: 'Ssempala Patrick',
-      guardianContact: '+256 703 554433',
-      communityWorker: 'Sula',
-      workerContact: '+256 703 554433',
-      zoneInNansana: 'Kabulengwa',
-      hasScholarship: false,
-      scholarshipType: 'None',
-      stream: 'Yellow',
-      status: 'Active'
-    },
-    {
-      id: 'mock-4',
-      surname: 'Namagembe',
-      otherNames: 'Aisha',
-      gender: 'Female',
-      dateOfBirth: '2017-01-30',
-      className: 'P.2',
-      yearOfEntry: 2024,
-      photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop',
-      guardianName: 'Namagembe Hajara',
-      guardianContact: '+256 704 121212',
-      communityWorker: 'Agnes',
-      workerContact: '+256 704 121212',
-      zoneInNansana: 'Kagoma',
-      hasScholarship: true,
-      scholarshipType: 'Pending Review',
-      stream: 'Green',
-      status: 'Pending'
-    },
-    {
-      id: 'mock-5',
-      surname: 'Muwanga',
-      otherNames: 'Isaac',
-      gender: 'Male',
-      dateOfBirth: '2013-05-15',
-      className: 'P.6',
-      yearOfEntry: 2020,
-      photo: 'https://images.unsplash.com/photo-1544717297-fa95b6ee9643?w=150&h=150&fit=crop',
-      guardianName: 'Muwanga John',
-      guardianContact: '+256 705 998877',
-      communityWorker: 'Florence',
-      workerContact: '+256 705 998877',
-      zoneInNansana: 'Kibiri',
-      hasScholarship: true,
-      scholarshipType: 'Full Scholarship',
-      stream: 'Blue',
-      status: 'Active'
-    }
-  ];
+  // Default students list is now empty to keep the registry clean of trial data
+  const defaultStudents: any[] = [];
 
   const filteredDefaultStudents = isTeacher ? defaultStudents.filter(ds => teacherClasses.includes(ds.className as any)) : defaultStudents;
 

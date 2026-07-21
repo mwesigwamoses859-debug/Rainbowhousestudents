@@ -45,6 +45,15 @@ export default function BackupRecovery({ onRestoreSuccess }: BackupRecoveryProps
   const [confirmRestoreId, setConfirmRestoreId] = useState<string | null>(null);
   const [alert, setAlert] = useState<{ type: 'success' | 'error' | 'info' | null; text: string }>({ type: null, text: '' });
 
+  // Reset utility states
+  const [resetStudents, setResetStudents] = useState(false);
+  const [resetMarks, setResetMarks] = useState(false);
+  const [resetTeachers, setResetTeachers] = useState(false);
+  const [resetOtherLogs, setResetOtherLogs] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
+
   const fetchBackups = async () => {
     setLoading(true);
     try {
@@ -147,6 +156,51 @@ export default function BackupRecovery({ onRestoreSuccess }: BackupRecoveryProps
       showAlert('error', 'Communication failure during file deletion.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleExecuteReset = async () => {
+    if (resetConfirmText.trim().toUpperCase() !== 'RESET') {
+      showAlert('error', 'Confirmation keyword mismatch. Please type RESET to authorize.');
+      return;
+    }
+
+    setResetting(true);
+    setShowResetConfirmModal(false);
+    setAlert({ type: 'info', text: 'Executing secure administrative partition wipe...' });
+
+    try {
+      const res = await fetch('/api/admin/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clearStudents: resetStudents,
+          clearMarks: resetMarks,
+          clearTeachers: resetTeachers,
+          clearOtherLogs: resetOtherLogs
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showAlert('success', data.message || 'Database partitions wiped successfully!');
+        
+        // Reset local checkbox states
+        setResetStudents(false);
+        setResetMarks(false);
+        setResetTeachers(false);
+        setResetOtherLogs(false);
+        setResetConfirmText('');
+        
+        // Notify parent to fetch data and refresh global registry lists
+        onRestoreSuccess();
+      } else {
+        showAlert('error', data.message || 'Wipe transaction rejected.');
+      }
+    } catch (err) {
+      showAlert('error', 'Network error or system timeout while processing reset request.');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -264,6 +318,87 @@ export default function BackupRecovery({ onRestoreSuccess }: BackupRecoveryProps
                 )}
               </button>
             </form>
+          </div>
+
+          {/* Database Reset Utility */}
+          <div className="bg-white p-5 rounded-2xl border border-red-100 shadow-sm space-y-4">
+            <h3 className="text-xs font-extrabold uppercase text-red-600 tracking-wider flex items-center gap-1.5">
+              <Trash2 className="h-4 w-4 text-red-500" />
+              <span>Database Reset Utility</span>
+            </h3>
+            
+            <p className="text-[11px] text-slate-500 leading-normal">
+              Quickly clear trial records to restore the application to a clean, empty state. Select the partitions to wipe:
+            </p>
+
+            <div className="space-y-2">
+              <label className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={resetStudents}
+                  onChange={(e) => setResetStudents(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                />
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Wipe Student Registry</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Clears all student bios, records, and photographs.</span>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={resetMarks}
+                  onChange={(e) => setResetMarks(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                />
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Clear Academic Marks</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Removes all mid-term and end-of-term grade ledger records.</span>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={resetTeachers}
+                  onChange={(e) => setResetTeachers(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                />
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Wipe Secondary Teachers</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Removes teacher logins. Retains master 'admin' account.</span>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={resetOtherLogs}
+                  onChange={(e) => setResetOtherLogs(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                />
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Clear Safeguarding & Attendance Logs</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Wipes attendance registries, home visitations, and support logs.</span>
+                </div>
+              </label>
+            </div>
+
+            <button
+              onClick={() => {
+                if (!resetStudents && !resetMarks && !resetTeachers && !resetOtherLogs) {
+                  showAlert('error', 'Please select at least one database partition to wipe.');
+                  return;
+                }
+                setShowResetConfirmModal(true);
+              }}
+              disabled={resetting}
+              className="w-full py-2 px-4 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Reset Selected Partitions</span>
+            </button>
           </div>
 
         </div>
@@ -422,6 +557,67 @@ export default function BackupRecovery({ onRestoreSuccess }: BackupRecoveryProps
           </div>
         );
       })()}
+
+      {/* Database Reset Confirmation Modal */}
+      {showResetConfirmModal && (
+        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-red-100 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-red-600">
+              <span className="p-2.5 bg-red-50 rounded-xl">
+                <AlertTriangle className="h-6 w-6" />
+              </span>
+              <h3 className="text-sm font-extrabold text-slate-900">Confirm Database Partition Wipe?</h3>
+            </div>
+
+            <div className="space-y-2.5 text-xs text-slate-600 leading-relaxed">
+              <p>
+                You are about to permanently erase the selected database partitions. This action is irreversible unless you have a valid backup.
+              </p>
+              
+              <div className="p-3 bg-red-50/50 border border-red-100 rounded-xl space-y-1">
+                <p className="font-bold text-red-800">Partitions queued for deletion:</p>
+                <ul className="list-disc pl-4 space-y-0.5 text-red-700 font-semibold text-[10px]">
+                  {resetStudents && <li>All Student profiles & records</li>}
+                  {resetMarks && <li>All exam mark sheets and grades</li>}
+                  {resetTeachers && <li>All supplementary Teacher logins (retaining admin)</li>}
+                  {resetOtherLogs && <li>Attendance logs, Community Home visits, safeguarding records</li>}
+                </ul>
+              </div>
+
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[10px] font-bold uppercase text-slate-500 block">Type the word <span className="text-red-600 font-extrabold font-mono">RESET</span> to authorize:</label>
+                <input
+                  type="text"
+                  value={resetConfirmText}
+                  onChange={(e) => setResetConfirmText(e.target.value)}
+                  placeholder="RESET"
+                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-500 font-mono font-bold tracking-widest text-center"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setShowResetConfirmModal(false);
+                  setResetConfirmText('');
+                }}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-600 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExecuteReset}
+                disabled={resetConfirmText.toUpperCase() !== 'RESET'}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Authorize & Wipe</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -87,58 +87,313 @@ export async function fetchSheetValues(
  * Map raw Google Sheets rows (with headers) to Student objects
  */
 export function mapSheetRowsToStudents(rows: any[][]): Student[] {
-  if (rows.length < 2) return [];
+  if (rows.length === 0) return [];
 
-  const headers = rows[0].map(h => String(h).trim().toLowerCase());
-  const dataRows = rows.slice(1);
+  const cleanHeader = (val: any): string => {
+    return String(val || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  };
+
+  // Find the index of the header row
+  let headerRowIndex = -1;
+  let sheetHeaders: string[] = [];
+
+  // We check row-by-row to see if it looks like a header row
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const row = rows[i];
+    if (!Array.isArray(row) || row.length === 0) continue;
+
+    const cleanRow = row.map(cell => cleanHeader(cell));
+    
+    const expectedKeywords = [
+      'surname', 'lastname', 'familyname', 'sirname',
+      'othernames', 'firstname', 'givenname', 'givennames',
+      'gender', 'sex', 'sexgender',
+      'dateofbirth', 'dob', 'birthdate',
+      'class', 'classname', 'classlevel', 'grade', 'level',
+      'yearofentry', 'entryyear', 'admissionyear',
+      'zone', 'address', 'village', 'residence',
+      'guardian', 'parent', 'guardianname',
+      'scholarship', 'sponsored'
+    ];
+
+    const matchedCount = cleanRow.filter(cell => expectedKeywords.includes(cell)).length;
+
+    if (matchedCount >= 2) {
+      headerRowIndex = i;
+      sheetHeaders = row.map(cell => String(cell || '').trim());
+      break;
+    }
+  }
+
+  // Fallback if no robust header row was found
+  if (headerRowIndex === -1) {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (Array.isArray(row) && row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== '')) {
+        headerRowIndex = i;
+        sheetHeaders = row.map(cell => String(cell || '').trim());
+        break;
+      }
+    }
+  }
+
+  if (headerRowIndex === -1) return [];
+
+  const dataRows = rows.slice(headerRowIndex + 1).filter(row => {
+    return Array.isArray(row) && row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== '');
+  });
+
+  // Map column indices for each field
+  const colIndices = {
+    surname: -1,
+    otherNames: -1,
+    gender: -1,
+    dateOfBirth: -1,
+    className: -1,
+    yearOfEntry: -1,
+    guardianName: -1,
+    guardianContact: -1,
+    communityWorker: -1,
+    workerContact: -1,
+    zoneInNansana: -1,
+    hasScholarship: -1,
+    combinedName: -1
+  };
+
+  const sheetHeadersClean = sheetHeaders.map(h => cleanHeader(h));
+
+  const findColIdx = (possibleKeys: string[]): number => {
+    const cleanPossibles = possibleKeys.map(k => cleanHeader(k));
+    return sheetHeadersClean.findIndex(h => cleanPossibles.includes(h));
+  };
+
+  colIndices.surname = findColIdx(['surname', 'lastname', 'familyname', 'sirname', 'family', 'last', 'sur', 'sname']);
+  colIndices.otherNames = findColIdx(['othernames', 'firstname', 'givenname', 'givennames', 'othername', 'first', 'given', 'other', 'onames']);
+  colIndices.combinedName = findColIdx(['name', 'names', 'studentname', 'pupilname', 'fullname', 'pupilsname', 'studentsname', 'nameofpupil', 'nameofstudent', 'pupil', 'student', 'child', 'childname', 'childsname', 'pupilsnames', 'studentsnames', 'studentnames']);
+  colIndices.gender = findColIdx(['gender', 'sex', 'genderstatus', 'sexgender']);
+  colIndices.dateOfBirth = findColIdx(['dateofbirth', 'dob', 'birthdate', 'birthday', 'birth']);
+  colIndices.className = findColIdx(['classname', 'class', 'grade', 'level', 'classid']);
+  colIndices.yearOfEntry = findColIdx(['yearofentry', 'entryyear', 'year', 'joined', 'entry_year', 'admissionyear', 'admission_year']);
+  colIndices.zoneInNansana = findColIdx(['zoneinnansana', 'zone', 'address', 'area', 'village', 'wherestaying', 'residencezone', 'residence', 'homezone', 'location', 'residencezoneinnansana']);
+  colIndices.guardianName = findColIdx(['guardianname', 'guardian', 'parent', 'parentguardian', 'parentname', 'guardiannameorparentname']);
+  colIndices.guardianContact = findColIdx(['guardiancontact', 'guardianphone', 'contact', 'phone', 'parentcontact', 'parentphone', 'phone_number', 'phonenumber', 'guardiancontactphone']);
+  colIndices.communityWorker = findColIdx(['communityworker', 'worker', 'socialworker', 'communityworkername']);
+  colIndices.workerContact = findColIdx(['communityworkercontact', 'workercontact', 'workerphone', 'socialworkerphone', 'communityworkercontactphone']);
+  colIndices.hasScholarship = findColIdx(['scholarshipstatus', 'scholarship', 'sponsored', 'hasscholarship']);
+
+  // Auto-detect columns by inspecting cell values if index is still -1
+  const numRowsToCheck = Math.min(dataRows.length, 5);
+  if (numRowsToCheck > 0) {
+    for (let colIdx = 0; colIdx < sheetHeaders.length; colIdx++) {
+      const values: string[] = [];
+      for (let r = 0; r < numRowsToCheck; r++) {
+        const val = String(dataRows[r][colIdx] || '').trim();
+        if (val) values.push(val);
+      }
+      if (values.length === 0) continue;
+
+      // Gender auto-detect
+      if (colIndices.gender === -1) {
+        const isGenderCol = values.every(v => {
+          const lv = v.toLowerCase();
+          return lv === 'm' || lv === 'f' || lv === 'male' || lv === 'female';
+        });
+        if (isGenderCol) {
+          colIndices.gender = colIdx;
+          continue;
+        }
+      }
+
+      // Class auto-detect
+      if (colIndices.className === -1) {
+        const isClassCol = values.every(v => {
+          const normV = v.toUpperCase().replace(/[\s._-]/g, '');
+          return normV.startsWith('P') || normV.startsWith('PRIMARY') || /^[1-7]$/.test(normV);
+        });
+        if (isClassCol) {
+          colIndices.className = colIdx;
+          continue;
+        }
+      }
+
+      // Year of Entry auto-detect
+      if (colIndices.yearOfEntry === -1) {
+        const isYearCol = values.every(v => {
+          const num = Number(v);
+          return !isNaN(num) && num >= 2000 && num <= 2100;
+        });
+        if (isYearCol) {
+          colIndices.yearOfEntry = colIdx;
+          continue;
+        }
+      }
+
+      // DOB auto-detect
+      if (colIndices.dateOfBirth === -1) {
+        const isDobCol = values.every(v => {
+          const date = new Date(v);
+          return !isNaN(date.getTime()) && date.getFullYear() >= 2000 && date.getFullYear() <= new Date().getFullYear();
+        });
+        if (isDobCol) {
+          colIndices.dateOfBirth = colIdx;
+          continue;
+        }
+      }
+
+      // Scholarship auto-detect
+      if (colIndices.hasScholarship === -1) {
+        const isScholarshipCol = values.every(v => {
+          const lv = v.toLowerCase();
+          return lv === 'yes' || lv === 'no' || lv === 'true' || lv === 'false';
+        });
+        if (isScholarshipCol) {
+          colIndices.hasScholarship = colIdx;
+          continue;
+        }
+      }
+    }
+  }
+
+  // Fallback: If surname is not found, find first unmapped text column and use it as combined name
+  if (colIndices.surname === -1 && colIndices.combinedName === -1) {
+    let nameFallbackIdx = -1;
+    for (let colIdx = 0; colIdx < sheetHeaders.length; colIdx++) {
+      if (
+        colIdx === colIndices.gender ||
+        colIdx === colIndices.className ||
+        colIdx === colIndices.yearOfEntry ||
+        colIdx === colIndices.dateOfBirth ||
+        colIdx === colIndices.hasScholarship
+      ) {
+        continue;
+      }
+      const hasLetters = dataRows.some(row => /[a-zA-Z]/.test(String(row[colIdx] || '')));
+      if (hasLetters) {
+        nameFallbackIdx = colIdx;
+        break;
+      }
+    }
+    if (nameFallbackIdx !== -1) {
+      colIndices.combinedName = nameFallbackIdx;
+    }
+  }
 
   return dataRows.map((row, index) => {
-    // Helper to find cell value by matching header variations
-    const getVal = (possibleHeaders: string[]): string => {
-      const colIdx = headers.findIndex(h => possibleHeaders.includes(h));
-      if (colIdx !== -1 && row[colIdx] !== undefined) {
-        return String(row[colIdx]).trim();
+    const getRowVal = (idx: number): string => {
+      if (idx === -1 || idx >= row.length) return '';
+      const cell = row[idx];
+      if (cell === undefined || cell === null) return '';
+      if (cell instanceof Date) {
+        return cell.toISOString().split('T')[0];
       }
-      return "";
+      return String(cell).trim();
     };
 
-    const surname = getVal(["surname", "last name", "sirname", "family name"]) || "Unknown";
-    const otherNames = getVal(["other names", "first name", "given name", "othernames"]) || "";
-    const genderRaw = getVal(["gender", "sex", "sex/gender"]) || "Male";
-    const gender: Gender = genderRaw.toLowerCase().startsWith("f") ? "Female" : "Male";
+    let surname = getRowVal(colIndices.surname);
+    let otherNames = getRowVal(colIndices.otherNames);
+    const combinedName = getRowVal(colIndices.combinedName);
 
-    let dobStr = getVal(["date of birth", "dob", "birthdate", "dateofbirth"]) || "2015-01-01";
-    // Sanitize DOB (ensure YYYY-MM-DD or standard parseable string)
-    const dobDate = new Date(dobStr);
-    if (!isNaN(dobDate.getTime())) {
-      dobStr = dobDate.toISOString().split("T")[0];
-    } else {
-      dobStr = "2015-01-01";
+    // If surname was not found, try combined name
+    if (!surname && combinedName) {
+      const parts = combinedName.split(/\s+/).filter(Boolean);
+      if (parts.length > 1) {
+        surname = parts[0];
+        otherNames = parts.slice(1).join(' ');
+      } else if (parts.length === 1) {
+        surname = parts[0];
+        otherNames = '';
+      }
     }
 
-    let classNameRaw = getVal(["class name", "class", "classname"]) || "P.1";
-    classNameRaw = classNameRaw.trim().toUpperCase();
-    if (classNameRaw.length === 2 && classNameRaw.startsWith("P")) {
-      classNameRaw = `P.${classNameRaw[1]}`;
+    // If surname is found but otherNames is empty, and surname has spaces, split it
+    if (surname && !otherNames) {
+      const parts = surname.split(/\s+/).filter(Boolean);
+      if (parts.length > 1) {
+        surname = parts[0];
+        otherNames = parts.slice(1).join(' ');
+      }
     }
-    const className: ClassName = ["P.1", "P.2", "P.3", "P.4", "P.5", "P.6", "P.7"].includes(classNameRaw)
-      ? (classNameRaw as ClassName)
-      : "P.1";
 
-    const yearOfEntryStr = getVal(["year of entry", "entry year", "yearofentry", "joined"]);
-    const yearOfEntry = Number(yearOfEntryStr) || new Date().getFullYear();
+    if (!surname) {
+      surname = 'Unknown';
+    }
 
-    const zoneInNansana = getVal(["zone in nansana", "zone", "address", "area", "village", "where staying"]) || "Nansana";
-    const guardianName = getVal(["guardian name", "guardian", "parent", "parent/guardian"]) || "Unknown";
-    const guardianContact = getVal(["guardian contact", "guardian phone", "contact", "phone"]) || "";
-    const communityWorker = getVal(["community worker", "worker", "social worker"]) || "";
-    const workerContact = getVal(["community worker contact", "worker contact", "worker phone"]) || "";
+    // Gender extraction
+    let genderRaw = getRowVal(colIndices.gender);
+    let gender: Gender = 'Male';
+    if (genderRaw) {
+      const gLower = genderRaw.toLowerCase();
+      if (gLower.startsWith('f') || gLower.includes('female')) {
+        gender = 'Female';
+      }
+    }
 
-    const scholarshipRaw = getVal(["scholarship status", "scholarship", "sponsored", "has scholarship", "has_scholarship"]);
-    const hasScholarship =
-      scholarshipRaw.toLowerCase() === "yes" ||
-      scholarshipRaw.toLowerCase() === "true" ||
-      scholarshipRaw === "1";
+    // DOB extraction
+    let dobStr = '2015-01-01';
+    const dobRaw = getRowVal(colIndices.dateOfBirth);
+    if (dobRaw) {
+      const dateVal = new Date(dobRaw);
+      if (!isNaN(dateVal.getTime())) {
+        dobStr = dateVal.toISOString().split('T')[0];
+      } else {
+        // Try regex format parse
+        const parts = dobRaw.split(/[-/.\s]+/);
+        if (parts.length === 3) {
+          // Check if YYYY-MM-DD or DD-MM-YYYY or MM-DD-YYYY
+          let d = Number(parts[0]);
+          let m = Number(parts[1]);
+          let y = Number(parts[2]);
+          if (parts[0].length === 4) {
+            y = Number(parts[0]);
+            d = Number(parts[2]);
+          }
+          if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+            if (m > 12 && d <= 12) {
+              // swap
+              const temp = m;
+              m = d;
+              d = temp;
+            }
+            const pad = (n: number) => String(n).padStart(2, '0');
+            dobStr = `${y}-${pad(m)}-${pad(d)}`;
+          }
+        }
+      }
+    }
+
+    // Class Name extraction
+    let clNameRaw = getRowVal(colIndices.className) || 'P.1';
+    clNameRaw = clNameRaw.toUpperCase().replace(/[\s._-]/g, '');
+    if (clNameRaw.startsWith('PRIMARY')) {
+      clNameRaw = clNameRaw.replace('PRIMARY', 'P');
+    }
+    if (clNameRaw.length === 2 && clNameRaw.startsWith('P')) {
+      clNameRaw = `P.${clNameRaw[1]}`;
+    }
+    const className: ClassName = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'].includes(clNameRaw)
+      ? (clNameRaw as ClassName)
+      : 'P.1';
+
+    // Entry Year extraction
+    const yearRaw = getRowVal(colIndices.yearOfEntry);
+    const yearOfEntry = Number(yearRaw) || new Date().getFullYear();
+
+    // Scholarship extraction
+    const scholarshipRaw = getRowVal(colIndices.hasScholarship);
+    const hasScholarship = scholarshipRaw !== '' && (
+      scholarshipRaw.toLowerCase().includes('yes') ||
+      scholarshipRaw.toLowerCase() === 'true' ||
+      scholarshipRaw === '1'
+    );
+
+    // Residence Zone extraction
+    const zoneInNansana = getRowVal(colIndices.zoneInNansana) || 'Nansana';
+
+    // Guardian Name extraction
+    const guardianName = getRowVal(colIndices.guardianName) || 'Unknown';
+    const guardianContact = getRowVal(colIndices.guardianContact);
+    const communityWorker = getRowVal(colIndices.communityWorker);
+    const workerContact = getRowVal(colIndices.workerContact);
 
     return {
       id: `st-sheet-${Date.now()}-${index}`,
@@ -148,13 +403,13 @@ export function mapSheetRowsToStudents(rows: any[][]): Student[] {
       dateOfBirth: dobStr,
       className,
       yearOfEntry,
-      photo: "",
+      photo: '',
       guardianName,
       guardianContact,
       communityWorker,
       workerContact,
       zoneInNansana,
-      hasScholarship,
+      hasScholarship
     };
   });
 }

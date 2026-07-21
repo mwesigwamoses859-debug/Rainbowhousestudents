@@ -19,6 +19,7 @@ import DocumentGenerator from './components/DocumentGenerator';
 import AiAssistant from './components/AiAssistant';
 import AcademicAnalytics from './components/AcademicAnalytics';
 import ReportVerification from './components/ReportVerification';
+import AshinagaLogo from './components/AshinagaLogo';
 import { 
   ShieldAlert, 
   BookOpen, 
@@ -583,12 +584,8 @@ export default function App() {
         
         {/* Left Section: Shield Logo and Title */}
         <div className="flex items-center gap-3">
-          <div className="relative w-11 h-11 flex items-center justify-center">
-            {/* Red laurel wreath/dashed styling */}
-            <div className="absolute inset-0 rounded-full border-2 border-red-500/80 animate-[spin_50s_linear_infinite]" />
-            <div className="absolute inset-1 rounded-full bg-[#051c3a] border border-red-500/60 flex items-center justify-center">
-              <span className="text-xl">🛡️</span>
-            </div>
+          <div className="flex items-center justify-center p-1 bg-white/10 rounded-xl">
+            <AshinagaLogo size={42} />
           </div>
           <div>
             <h1 className="font-display font-extrabold text-base lg:text-lg tracking-tight leading-none text-white">
