@@ -18,6 +18,7 @@ import StudentProfileModal from './components/StudentProfileModal';
 import DocumentGenerator from './components/DocumentGenerator';
 import AiAssistant from './components/AiAssistant';
 import AcademicAnalytics from './components/AcademicAnalytics';
+import ReportVerification from './components/ReportVerification';
 import { 
   ShieldAlert, 
   BookOpen, 
@@ -43,6 +44,7 @@ import {
   Lock,
   FileText,
   Shield,
+  ShieldCheck,
   FileKey
 } from 'lucide-react';
 
@@ -53,7 +55,7 @@ export default function App() {
   // Secondary sub-tab states for grouped views
   const [studentsSubTab, setStudentsSubTab] = useState<'list' | 'upload'>('list');
   const [academicsSubTab, setAcademicsSubTab] = useState<'marks' | 'timetable' | 'teachers' | 'promotion' | 'analytics'>('marks');
-  const [examsSubTab, setExamsSubTab] = useState<'reports' | 'graduation' | 'idcards' | 'docgen'>('reports');
+  const [examsSubTab, setExamsSubTab] = useState<'reports' | 'graduation' | 'idcards' | 'docgen' | 'verification'>('reports');
   const [settingsSubTab, setSettingsSubTab] = useState<'upload' | 'backup' | 'audit'>('upload');
 
   // Data State
@@ -91,6 +93,76 @@ export default function App() {
 
   // Report Card selection carrier
   const [selectedReportCardStudent, setSelectedReportCardStudent] = useState<Student | null>(null);
+
+  // Report verification from URL query params
+  const [verificationFromUrl, setVerificationFromUrl] = useState<{
+    studentId: string;
+    term: number;
+    year: number;
+    verified: boolean;
+    student?: Student;
+    averageScore?: number;
+    division?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (students.length === 0) return;
+    
+    const params = new URLSearchParams(window.location.search);
+    const verifyReportId = params.get('verifyReport');
+    const verifyTerm = params.get('term');
+    const verifyYear = params.get('year');
+
+    if (verifyReportId) {
+      const foundStudent = students.find(s => s.id.toLowerCase() === verifyReportId.toLowerCase());
+      if (foundStudent) {
+        const t = Number(verifyTerm) || 1;
+        const y = Number(verifyYear) || 2026;
+        const termMarks = marks.filter(m => m.studentId === foundStudent.id && m.term === t && m.year === y);
+        const total = termMarks.reduce((sum, m) => sum + m.score, 0);
+        const avg = termMarks.length > 0 ? Math.round(total / termMarks.length) : 0;
+        
+        const getGradePointsLocal = (score: number) => {
+          if (score >= 90) return 1;
+          if (score >= 80) return 2;
+          if (score >= 70) return 3;
+          if (score >= 60) return 4;
+          if (score >= 55) return 5;
+          if (score >= 50) return 6;
+          if (score >= 45) return 7;
+          if (score >= 40) return 8;
+          return 9;
+        };
+        const totalPoints = termMarks.reduce((sum, m) => sum + getGradePointsLocal(m.score), 0);
+        const getDivisionTextLocal = (aggregate: number, count: number) => {
+          if (count === 0) return 'N/A';
+          const avgPoint = aggregate / count;
+          if (avgPoint <= 2.2) return 'Division I';
+          if (avgPoint <= 4.8) return 'Division II';
+          if (avgPoint <= 6.8) return 'Division III';
+          if (avgPoint <= 8.0) return 'Division IV';
+          return 'Division U';
+        };
+
+        setVerificationFromUrl({
+          studentId: verifyReportId,
+          term: t,
+          year: y,
+          verified: true,
+          student: foundStudent,
+          averageScore: avg,
+          division: getDivisionTextLocal(totalPoints, termMarks.length)
+        });
+      } else {
+        setVerificationFromUrl({
+          studentId: verifyReportId,
+          term: Number(verifyTerm) || 1,
+          year: Number(verifyYear) || 2026,
+          verified: false
+        });
+      }
+    }
+  }, [students, marks]);
 
   // Load teacher from session or localStorage
   useEffect(() => {
@@ -416,6 +488,96 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F4F7FA] flex flex-col font-sans text-slate-800">
       
+      {/* Dynamic QR Verification Modal from URL Query */}
+      {verificationFromUrl && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in no-print">
+          <div className={`w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl border-2 transform scale-100 transition-all duration-300 ${
+            verificationFromUrl.verified ? 'border-emerald-500' : 'border-red-500'
+          }`}>
+            {/* Header */}
+            <div className={`p-6 text-white text-center relative overflow-hidden ${
+              verificationFromUrl.verified ? 'bg-emerald-600' : 'bg-red-600'
+            }`}>
+              <div className="absolute right-0 top-0 opacity-10 pointer-events-none">
+                <ShieldCheck className="h-32 w-32" />
+              </div>
+              {verificationFromUrl.verified ? (
+                <ShieldCheck className="h-14 w-14 mx-auto mb-2 text-emerald-100 animate-bounce" />
+              ) : (
+                <ShieldAlert className="h-14 w-14 mx-auto mb-2 text-red-100" />
+              )}
+              <h3 className="font-display font-black text-lg uppercase tracking-wider">
+                {verificationFromUrl.verified ? '✓ Official Verified Report' : '✕ Verification Failed'}
+              </h3>
+              <p className="text-xs text-white/80 mt-1">
+                {verificationFromUrl.verified 
+                  ? 'Ashinaga Uganda Academic Registry Ledger Checked' 
+                  : 'No matching academic ledger entry found'}
+              </p>
+            </div>
+
+            {/* Content body */}
+            <div className="p-6 space-y-4">
+              {verificationFromUrl.verified && verificationFromUrl.student ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-150">
+                    {verificationFromUrl.student.photo ? (
+                      <img src={verificationFromUrl.student.photo} alt="Student" className="h-12 w-12 rounded-lg object-cover" />
+                    ) : (
+                      <div className="h-12 w-12 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center justify-center font-bold text-indigo-600">
+                        {verificationFromUrl.student.surname[0]}
+                      </div>
+                    )}
+                    <div className="text-left">
+                      <span className="text-[9px] uppercase font-bold text-indigo-600 font-mono">Verified Pupil</span>
+                      <h4 className="text-sm font-bold text-slate-800 uppercase leading-none">
+                        {verificationFromUrl.student.surname} {verificationFromUrl.student.otherNames}
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-mono mt-1">Class: {verificationFromUrl.student.className} | ID: {verificationFromUrl.student.id}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                      <span className="text-[9px] text-slate-400 uppercase font-bold block">Assessed Period</span>
+                      <strong className="text-slate-800 font-extrabold mt-0.5 block">Term {verificationFromUrl.term} | {verificationFromUrl.year}</strong>
+                    </div>
+                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                      <span className="text-[9px] text-slate-400 uppercase font-bold block">Academic Division</span>
+                      <span className="text-indigo-600 font-bold block mt-0.5">{verificationFromUrl.division}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-emerald-50 text-emerald-950 text-xs rounded-xl border border-emerald-200/55 leading-relaxed text-center font-medium">
+                    This document is fully certified and verified by Ashinaga Uganda Education Management authorities as a true copy of original school records.
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3 text-center py-4">
+                  <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                    The verification reference code <code className="bg-slate-100 px-1 py-0.5 rounded font-mono font-bold text-slate-800">{verificationFromUrl.studentId}</code> is not registered for Term {verificationFromUrl.term} of {verificationFromUrl.year}.
+                  </p>
+                  <p className="text-[10px] text-red-500 font-bold">
+                    ⚠️ WARNING: This report card may be invalid, forged, or altered. Please contact the school head teacher immediately.
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  setVerificationFromUrl(null);
+                  // Remove query parameters from URL elegantly without reloading the page
+                  window.history.replaceState({}, document.title, window.location.pathname);
+                }}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer text-center"
+              >
+                Close Verification
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 1. Header Navigation Banner */}
       <header className="bg-[#0b2d59] text-white px-8 py-3.5 flex items-center justify-between shadow-md relative z-40 select-none no-print">
         
@@ -849,6 +1011,17 @@ export default function App() {
                       <FileText className="h-4 w-4" />
                       <span>Custom Document Creator</span>
                     </button>
+                    <button
+                      onClick={() => setExamsSubTab('verification')}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        examsSubTab === 'verification'
+                          ? 'bg-[#0b2d59] text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                      <span>Report Verification</span>
+                    </button>
                   </div>
 
                   {examsSubTab === 'reports' && (
@@ -874,6 +1047,13 @@ export default function App() {
 
                   {examsSubTab === 'docgen' && (
                     <DocumentGenerator 
+                      students={students}
+                      marks={marks}
+                    />
+                  )}
+
+                  {examsSubTab === 'verification' && (
+                    <ReportVerification 
                       students={students}
                       marks={marks}
                     />

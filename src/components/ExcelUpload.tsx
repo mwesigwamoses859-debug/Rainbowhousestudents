@@ -189,38 +189,70 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
         const sheetHeaders = Object.keys(rawJson[0]);
         setHeaders(sheetHeaders);
 
+        // Helper to find a value by checking multiple potential header variations in a case-insensitive and space-insensitive way
+        const getExcelVal = (rowObj: any, possibleKeys: string[]): any => {
+          const rowKeys = Object.keys(rowObj);
+          const normalizedPossibles = possibleKeys.map(k => k.toLowerCase().replace(/[\s_-]/g, ''));
+          
+          for (const rKey of rowKeys) {
+            const normalizedRowKey = rKey.toLowerCase().replace(/[\s_-]/g, '');
+            if (normalizedPossibles.includes(normalizedRowKey)) {
+              return rowObj[rKey];
+            }
+          }
+          return undefined;
+        };
+
+        const getExcelValStr = (rowObj: any, possibleKeys: string[]): string => {
+          const val = getExcelVal(rowObj, possibleKeys);
+          return val !== undefined && val !== null ? String(val).trim() : '';
+        };
+
         const mappedStudents = rawJson.map(row => {
           let dobStr = '2015-01-01';
-          if (row['Date of Birth']) {
-            if (row['Date of Birth'] instanceof Date) {
-              dobStr = row['Date of Birth'].toISOString().split('T')[0];
+          const rawDob = getExcelVal(row, ['Date of Birth', 'DateofBirth', 'DOB', 'birthdate', 'birth date']);
+          if (rawDob) {
+            if (rawDob instanceof Date) {
+              dobStr = rawDob.toISOString().split('T')[0];
             } else {
-              const dateVal = new Date(row['Date of Birth']);
+              const dateVal = new Date(rawDob);
               if (!isNaN(dateVal.getTime())) {
                 dobStr = dateVal.toISOString().split('T')[0];
               }
             }
           }
 
-          let clName = String(row['Class Name'] || row['Class'] || 'P.1').trim().toUpperCase();
+          let clName = getExcelValStr(row, ['Class Name', 'ClassName', 'Class', 'Class ID']) || 'P.1';
+          clName = clName.toUpperCase();
           if (clName.length === 2 && clName.startsWith('P')) {
             clName = `P.${clName[1]}`;
           }
 
+          const rawYear = getExcelVal(row, ['Year of Entry', 'YearofEntry', 'Entry Year', 'EntryYear', 'Year', 'Joined']);
+          const yearOfEntry = Number(rawYear) || new Date().getFullYear();
+
+          const rawScholarship = getExcelVal(row, ['Scholarship Status', 'ScholarshipStatus', 'Scholarship', 'sponsored', 'has scholarship', 'has_scholarship']);
+          const hasScholarship = rawScholarship !== undefined && rawScholarship !== null && (
+            String(rawScholarship).toLowerCase().includes('yes') ||
+            rawScholarship === true ||
+            String(rawScholarship) === '1' ||
+            String(rawScholarship).toLowerCase() === 'true'
+          );
+
           return {
-            surname: row['Surname'] || row['SurName'] || row['Last Name'] || 'Unknown',
-            otherNames: row['Other Names'] || row['OtherNames'] || row['First Name'] || '',
-            gender: String(row['Gender'] || 'Male').trim(),
+            surname: getExcelValStr(row, ['Surname', 'SurName', 'Last Name', 'LastName', 'sirname', 'family name']) || 'Unknown',
+            otherNames: getExcelValStr(row, ['Other Names', 'OtherNames', 'First Name', 'FirstName', 'given name', 'givennames']) || '',
+            gender: getExcelValStr(row, ['Gender', 'Sex', 'Sex/Gender']) || 'Male',
             dateOfBirth: dobStr,
             className: clName,
-            yearOfEntry: Number(row['Year of Entry'] || row['Entry Year'] || new Date().getFullYear()),
+            yearOfEntry: yearOfEntry,
             photo: '',
-            guardianName: row['Guardian Name'] || row['Guardian'] || 'Unknown',
-            guardianContact: String(row['Guardian Contact'] || row['Contact'] || ''),
-            communityWorker: row['Community Worker'] || row['Worker'] || '',
-            workerContact: String(row['Community Worker Contact'] || row['Worker Contact'] || ''),
-            zoneInNansana: row['Zone in Nansana'] || row['Zone'] || 'Nansana',
-            hasScholarship: String(row['Scholarship Status'] || row['Scholarship'] || '').toLowerCase().includes('yes') || row['Scholarship Status'] === true
+            guardianName: getExcelValStr(row, ['Guardian Name', 'GuardianName', 'Guardian', 'parent', 'parent/guardian']) || 'Unknown',
+            guardianContact: getExcelValStr(row, ['Guardian Contact', 'GuardianContact', 'Contact', 'Phone', 'Guardian Phone']),
+            communityWorker: getExcelValStr(row, ['Community Worker', 'CommunityWorker', 'Worker', 'social worker']),
+            workerContact: getExcelValStr(row, ['Community Worker Contact', 'CommunityWorkerContact', 'Worker Contact', 'WorkerContact', 'worker phone']),
+            zoneInNansana: getExcelValStr(row, ['Zone in Nansana', 'ZoneinNansana', 'Zone', 'Address', 'Area', 'Village', 'where staying']) || 'Nansana',
+            hasScholarship: hasScholarship
           };
         });
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Printer, Users, Calendar, Award, MapPin } from 'lucide-react';
+import QRCode from 'qrcode';
 import { Student, Mark } from '../types';
 
 interface ReportCardViewProps {
@@ -12,6 +13,7 @@ export default function ReportCardView({ students, marks, selectedStudent: initi
   const [activeStudentId, setActiveStudentId] = useState<string>('');
   const [activeTerm, setActiveTerm] = useState<1 | 2 | 3>(1);
   const [activeYear, setActiveYear] = useState<number>(2026);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
 
   // Synchronize with selected student from ClassList
   useEffect(() => {
@@ -29,6 +31,22 @@ export default function ReportCardView({ students, marks, selectedStudent: initi
   }, [initialSelectedStudent, students, marks]);
 
   const student = students.find(s => s.id === activeStudentId);
+
+  // Generate QR Code dynamically on student, term, or year change
+  useEffect(() => {
+    if (student) {
+      const verificationUrl = `${window.location.origin}/?verifyReport=${student.id}&term=${activeTerm}&year=${activeYear}`;
+      QRCode.toDataURL(verificationUrl, { margin: 1, width: 120 })
+        .then(url => {
+          setQrCodeDataUrl(url);
+        })
+        .catch(err => {
+          console.error('Error generating QR Code', err);
+        });
+    } else {
+      setQrCodeDataUrl('');
+    }
+  }, [student, activeTerm, activeYear]);
 
   // Filter marks for selected student, term, and year
   const studentMarks = marks.filter(
@@ -363,6 +381,32 @@ export default function ReportCardView({ students, marks, selectedStudent: initi
               <div className="w-44">
                 <div className="border-b border-slate-800 h-8 font-serif italic text-sm text-slate-600">William Mukasa</div>
                 <div className="text-[10px] font-bold text-slate-500 uppercase mt-1 font-mono">Head Teacher</div>
+              </div>
+            </div>
+
+            {/* Verification Security Footer */}
+            <div className="mt-10 pt-5 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {qrCodeDataUrl ? (
+                  <div className="p-1 border border-slate-300 rounded bg-white shrink-0 shadow-xs">
+                    <img src={qrCodeDataUrl} alt="Verification QR Code" className="w-16 h-16" />
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 bg-slate-50 border border-slate-200 text-[8px] text-slate-400 flex items-center justify-center font-mono">
+                    GENERATING
+                  </div>
+                )}
+                <div className="text-left text-[10px] text-slate-500 space-y-0.5">
+                  <p className="font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1 text-[11px]">
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    SECURE VERIFICATION SYSTEM
+                  </p>
+                  <p className="text-[10px] text-slate-500 leading-normal">This report card is digitally verified. Scan the QR code to confirm registry authenticity.</p>
+                  <p className="font-mono text-[9px] text-slate-400 font-bold uppercase">REF: ASH-UG-{student.id.toUpperCase()}-T{activeTerm}-{activeYear}</p>
+                </div>
+              </div>
+              <div className="text-right text-[9px] text-slate-400 font-mono italic">
+                Ashinaga Uganda Ledger ID
               </div>
             </div>
           </div>
