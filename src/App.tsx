@@ -22,6 +22,7 @@ import ReportVerification from './components/ReportVerification';
 import AshinagaLogo from './components/AshinagaLogo';
 import SubjectWorkspaces from './components/SubjectWorkspaces';
 import EmailGatewayModal from './components/EmailGatewayModal';
+import QuickActionFAB from './components/QuickActionFAB';
 import { 
   ShieldAlert, 
   BookOpen, 
@@ -72,6 +73,25 @@ export default function App() {
   // Bell Notifications Dropdown State
   const [showNotifications, setShowNotifications] = useState(false);
   const [isEmailGatewayOpen, setIsEmailGatewayOpen] = useState(false);
+
+  // Floating Quick Actions FAB triggers
+  const [autoOpenAddStudent, setAutoOpenAddStudent] = useState(false);
+
+  const handleQuickAddStudent = () => {
+    setActiveTab('classes');
+    setStudentsSubTab('list');
+    setAutoOpenAddStudent(true);
+  };
+
+  const handleQuickRegisterMark = () => {
+    setActiveTab('marks');
+    setAcademicsSubTab('marks');
+  };
+
+  const handleQuickGenerateIdCard = () => {
+    setActiveTab('reports');
+    setExamsSubTab('idcards');
+  };
 
   // 360-Degree Profile & Custom Documents state
   const [selectedProfileStudent, setSelectedProfileStudent] = useState<Student | null>(null);
@@ -826,6 +846,9 @@ export default function App() {
                   marks={marks} 
                   teacher={teacher || undefined}
                   isAdmin={isAdmin}
+                  onAddStudentQuickAction={handleQuickAddStudent}
+                  onRegisterMarkQuickAction={handleQuickRegisterMark}
+                  onGenerateIdCardQuickAction={handleQuickGenerateIdCard}
                   setActiveTab={(tab) => {
                     setActiveTab(tab);
                     if (tab === 'classes') setStudentsSubTab('list');
@@ -878,6 +901,8 @@ export default function App() {
                       }}
                       teacherClasses={activeTeacherClasses}
                       isAdmin={isAdmin}
+                      autoOpenAddModal={autoOpenAddStudent}
+                      onCloseAutoOpenAddModal={() => setAutoOpenAddStudent(false)}
                     />
                   ) : (
                     <ExcelUpload 
@@ -1278,6 +1303,13 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Global Floating Quick Actions Button (FAB) */}
+      <QuickActionFAB 
+        onAddStudent={handleQuickAddStudent}
+        onRegisterMark={handleQuickRegisterMark}
+        onGenerateIdCard={handleQuickGenerateIdCard}
+      />
 
       {/* Ergonomic Mobile Bottom Tab Navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#06182c] border-t border-[#0f243c] h-16 flex justify-around items-center px-2 shadow-[0_-5px_20px_rgba(0,0,0,0.3)] no-print">

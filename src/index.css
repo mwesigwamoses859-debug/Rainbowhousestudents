@@ -101,16 +101,25 @@ button, .btn-bounce {
   background: #94a3b8;
 }
 
-/* Custom styles for printing report cards */
+/* Custom styles for printing report cards & student profiles */
 @media print {
   .no-print {
     display: none !important;
+  }
+  .print-only {
+    display: block !important;
   }
   body {
     background: white !important;
     color: black !important;
     padding: 0 !important;
     margin: 0 !important;
+  }
+}
+
+@media screen {
+  .print-only {
+    display: none !important;
   }
 }
 

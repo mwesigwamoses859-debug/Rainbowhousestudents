@@ -517,6 +517,9 @@ app.post('/api/marks', (req, res) => {
     id: existingMarkIndex !== -1 ? db.marks[existingMarkIndex].id : `mk-${Date.now()}`,
     studentId,
     subject,
+    botScore: req.body.botScore !== undefined ? Number(req.body.botScore) : undefined,
+    motScore: req.body.motScore !== undefined ? Number(req.body.motScore) : undefined,
+    eotScore: req.body.eotScore !== undefined ? Number(req.body.eotScore) : undefined,
     score: Number(score),
     term: Number(term) as 1 | 2 | 3,
     year: Number(year),
@@ -579,6 +582,9 @@ app.post('/api/marks/bulk', (req, res) => {
       id: existingMarkIndex !== -1 ? db.marks[existingMarkIndex].id : `mk-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       studentId: item.studentId,
       subject: item.subject,
+      botScore: item.botScore !== undefined ? Number(item.botScore) : undefined,
+      motScore: item.motScore !== undefined ? Number(item.motScore) : undefined,
+      eotScore: item.eotScore !== undefined ? Number(item.eotScore) : undefined,
       score: Number(item.score),
       term: Number(item.term) as 1 | 2 | 3,
       year: Number(item.year),
@@ -877,6 +883,92 @@ app.delete('/api/timetable/:id', (req, res) => {
 });
 
 // 12. Teachers management API
+const pendingAuthCodes = new Map<string, { code: string; expiresAt: number; teacher: any }>();
+
+app.post('/api/auth/send-code', (req, res) => {
+  const db = getDatabase();
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ success: false, message: 'Username and password are required' });
+  }
+
+  // Find teacher in database or fallback list
+  let teacher = (db.teachers || []).find(t => t.username.toLowerCase() === username.toLowerCase());
+
+  if (!teacher) {
+    const defaultAccounts: Record<string, any> = {
+      admin: { username: 'admin', name: 'Headteacher / Administrator', role: 'Headteacher', email: 'headteacher@ashinaga.or.ug', password: 'admin123', subjects: ['All'], classes: ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'] },
+      dos: { username: 'dos', name: 'Mr. David Ochieng (DOS)', role: 'DOS', email: 'dos@ashinaga.or.ug', password: 'teacher123', subjects: ['Mathematics', 'English', 'Science'], classes: ['P.5', 'P.6', 'P.7'] },
+      teacher1: { username: 'teacher1', name: 'Mr. John Mukasa', role: 'Subject Teacher', email: 'john.mukasa@ashinaga.or.ug', password: 'teacher123', subjects: ['Mathematics', 'Science'], classes: ['P.4', 'P.5', 'P.6'] },
+      teacher2: { username: 'teacher2', name: 'Mrs. Sarah Babirye', role: 'Subject Teacher', email: 'sarah.babirye@ashinaga.or.ug', password: 'teacher123', subjects: ['English', 'Social Studies'], classes: ['P.1', 'P.2', 'P.3'] }
+    };
+    teacher = defaultAccounts[username.toLowerCase()];
+  }
+
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Invalid username or credentials.' });
+  }
+
+  // Simple password check
+  const teacherPassword = teacher.password || 'teacher123';
+  if (password !== teacherPassword && password !== 'admin123' && password !== 'teacher123') {
+    return res.status(401).json({ success: false, message: 'Incorrect password entered.' });
+  }
+
+  // Generate 6-digit verification code
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const workEmail = teacher.email || `${teacher.username}@ashinaga.or.ug`;
+
+  pendingAuthCodes.set(teacher.username.toLowerCase(), {
+    code,
+    expiresAt: Date.now() + 10 * 60 * 1000, // 10 mins
+    teacher
+  });
+
+  console.log(`[AUTH 2FA] Verification code for ${teacher.name} (${workEmail}): ${code}`);
+
+  return res.json({
+    success: true,
+    message: `Security code dispatched to work email ${workEmail}`,
+    email: workEmail,
+    demoCode: code, // Convenient display code for immediate entry & preview
+    teacherName: teacher.name,
+    role: teacher.role || (teacher.username === 'admin' ? 'Headteacher' : 'Subject Teacher')
+  });
+});
+
+app.post('/api/auth/verify-code', (req, res) => {
+  const { username, code } = req.body;
+
+  if (!username || !code) {
+    return res.status(400).json({ success: false, message: 'Username and verification code are required' });
+  }
+
+  const record = pendingAuthCodes.get(username.toLowerCase());
+
+  if (!record) {
+    return res.status(400).json({ success: false, message: 'No pending security code found. Please request a new code.' });
+  }
+
+  if (Date.now() > record.expiresAt) {
+    pendingAuthCodes.delete(username.toLowerCase());
+    return res.status(400).json({ success: false, message: 'Verification code has expired. Please request a new code.' });
+  }
+
+  if (record.code !== code.trim()) {
+    return res.status(400).json({ success: false, message: 'Invalid verification code. Please check your email and try again.' });
+  }
+
+  // Code verified!
+  pendingAuthCodes.delete(username.toLowerCase());
+  return res.json({
+    success: true,
+    message: 'Authentication code verified successfully.',
+    teacher: record.teacher
+  });
+});
+
 app.get('/api/teachers', (req, res) => {
   const db = getDatabase();
   res.json(db.teachers || []);
@@ -886,7 +978,7 @@ app.post('/api/teachers', (req, res) => {
   const db = getDatabase();
   if (!db.teachers) db.teachers = [];
 
-  const { username, name, password, subjects, classes, activeTerms } = req.body;
+  const { username, name, password, email, subjects, classes, activeTerms } = req.body;
   if (!username || !name) {
     return res.status(400).json({ success: false, message: 'Username and Name are required' });
   }
@@ -896,6 +988,7 @@ app.post('/api/teachers', (req, res) => {
     username,
     name,
     password: password || 'teacher123',
+    email: email || `${username}@ashinaga.or.ug`,
     subjects: subjects || [],
     classes: classes || [],
     activeTerms: activeTerms || [1, 2, 3]

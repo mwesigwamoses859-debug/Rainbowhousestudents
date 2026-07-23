@@ -10,6 +10,9 @@ import {
   BookOpen,
   PhoneCall,
   User,
+  UserPlus,
+  CreditCard,
+  Zap,
   Backpack,
   Pencil,
   FlaskConical,
@@ -57,6 +60,7 @@ import {
 } from 'recharts';
 import { Student, Mark, Teacher } from '../types';
 import AshinagaLogo from './AshinagaLogo';
+import AttendanceHeatmap from './AttendanceHeatmap';
 
 interface DashboardProps {
   students: Student[];
@@ -64,9 +68,21 @@ interface DashboardProps {
   setActiveTab: (tab: string) => void;
   teacher?: Teacher;
   isAdmin?: boolean;
+  onAddStudentQuickAction?: () => void;
+  onRegisterMarkQuickAction?: () => void;
+  onGenerateIdCardQuickAction?: () => void;
 }
 
-export default function Dashboard({ students, marks, setActiveTab, teacher, isAdmin = true }: DashboardProps) {
+export default function Dashboard({ 
+  students, 
+  marks, 
+  setActiveTab, 
+  teacher, 
+  isAdmin = true,
+  onAddStudentQuickAction,
+  onRegisterMarkQuickAction,
+  onGenerateIdCardQuickAction
+}: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState('All Classes');
 
@@ -316,27 +332,77 @@ export default function Dashboard({ students, marks, setActiveTab, teacher, isAd
             )}
           </div>
         </div>
-        {isAdmin ? (
-          <div>
-            <button 
-              id="add_student_shortcut_btn"
-              onClick={() => setActiveTab('classes')}
-              className="px-5 py-2.5 bg-[#FF5E4D] hover:bg-[#e04f3f] text-white font-bold rounded-xl text-sm shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
-            >
-              <span className="text-lg leading-none">+</span> Add Student
-            </button>
+      </div>
+
+      {/* Prominent Dashboard Quick Action Hub Cards */}
+      <div className="bg-gradient-to-r from-slate-900 via-[#032b5e] to-indigo-950 p-5 rounded-3xl text-white shadow-xl border border-indigo-500/20">
+        <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2.5">
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-amber-400 animate-pulse" />
+            <h2 className="text-xs font-black uppercase tracking-widest text-slate-200">
+              Dashboard Quick Action Hub
+            </h2>
           </div>
-        ) : (
-          <div className="flex gap-2">
-            <button
-              onClick={() => setActiveTab('marks')}
-              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              <span>Enter Term Marks</span>
-            </button>
-          </div>
-        )}
+          <span className="text-[10px] font-bold text-amber-300 bg-amber-400/10 px-2.5 py-0.5 rounded-full border border-amber-400/20">
+            Instant Operations
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Quick Action 1: Add Student */}
+          <button
+            onClick={() => onAddStudentQuickAction ? onAddStudentQuickAction() : setActiveTab('classes')}
+            className="group flex items-center gap-3.5 bg-white/10 hover:bg-white p-3.5 rounded-2xl backdrop-blur-md transition-all duration-200 text-left border border-white/10 hover:border-white shadow-sm cursor-pointer transform hover:-translate-y-0.5"
+          >
+            <div className="h-10 w-10 rounded-xl bg-indigo-500/20 group-hover:bg-indigo-600 text-indigo-300 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
+              <UserPlus className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-xs font-black group-hover:text-slate-900 text-white tracking-tight">
+                Add Student
+              </div>
+              <div className="text-[10px] text-slate-300 group-hover:text-slate-500 font-medium">
+                Register pupil profile & snapshot
+              </div>
+            </div>
+          </button>
+
+          {/* Quick Action 2: Register Mark */}
+          <button
+            onClick={() => onRegisterMarkQuickAction ? onRegisterMarkQuickAction() : setActiveTab('marks')}
+            className="group flex items-center gap-3.5 bg-white/10 hover:bg-white p-3.5 rounded-2xl backdrop-blur-md transition-all duration-200 text-left border border-white/10 hover:border-white shadow-sm cursor-pointer transform hover:-translate-y-0.5"
+          >
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/20 group-hover:bg-emerald-600 text-emerald-300 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
+              <GraduationCap className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-xs font-black group-hover:text-slate-900 text-white tracking-tight">
+                Register Mark
+              </div>
+              <div className="text-[10px] text-slate-300 group-hover:text-slate-500 font-medium">
+                Record BOT, MOT & EOT assessments
+              </div>
+            </div>
+          </button>
+
+          {/* Quick Action 3: Generate ID Card */}
+          <button
+            onClick={() => onGenerateIdCardQuickAction ? onGenerateIdCardQuickAction() : setActiveTab('reports')}
+            className="group flex items-center gap-3.5 bg-white/10 hover:bg-white p-3.5 rounded-2xl backdrop-blur-md transition-all duration-200 text-left border border-white/10 hover:border-white shadow-sm cursor-pointer transform hover:-translate-y-0.5"
+          >
+            <div className="h-10 w-10 rounded-xl bg-amber-500/20 group-hover:bg-amber-500 text-amber-300 group-hover:text-slate-950 flex items-center justify-center shrink-0 transition-colors">
+              <CreditCard className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-xs font-black group-hover:text-slate-900 text-white tracking-tight">
+                Generate ID Card
+              </div>
+              <div className="text-[10px] text-slate-300 group-hover:text-slate-500 font-medium">
+                Print pupil cards & certificates
+              </div>
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* Teacher Desk Meta Panel */}
@@ -739,6 +805,12 @@ export default function Dashboard({ students, marks, setActiveTab, teacher, isAd
           </div>
 
         </div>
+
+        {/* Interactive D3.js Attendance Heatmap Studio Module */}
+        <AttendanceHeatmap 
+          totalStudentsCount={displayTotal} 
+          selectedClass={selectedClassFilter !== 'All Classes' ? selectedClassFilter : undefined} 
+        />
 
         {/* Row 2: Attendance Patterns & Class-Wise Academic Distribution */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

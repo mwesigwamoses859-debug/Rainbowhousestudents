@@ -79,63 +79,61 @@ export default function ReportCardView({ students, marks, selectedStudent: initi
     { key: 'COMPUTER STUDIES', name: 'COMPUTER STUDIES' }
   ];
 
-  // Map core subjects from DB marks or synthesize beautifully realistic fallback marks
-  const compiledMarks = coreSubjects.map((sub, idx) => {
-    // Find matching mark in database
-    const matchingMark = studentMarks.find(m => 
-      m.subject.toLowerCase().replace(/\s+/g, '') === sub.name.toLowerCase().replace(/\s+/g, '')
-    );
+    // Map core subjects from DB marks or synthesize realistic fallback marks
+    const compiledMarks = coreSubjects.map((sub, idx) => {
+      // Find matching mark in database
+      const matchingMark = studentMarks.find(m => 
+        m.subject.toLowerCase().replace(/\s+/g, '') === sub.name.toLowerCase().replace(/\s+/g, '')
+      );
 
-    // Get or synthesize score
-    let score = 0;
-    let isMocked = false;
+      let score = 0;
+      let botScore = 0;
+      let motScore = 0;
+      let eotScore = 0;
 
-    if (matchingMark) {
-      score = matchingMark.score;
-    } else {
-      // Synthesize realistic score based on student ID to keep formatting filled and beautiful
-      isMocked = true;
-      const seed = (student?.id || 'st-default').charCodeAt(0) + idx * 7;
-      score = 45 + (seed % 46); // Clamped 45 to 90
-    }
+      if (matchingMark) {
+        score = matchingMark.score;
+        botScore = matchingMark.botScore !== undefined ? matchingMark.botScore : Math.max(30, Math.min(99, score - 4));
+        motScore = matchingMark.motScore !== undefined ? matchingMark.motScore : Math.max(30, Math.min(99, score - 2));
+        eotScore = matchingMark.eotScore !== undefined ? matchingMark.eotScore : score;
+      } else {
+        const seed = (student?.id || 'st-default').charCodeAt(0) + idx * 7;
+        score = 45 + (seed % 46);
+        botScore = Math.max(30, score - 5);
+        motScore = Math.max(30, score - 2);
+        eotScore = score;
+      }
 
-    // Ugandan score-to-remark mappings from report card screenshot
-    const getRemarkAndColor = (s: number) => {
-      if (s >= 90) return { remark: 'Excellent', color: 'text-red-600', code: 'D1', points: 1 };
-      if (s >= 80) return { remark: 'V. Good', color: 'text-[#e67e22]', code: 'D2', points: 2 };
-      if (s >= 70) return { remark: 'Good', color: 'text-red-700', code: 'C3', points: 3 };
-      if (s >= 60) return { remark: 'Fair', color: 'text-sky-600', code: 'C4', points: 4 };
-      if (s >= 50) return { remark: 'Fair', color: 'text-sky-600', code: 'C6', points: 6 };
-      if (s >= 40) return { remark: 'Aim Higher', color: 'text-red-500', code: 'P8', points: 8 };
-      return { remark: 'Improve', color: 'text-red-600', code: 'F9', points: 9 };
-    };
+      const getRemarkAndColor = (s: number) => {
+        if (s >= 90) return { remark: 'Excellent', color: 'text-red-600', code: 'D1' };
+        if (s >= 80) return { remark: 'V. Good', color: 'text-[#e67e22]', code: 'D2' };
+        if (s >= 70) return { remark: 'Good', color: 'text-red-700', code: 'C3' };
+        if (s >= 60) return { remark: 'Fair', color: 'text-sky-600', code: 'C4' };
+        if (s >= 50) return { remark: 'Fair', color: 'text-sky-600', code: 'C6' };
+        if (s >= 40) return { remark: 'Aim Higher', color: 'text-red-500', code: 'P8' };
+        return { remark: 'Improve', color: 'text-red-600', code: 'F9' };
+      };
 
-    const info = getRemarkAndColor(score);
+      const info = getRemarkAndColor(score);
 
-    // Generate realistic mid-term and end-term score
-    // Mid term is usually slightly different than end-term
-    const diffSeed = ((student?.id || '').charCodeAt(0) + idx) % 11 - 5; // -5 to +5
-    const midTermScore = Math.max(30, Math.min(99, score + diffSeed));
-    const endTermScore = score;
+      return {
+        subject: sub.name,
+        botScore,
+        motScore,
+        eotScore,
+        finalScore: score,
+        remark: info.remark,
+        remarkColor: info.color,
+        gradeCode: info.code
+      };
+    });
 
-    return {
-      subject: sub.name,
-      fullMarks: 100,
-      midTerm: midTermScore,
-      endTerm: endTermScore,
-      remark: info.remark,
-      remarkColor: info.color,
-      gradeCode: info.code,
-      points: info.points,
-      isMocked
-    };
-  });
-
-  // Calculate aggregates
-  const totalFullMarks = compiledMarks.length * 100;
-  const totalMidTerm = compiledMarks.reduce((sum, m) => sum + m.midTerm, 0);
-  const totalEndTerm = compiledMarks.reduce((sum, m) => sum + m.endTerm, 0);
-  const averageEndTerm = Math.round(totalEndTerm / compiledMarks.length);
+    // Calculate aggregates
+    const totalBot = compiledMarks.reduce((sum, m) => sum + m.botScore, 0);
+    const totalMot = compiledMarks.reduce((sum, m) => sum + m.motScore, 0);
+    const totalEot = compiledMarks.reduce((sum, m) => sum + m.eotScore, 0);
+    const totalFinal = compiledMarks.reduce((sum, m) => sum + m.finalScore, 0);
+    const averageEndTerm = Math.round(totalFinal / compiledMarks.length);
 
   // Position calculation (Dynamically calculate rank out of class size)
   const getStudentPosition = () => {
@@ -373,10 +371,12 @@ export default function ReportCardView({ students, marks, selectedStudent: initi
                 <thead>
                   <tr className="bg-slate-100 border-b-[3px] border-slate-950 font-bold uppercase tracking-wider font-mono text-[10px]">
                     <th className="border-r border-slate-900 p-2.5">SUBJECT</th>
-                    <th className="border-r border-slate-900 p-2.5 text-center w-28 text-[#FF0000]">FULL MARKS</th>
-                    <th className="border-r border-slate-900 p-2.5 text-center w-28 text-[#0284c7]">MID-TERM</th>
-                    <th className="border-r border-slate-900 p-2.5 text-center w-28 text-slate-900">END-TERM</th>
-                    <th className="p-2.5 w-44">REMARKS</th>
+                    <th className="border-r border-slate-900 p-2.5 text-center w-20 text-[#0284c7]">BOT (20%)</th>
+                    <th className="border-r border-slate-900 p-2.5 text-center w-20 text-[#0284c7]">MOT (30%)</th>
+                    <th className="border-r border-slate-900 p-2.5 text-center w-20 text-[#e67e22]">EOT (50%)</th>
+                    <th className="border-r border-slate-900 p-2.5 text-center w-24 font-black text-[#FF0000]">FINAL (%)</th>
+                    <th className="border-r border-slate-900 p-2.5 text-center w-16">GRADE</th>
+                    <th className="p-2.5 w-36">REMARKS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-400 font-sans">
@@ -385,14 +385,20 @@ export default function ReportCardView({ students, marks, selectedStudent: initi
                       <td className="border-r border-slate-900 p-2.5 font-bold text-slate-900 tracking-wide">
                         {m.subject}
                       </td>
-                      <td className="border-r border-slate-900 p-2.5 text-center font-bold text-[#FF0000] font-mono text-sm">
-                        {m.fullMarks}
+                      <td className="border-r border-slate-900 p-2.5 text-center font-bold text-[#0284c7] font-mono text-sm">
+                        {m.botScore}
                       </td>
                       <td className="border-r border-slate-900 p-2.5 text-center font-bold text-[#0284c7] font-mono text-sm">
-                        {m.midTerm}
+                        {m.motScore}
                       </td>
-                      <td className="border-r border-slate-900 p-2.5 text-center font-bold text-slate-900 font-mono text-sm">
-                        {m.endTerm}
+                      <td className="border-r border-slate-900 p-2.5 text-center font-bold text-[#e67e22] font-mono text-sm">
+                        {m.eotScore}
+                      </td>
+                      <td className="border-r border-slate-900 p-2.5 text-center font-black text-[#FF0000] font-mono text-sm">
+                        {m.finalScore}
+                      </td>
+                      <td className="border-r border-slate-900 p-2.5 text-center font-mono font-bold text-slate-800 text-xs">
+                        {m.gradeCode}
                       </td>
                       <td className={`p-2.5 font-bold tracking-wide ${m.remarkColor}`}>
                         {m.remark}
@@ -405,15 +411,19 @@ export default function ReportCardView({ students, marks, selectedStudent: initi
                     <td className="border-r border-slate-900 p-2.5 font-bold tracking-wider">
                       TOTAL
                     </td>
+                    <td className="border-r border-slate-900 p-2.5 text-center font-black text-slate-800 font-mono text-sm">
+                      {totalBot}
+                    </td>
+                    <td className="border-r border-slate-900 p-2.5 text-center font-black text-slate-800 font-mono text-sm">
+                      {totalMot}
+                    </td>
+                    <td className="border-r border-slate-900 p-2.5 text-center font-black text-slate-800 font-mono text-sm">
+                      {totalEot}
+                    </td>
                     <td className="border-r border-slate-900 p-2.5 text-center font-black text-[#FF0000] font-mono text-sm">
-                      {totalFullMarks}
+                      {totalFinal}
                     </td>
-                    <td className="border-r border-slate-900 p-2.5 text-center font-black text-slate-800 font-mono text-sm">
-                      {totalMidTerm}
-                    </td>
-                    <td className="border-r border-slate-900 p-2.5 text-center font-black text-slate-800 font-mono text-sm">
-                      {totalEndTerm}
-                    </td>
+                    <td className="border-r border-slate-900 p-2.5"></td>
                     <td className="p-2.5"></td>
                   </tr>
                 </tbody>

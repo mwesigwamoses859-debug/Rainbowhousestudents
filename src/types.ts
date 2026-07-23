@@ -31,7 +31,10 @@ export interface Mark {
   id: string;
   studentId: string;
   subject: string;
-  score: number; // 0 - 100
+  botScore?: number; // Beginning of Term mark (0 - 100)
+  motScore?: number; // Middle of Term mark (0 - 100)
+  eotScore?: number; // End of Term mark (0 - 100)
+  score: number;     // Final score / weighted score (0 - 100)
   term: 1 | 2 | 3;
   year: number;
   teacherName: string;

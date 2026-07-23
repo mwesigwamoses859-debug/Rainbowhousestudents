@@ -17,7 +17,8 @@ import {
   X,
   FileSpreadsheet,
   Activity,
-  QrCode
+  QrCode,
+  Camera
 } from 'lucide-react';
 import { Student, ClassName, Gender, Mark } from '../types';
 import { googleSignIn, initAuth } from '../lib/firebase';
@@ -36,6 +37,8 @@ interface ClassListProps {
   onOpenProfile: (student: Student) => void;
   teacherClasses: ClassName[];
   isAdmin: boolean;
+  autoOpenAddModal?: boolean;
+  onCloseAutoOpenAddModal?: () => void;
 }
 
 export default function ClassList({ 
@@ -47,7 +50,9 @@ export default function ClassList({
   onGenerateReportCard,
   onOpenProfile,
   teacherClasses,
-  isAdmin
+  isAdmin,
+  autoOpenAddModal,
+  onCloseAutoOpenAddModal
 }: ClassListProps) {
   const classesList: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
   
@@ -60,6 +65,17 @@ export default function ClassList({
   // Form State
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+
+  // Auto-open Add Student modal when triggered from Quick Actions FAB
+  useEffect(() => {
+    if (autoOpenAddModal) {
+      setEditingStudent(null);
+      setShowFormModal(true);
+      if (onCloseAutoOpenAddModal) {
+        onCloseAutoOpenAddModal();
+      }
+    }
+  }, [autoOpenAddModal, onCloseAutoOpenAddModal]);
 
   // QR Code Modal State
   const [selectedQrStudent, setSelectedQrStudent] = useState<Student | null>(null);
@@ -144,6 +160,56 @@ export default function ClassList({
 
   const [formError, setFormError] = useState('');
   const [photoPreview, setPhotoPreview] = useState('');
+
+  // Real-time camera snapshot capture state
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+      });
+      setCameraStream(stream);
+      setIsCameraActive(true);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 100);
+    } catch (err) {
+      alert("Unable to access camera. Please check camera permissions or try uploading an image.");
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setIsCameraActive(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current) {
+      const video = videoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 320;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const minDim = Math.min(video.videoWidth || 640, video.videoHeight || 480);
+        const startX = ((video.videoWidth || 640) - minDim) / 2;
+        const startY = ((video.videoHeight || 480) - minDim) / 2;
+        ctx.drawImage(video, startX, startY, minDim, minDim, 0, 0, 320, 320);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setPhotoPreview(dataUrl);
+        setFormData(prev => ({ ...prev, photo: dataUrl }));
+      }
+    }
+    stopCamera();
+  };
 
   // Handle Name Similarity Checking on typing
   const [similarityWarning, setSimilarityWarning] = useState<{
@@ -777,22 +843,33 @@ export default function ClassList({
                         </div>
                       )}
                     </div>
-                    <div className="flex-1 w-full space-y-1 text-center sm:text-left">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handlePhotoChange}
-                        className="hidden"
-                        id="photo_file_input"
-                      />
-                      <label
-                        htmlFor="photo_file_input"
-                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-                      >
-                        <Upload className="h-3.5 w-3.5" />
-                        Upload Student Image
-                      </label>
-                      <p className="text-[10px] text-slate-400 mt-1">PNG or JPEG up to 2MB. Stored locally.</p>
+                    <div className="flex-1 w-full space-y-2 text-center sm:text-left">
+                      <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePhotoChange}
+                          className="hidden"
+                          id="photo_file_input"
+                        />
+                        <label
+                          htmlFor="photo_file_input"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          Upload File
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={startCamera}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
+                        >
+                          <Camera className="h-3.5 w-3.5 text-amber-300" />
+                          Snap Photo with Camera
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400">PNG, JPEG or live camera snapshot. Automatically saved to profile.</p>
                     </div>
                   </div>
                 </div>
@@ -826,6 +903,58 @@ export default function ClassList({
         marks={marks}
         onOpenProfile={onOpenProfile}
       />
+
+      {/* Camera Live Snapshot Capture Overlay Modal */}
+      {isCameraActive && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-slate-100 flex flex-col items-center space-y-4">
+            <div className="flex items-center justify-between w-full border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Camera className="h-5 w-5 text-indigo-600" />
+                <h3 className="font-extrabold text-sm text-slate-800 uppercase tracking-wide">Live Student Photo Snap</h3>
+              </div>
+              <button
+                type="button"
+                onClick={stopCamera}
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="relative w-full aspect-square bg-slate-900 rounded-2xl overflow-hidden shadow-inner border-2 border-indigo-500/30 flex items-center justify-center">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover transform -scale-x-100"
+              />
+              <div className="absolute inset-0 border-2 border-dashed border-white/50 rounded-full m-8 pointer-events-none"></div>
+              <div className="absolute bottom-2 bg-slate-900/70 text-white text-[10px] px-2.5 py-1 rounded-full backdrop-blur-sm">
+                Center student's face in frame
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between w-full gap-3 pt-2">
+              <button
+                type="button"
+                onClick={stopCamera}
+                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={capturePhoto}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-indigo-200 transition-all cursor-pointer flex justify-center items-center gap-2"
+              >
+                <Camera className="h-4 w-4 text-amber-300" />
+                <span>Capture & Save Photo</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

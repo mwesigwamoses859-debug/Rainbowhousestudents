@@ -49,6 +49,7 @@ export default function TeacherAssignmentHub({
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedClasses, setSelectedClasses] = useState<ClassName[]>([]);
   const [selectedTerms, setSelectedTerms] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
@@ -62,6 +63,7 @@ export default function TeacherAssignmentHub({
     setUsername('');
     setName('');
     setPassword('');
+    setEmail('');
     setSelectedSubjects([]);
     setSelectedClasses([]);
     setSelectedTerms([1, 2, 3]);
@@ -74,8 +76,8 @@ export default function TeacherAssignmentHub({
     setEditingTeacher(teacher);
     setUsername(teacher.username);
     setName(teacher.name);
-    // Cast password safely (it might be defined on the model now)
     setPassword((teacher as any).password || 'teacher123');
+    setEmail(teacher.email || `${teacher.username}@ashinaga.or.ug`);
     setSelectedSubjects(teacher.subjects);
     setSelectedClasses(teacher.classes);
     setSelectedTerms(teacher.activeTerms || [1, 2, 3]);
@@ -129,6 +131,7 @@ export default function TeacherAssignmentHub({
         username: username.trim(),
         name: name.trim(),
         password: password.trim() || 'teacher123',
+        email: email.trim() || `${username.trim()}@ashinaga.or.ug`,
         subjects: selectedSubjects,
         classes: selectedClasses,
         activeTerms: selectedTerms
@@ -284,13 +287,25 @@ export default function TeacherAssignmentHub({
               </div>
 
               {/* Full Name */}
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase tracking-wider">Full Instructor Name</label>
                 <input
                   type="text"
                   placeholder="e.g. Madam Florence Namatovu"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  className="w-full px-4 py-2.5 border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800"
+                />
+              </div>
+
+              {/* Official Work Email */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase tracking-wider">Official Work Email (2FA Code Receiver)</label>
+                <input
+                  type="email"
+                  placeholder="e.g. florence@ashinaga.or.ug"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-2.5 border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800"
                 />
               </div>

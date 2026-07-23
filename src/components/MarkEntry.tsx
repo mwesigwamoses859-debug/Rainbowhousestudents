@@ -45,8 +45,8 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
     }
   }, [teacher, filteredClasses, filteredSubjects, allowedTerms]);
 
-  // Buffer score state for editing
-  const [scoreInputs, setScoreInputs] = useState<Record<string, string>>({});
+  // Buffer score state for editing: { studentId: { bot: string, mot: string, eot: string, score: string } }
+  const [scoreInputs, setScoreInputs] = useState<Record<string, { bot: string; mot: string; eot: string; score: string }>>({});
   const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
   const [saving, setSaving] = useState(false);
 
@@ -55,7 +55,7 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
 
   // Load saved marks whenever the parameters change
   useEffect(() => {
-    const inputs: Record<string, string> = {};
+    const inputs: Record<string, { bot: string; mot: string; eot: string; score: string }> = {};
     classStudents.forEach(student => {
       const savedMark = marks.find(
         m => m.studentId === student.id &&
@@ -63,19 +63,49 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
              m.term === selectedTerm &&
              m.year === selectedYear
       );
-      inputs[student.id] = savedMark ? String(savedMark.score) : '';
+      inputs[student.id] = {
+        bot: savedMark?.botScore !== undefined ? String(savedMark.botScore) : '',
+        mot: savedMark?.motScore !== undefined ? String(savedMark.motScore) : '',
+        eot: savedMark?.eotScore !== undefined ? String(savedMark.eotScore) : '',
+        score: savedMark ? String(savedMark.score) : ''
+      };
     });
     setScoreInputs(inputs);
     setStatusMessage({ type: '', text: '' });
   }, [selectedClass, selectedSubject, selectedTerm, selectedYear, students, marks]);
 
-  // Handle score change
-  const handleScoreChange = (studentId: string, val: string) => {
-    // Basic sanitization: only allow digits or empty string
+  // Handle individual exam mark change and auto-compute combined score
+  const handleExamChange = (studentId: string, field: 'bot' | 'mot' | 'eot' | 'score', val: string) => {
     if (val === '' || /^\d+$/.test(val)) {
       const num = Number(val);
       if (val === '' || (num >= 0 && num <= 100)) {
-        setScoreInputs(prev => ({ ...prev, [studentId]: val }));
+        setScoreInputs(prev => {
+          const current = prev[studentId] || { bot: '', mot: '', eot: '', score: '' };
+          const updated = { ...current, [field]: val };
+
+          // If updating BOT, MOT, or EOT, compute weighted final score if available
+          if (field !== 'score') {
+            const b = updated.bot !== '' ? Number(updated.bot) : null;
+            const m = updated.mot !== '' ? Number(updated.mot) : null;
+            const e = updated.eot !== '' ? Number(updated.eot) : null;
+
+            if (b !== null || m !== null || e !== null) {
+              let weightedSum = 0;
+              let totalWeight = 0;
+              if (b !== null) { weightedSum += b * 0.20; totalWeight += 0.20; }
+              if (m !== null) { weightedSum += m * 0.30; totalWeight += 0.30; }
+              if (e !== null) { weightedSum += e * 0.50; totalWeight += 0.50; }
+
+              if (totalWeight > 0) {
+                // Normalize score to 100% scale
+                const computed = Math.round(weightedSum / totalWeight);
+                updated.score = String(computed);
+              }
+            }
+          }
+
+          return { ...prev, [studentId]: updated };
+        });
       }
     }
   };
@@ -124,16 +154,22 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
     const marksToSave: Omit<Mark, 'id'>[] = [];
 
     for (const student of classStudents) {
-      const scoreStr = scoreInputs[student.id];
-      if (scoreStr !== '' && scoreStr !== undefined) {
-        marksToSave.push({
-          studentId: student.id,
-          subject: selectedSubject,
-          score: Number(scoreStr),
-          term: selectedTerm,
-          year: selectedYear,
-          teacherName: teacher.name
-        });
+      const studentData = scoreInputs[student.id];
+      if (studentData) {
+        const { bot, mot, eot, score } = studentData;
+        if (score !== '' || bot !== '' || mot !== '' || eot !== '') {
+          marksToSave.push({
+            studentId: student.id,
+            subject: selectedSubject,
+            botScore: bot !== '' ? Number(bot) : undefined,
+            motScore: mot !== '' ? Number(mot) : undefined,
+            eotScore: eot !== '' ? Number(eot) : undefined,
+            score: score !== '' ? Number(score) : 0,
+            term: selectedTerm,
+            year: selectedYear,
+            teacherName: teacher.name
+          });
+        }
       }
     }
 
@@ -288,79 +324,101 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
             <table className="w-full text-left text-slate-600 border-collapse">
               <thead>
                 <tr className="bg-slate-50/75 text-xs font-semibold text-slate-500 border-b border-slate-100 uppercase tracking-wider font-sans">
-                  <th className="px-6 py-4">Pupil Profile</th>
-                  <th className="px-6 py-4">Residency Zone</th>
-                  <th className="px-6 py-4">Sponsorship</th>
-                  <th className="px-6 py-4 w-36">Score (%)</th>
-                  <th className="px-6 py-4 w-28 text-center">Grade</th>
-                  <th className="px-6 py-4">Term Assessment Remarks</th>
+                  <th className="px-5 py-4">Pupil Profile</th>
+                  <th className="px-3 py-4">Residency</th>
+                  <th className="px-3 py-4 w-24 text-center">BOT (20%)</th>
+                  <th className="px-3 py-4 w-24 text-center">MOT (30%)</th>
+                  <th className="px-3 py-4 w-24 text-center">EOT (50%)</th>
+                  <th className="px-3 py-4 w-28 text-center font-bold text-indigo-700">Final (%)</th>
+                  <th className="px-3 py-4 w-20 text-center">Grade</th>
+                  <th className="px-4 py-4">Assessment Remark</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-xs font-sans">
                 {classStudents.map((student) => {
-                  const val = scoreInputs[student.id] || '';
-                  const gradeResult = getGradeInfo(val);
+                  const data = scoreInputs[student.id] || { bot: '', mot: '', eot: '', score: '' };
+                  const gradeResult = getGradeInfo(data.score);
                   
                   return (
                     <tr key={student.id} className="hover:bg-slate-50/40 transition-colors">
                       {/* Pupil Profile */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 bg-slate-100 rounded-lg shrink-0 overflow-hidden border border-slate-100">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-8 w-8 bg-slate-100 rounded-lg shrink-0 overflow-hidden border border-slate-100">
                             {student.photo ? (
                               <img src={student.photo} alt="Student" className="h-full w-full object-cover" />
                             ) : (
-                              <div className="h-full w-full flex items-center justify-center bg-indigo-50 text-indigo-600 text-[11px] font-bold">
+                              <div className="h-full w-full flex items-center justify-center bg-indigo-50 text-indigo-600 text-[10px] font-bold">
                                 {student.surname[0]}{student.otherNames[0]}
                               </div>
                             )}
                           </div>
                           <div>
-                            <span className="font-bold text-slate-800 block">
+                            <span className="font-bold text-slate-800 block text-xs">
                               {student.surname} {student.otherNames}
                             </span>
-                            <span className="text-[10px] text-slate-400 font-mono block">
-                              ID: {student.id} | {student.gender}
+                            <span className="text-[9px] text-slate-400 font-mono block">
+                              {student.id} | {student.gender}
                             </span>
                           </div>
                         </div>
                       </td>
 
                       {/* Residency Zone */}
-                      <td className="px-6 py-4 text-slate-500 font-medium">{student.zoneInNansana}</td>
+                      <td className="px-3 py-3.5 text-slate-500 font-medium text-[11px]">{student.zoneInNansana}</td>
 
-                      {/* Sponsorship status */}
-                      <td className="px-6 py-4">
-                        {student.hasScholarship ? (
-                          <span className="px-2 py-0.5 bg-amber-500/10 text-amber-700 rounded-full font-bold text-[9px] uppercase border border-amber-500/20">
-                            Scholarship
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full font-medium text-[9px] uppercase">
-                            Self-Pay
-                          </span>
-                        )}
+                      {/* BOT Score Input (Beginning of Term - 20%) */}
+                      <td className="px-3 py-3.5 text-center">
+                        <input
+                          type="text"
+                          placeholder="BOT"
+                          maxLength={3}
+                          value={data.bot}
+                          onChange={(e) => handleExamChange(student.id, 'bot', e.target.value)}
+                          className="w-16 px-2 py-1 border border-slate-200 rounded-lg text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800 bg-blue-50/30"
+                        />
                       </td>
 
-                      {/* Score Input Box */}
-                      <td className="px-6 py-4">
-                        <div className="relative">
-                          <input
-                            type="text"
-                            placeholder="--"
-                            maxLength={3}
-                            value={val}
-                            onChange={(e) => handleScoreChange(student.id, e.target.value)}
-                            className="w-20 px-3 py-1.5 border border-slate-200 rounded-lg text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800 placeholder-slate-300"
-                          />
-                          <span className="absolute right-3.5 top-2 text-slate-400 font-mono text-[10px] select-none">%</span>
-                        </div>
+                      {/* MOT Score Input (Middle of Term - 30%) */}
+                      <td className="px-3 py-3.5 text-center">
+                        <input
+                          type="text"
+                          placeholder="MOT"
+                          maxLength={3}
+                          value={data.mot}
+                          onChange={(e) => handleExamChange(student.id, 'mot', e.target.value)}
+                          className="w-16 px-2 py-1 border border-slate-200 rounded-lg text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800 bg-indigo-50/30"
+                        />
+                      </td>
+
+                      {/* EOT Score Input (End of Term - 50%) */}
+                      <td className="px-3 py-3.5 text-center">
+                        <input
+                          type="text"
+                          placeholder="EOT"
+                          maxLength={3}
+                          value={data.eot}
+                          onChange={(e) => handleExamChange(student.id, 'eot', e.target.value)}
+                          className="w-16 px-2 py-1 border border-slate-200 rounded-lg text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800 bg-amber-50/30"
+                        />
+                      </td>
+
+                      {/* Combined Final Score */}
+                      <td className="px-3 py-3.5 text-center">
+                        <input
+                          type="text"
+                          placeholder="Final"
+                          maxLength={3}
+                          value={data.score}
+                          onChange={(e) => handleExamChange(student.id, 'score', e.target.value)}
+                          className="w-16 px-2 py-1 border-2 border-indigo-200 rounded-lg text-center text-xs font-black focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-indigo-900 bg-indigo-50/80"
+                        />
                       </td>
 
                       {/* Calculated Grade */}
-                      <td className="px-6 py-4 text-center">
-                        {val ? (
-                          <span className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-extrabold border ${
+                      <td className="px-3 py-3.5 text-center">
+                        {data.score ? (
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-extrabold border ${
                             gradeResult.grade.startsWith('D') ? 'bg-emerald-50 text-emerald-700 border-emerald-500/20' :
                             gradeResult.grade.startsWith('C') ? 'bg-indigo-50 text-indigo-700 border-indigo-500/20' :
                             gradeResult.grade.startsWith('P') ? 'bg-amber-50 text-amber-700 border-amber-500/20' :
@@ -374,8 +432,8 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
                       </td>
 
                       {/* Realtime Assessment Remark */}
-                      <td className="px-6 py-4 font-medium">
-                        {val ? (
+                      <td className="px-4 py-3.5 font-medium">
+                        {data.score ? (
                           <span className={`${
                             gradeResult.grade.startsWith('D') ? 'text-emerald-600' :
                             gradeResult.grade.startsWith('C') ? 'text-indigo-600' :

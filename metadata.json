@@ -1,6 +1,8 @@
 {
   "name": "Ashinaga Uganda Rainbow House",
   "description": "Student management, assessment registry, printable identification cards, graduation certificates, and real-time dashboard tracking for Ashinaga Uganda Rainbow House.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "camera"
+  ],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
