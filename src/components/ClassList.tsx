@@ -16,16 +16,19 @@ import {
   Check,
   X,
   FileSpreadsheet,
-  Activity
+  Activity,
+  QrCode
 } from 'lucide-react';
-import { Student, ClassName, Gender } from '../types';
+import { Student, ClassName, Gender, Mark } from '../types';
 import { googleSignIn, initAuth } from '../lib/firebase';
 import { createAndExportStudentsSheet } from '../lib/googleSheets';
 import { checkNameSimilarity } from '../utils/nameSimilarity';
 import AshinagaLogo from './AshinagaLogo';
+import StudentQrCodeModal from './StudentQrCodeModal';
 
 interface ClassListProps {
   students: Student[];
+  marks?: Mark[];
   onAddStudent: (student: Omit<Student, 'id'>) => Promise<void>;
   onUpdateStudent: (id: string, student: Partial<Student>) => Promise<void>;
   onDeleteStudent: (id: string) => Promise<void>;
@@ -37,6 +40,7 @@ interface ClassListProps {
 
 export default function ClassList({ 
   students, 
+  marks = [],
   onAddStudent, 
   onUpdateStudent, 
   onDeleteStudent, 
@@ -56,6 +60,15 @@ export default function ClassList({
   // Form State
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+
+  // QR Code Modal State
+  const [selectedQrStudent, setSelectedQrStudent] = useState<Student | null>(null);
+  const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
+
+  const handleOpenQrModal = (student: Student) => {
+    setSelectedQrStudent(student);
+    setIsQrModalOpen(true);
+  };
 
   // Google Sheets Export States
   const [googleUser, setGoogleUser] = useState<any>(null);
@@ -502,8 +515,8 @@ export default function ClassList({
                 </div>
 
                 {/* Card Action Buttons */}
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex gap-2.5">
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex gap-2 flex-wrap items-center">
                     <button
                       onClick={() => onGenerateReportCard(student)}
                       className="text-indigo-600 font-bold text-xs hover:underline flex items-center gap-1 cursor-pointer"
@@ -517,6 +530,14 @@ export default function ClassList({
                     >
                       <Activity className="h-3 w-3" />
                       <span>360° PROFILE</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenQrModal(student)}
+                      className="text-amber-600 font-bold text-xs hover:underline flex items-center gap-1 cursor-pointer"
+                      title="Generate Unique Student QR Code"
+                    >
+                      <QrCode className="h-3 w-3 text-amber-500" />
+                      <span>QR CODE</span>
                     </button>
                   </div>
 
@@ -797,6 +818,14 @@ export default function ClassList({
           </div>
         </div>
       )}
+      {/* Unique Student QR Code Modal */}
+      <StudentQrCodeModal
+        student={selectedQrStudent}
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        marks={marks}
+        onOpenProfile={onOpenProfile}
+      />
     </div>
   );
 }

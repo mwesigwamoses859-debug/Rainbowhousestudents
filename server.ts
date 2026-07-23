@@ -40,18 +40,32 @@ function getDatabase(): DatabaseSchema {
       {
         username: 'admin',
         name: 'Headteacher / Administrator',
+        role: 'Headteacher',
+        email: 'headteacher@ashinaga.or.ug',
+        subjects: ['All'],
+        classes: ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7']
+      },
+      {
+        username: 'dos',
+        name: 'Mr. David Ochieng (DOS)',
+        role: 'DOS',
+        email: 'dos@ashinaga.or.ug',
         subjects: ['All'],
         classes: ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7']
       },
       {
         username: 'teacher1',
         name: 'Mr. John Mukasa',
+        role: 'Subject Teacher',
+        email: 'john.mukasa@ashinaga.or.ug',
         subjects: ['Mathematics', 'Science'],
         classes: ['P.5', 'P.6', 'P.7']
       },
       {
         username: 'teacher2',
         name: 'Mrs. Sarah Babirye',
+        role: 'Subject Teacher',
+        email: 'sarah.babirye@ashinaga.or.ug',
         subjects: ['English', 'Social Studies', 'Religious Education'],
         classes: ['P.1', 'P.2', 'P.3', 'P.4']
       }
@@ -141,25 +155,198 @@ if (db.vapidKeys) {
 
 // --- API ROUTES ---
 
+// --- 2FA OTP Store in memory & Email Gateway Logs ---
+const otpStore: Record<string, { code: string; expiresAt: number }> = {};
+
+export interface EmailGatewayEntry {
+  id: string;
+  recipientEmail: string;
+  recipientName: string;
+  recipientRole: string;
+  subject: string;
+  category: 'CONFIRMATION_CODE' | 'ACTIVITY_ALERT' | 'LOGIN_ALERT' | 'MARK_MODIFICATION';
+  code?: string;
+  body: string;
+  timestamp: string;
+  status: 'DELIVERED' | 'DISPATCHED';
+}
+
+const emailGatewayLogs: EmailGatewayEntry[] = [
+  {
+    id: 'em-101',
+    recipientEmail: 'headteacher@ashinaga.or.ug',
+    recipientName: 'Headteacher / Administrator',
+    recipientRole: 'Headteacher',
+    subject: '[Security Confirmation] Headteacher Subject Workspace Access Code',
+    category: 'CONFIRMATION_CODE',
+    code: '849201',
+    body: 'Automated Security Dispatch:\nA login attempt into the Ashinaga Rainbow House School Portal was initiated.\nUse code: 849201 to confirm identity.\nIf you did not initiate this login, notify system administrator immediately.',
+    timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+    status: 'DELIVERED'
+  },
+  {
+    id: 'em-102',
+    recipientEmail: 'dos@ashinaga.or.ug',
+    recipientName: 'Mr. David Ochieng (DOS)',
+    recipientRole: 'DOS',
+    subject: '[Activity Alert] P.7 PLE Mock Marks Approval Requested',
+    category: 'ACTIVITY_ALERT',
+    code: '410982',
+    body: 'Director of Studies Notification:\nMarks entry for P.7 Term 1 Mathematics & Science has been submitted by subject teachers and requires DOS audit review.\nVerification Security Key: 410982',
+    timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+    status: 'DELIVERED'
+  },
+  {
+    id: 'em-103',
+    recipientEmail: 'john.mukasa@ashinaga.or.ug',
+    recipientName: 'Mr. John Mukasa',
+    recipientRole: 'Subject Teacher',
+    subject: '[Workspace Alert] Mathematics & Science Portal Authorization',
+    category: 'LOGIN_ALERT',
+    code: '529103',
+    body: 'Official Subject Teacher Alert:\nYour official email was verified for access to P.5 - P.7 Mathematics and Science portals.\nConfirmation Code: 529103',
+    timestamp: new Date(Date.now() - 1000 * 60 * 240).toISOString(),
+    status: 'DELIVERED'
+  }
+];
+
+function dispatchMockCompanyEmail(entry: Omit<EmailGatewayEntry, 'id' | 'timestamp' | 'status'>) {
+  const newLog: EmailGatewayEntry = {
+    ...entry,
+    id: `em-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    timestamp: new Date().toISOString(),
+    status: 'DELIVERED'
+  };
+  emailGatewayLogs.unshift(newLog);
+  console.log(`[EMAIL GATEWAY] Dispatched to ${entry.recipientEmail} (${entry.subject}) - Code: ${entry.code || 'N/A'}`);
+  return newLog;
+}
+
 // 1. Authentication
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/send-code', (req, res) => {
   const { username, password } = req.body;
+  const db = getDatabase();
+
+  const teacher = db.teachers.find(t => t.username === username);
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Account not found' });
+  }
+
+  const expectedPassword = teacher.password || (username === 'admin' ? 'admin123' : 'teacher123');
+  if (password !== expectedPassword) {
+    return res.status(401).json({ success: false, message: 'Invalid username or password' });
+  }
+
+  // Determine official email
+  const officialEmail = teacher.email || `${username.toLowerCase()}@ashinaga.or.ug`;
+  const teacherRole = teacher.role || (username === 'admin' ? 'Headteacher' : username === 'dos' ? 'DOS' : 'Subject Teacher');
+  
+  // Generate 6-digit OTP code
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  otpStore[username] = {
+    code,
+    expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes
+  };
+
+  // Dispatch to Company Email Gateway
+  dispatchMockCompanyEmail({
+    recipientEmail: officialEmail,
+    recipientName: teacher.name,
+    recipientRole: teacherRole,
+    subject: `[2FA Confirmation Code] Ashinaga Portal Access - ${code}`,
+    category: 'CONFIRMATION_CODE',
+    code,
+    body: `Hello ${teacher.name},\n\nA login request was received for your official Ashinaga account (${officialEmail}).\n\nYour 6-Digit Security Confirmation Code is: ${code}\n\nThis code expires in 10 minutes. Enter it in the login prompt to access your subject workspace.\n\nAshinaga Uganda Rainbow House Administration`
+  });
+
+  return res.json({
+    success: true,
+    message: `Security confirmation code dispatched to company email: ${officialEmail}`,
+    email: officialEmail,
+    demoCode: code, // Sent for testing/demonstration in sandbox
+    teacherName: teacher.name,
+    role: teacherRole
+  });
+});
+
+app.post('/api/auth/verify-code', (req, res) => {
+  const { username, password, code } = req.body;
+  const db = getDatabase();
+
+  const teacher = db.teachers.find(t => t.username === username);
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Account not found' });
+  }
+
+  const expectedPassword = teacher.password || (username === 'admin' ? 'admin123' : 'teacher123');
+  if (password !== expectedPassword) {
+    return res.status(401).json({ success: false, message: 'Invalid credentials' });
+  }
+
+  const storedOtp = otpStore[username];
+  if (!storedOtp) {
+    return res.status(400).json({ success: false, message: 'No confirmation code was requested or code expired. Please request a new code.' });
+  }
+
+  if (Date.now() > storedOtp.expiresAt) {
+    delete otpStore[username];
+    return res.status(400).json({ success: false, message: 'Confirmation code expired. Please request a new code.' });
+  }
+
+  if (storedOtp.code !== String(code).trim()) {
+    return res.status(400).json({ success: false, message: 'Invalid 6-digit confirmation code. Please check your email.' });
+  }
+
+  // Clear OTP on successful verification
+  delete otpStore[username];
+
+  const defaultRole = username === 'admin' ? 'Headteacher' : username === 'dos' ? 'DOS' : 'Subject Teacher';
+  const defaultEmail = `${username.toLowerCase()}@ashinaga.or.ug`;
+
+  return res.json({
+    success: true,
+    teacher: {
+      username: teacher.username,
+      name: teacher.name,
+      role: teacher.role || defaultRole,
+      email: teacher.email || defaultEmail,
+      subjects: teacher.subjects || [],
+      classes: teacher.classes || []
+    }
+  });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const { username, password, code } = req.body;
   const db = getDatabase();
   
   // Find teacher in database
   const teacher = db.teachers.find(t => t.username === username);
   
   if (teacher) {
-    // If teacher exists, match password. Custom password or default.
     const expectedPassword = teacher.password || (username === 'admin' ? 'admin123' : 'teacher123');
     if (password === expectedPassword) {
+      // If code provided, verify it
+      if (code) {
+        const storedOtp = otpStore[username];
+        if (!storedOtp || storedOtp.code !== String(code).trim()) {
+          return res.status(400).json({ success: false, message: 'Invalid confirmation code' });
+        }
+        delete otpStore[username];
+      }
+
+      const defaultRole = username === 'admin' ? 'Headteacher' : username === 'dos' ? 'DOS' : 'Subject Teacher';
+      const defaultEmail = `${username.toLowerCase()}@ashinaga.or.ug`;
+
       return res.json({
         success: true,
         teacher: {
           username: teacher.username,
           name: teacher.name,
-          subjects: teacher.subjects,
-          classes: teacher.classes
+          role: teacher.role || defaultRole,
+          email: teacher.email || defaultEmail,
+          subjects: teacher.subjects || [],
+          classes: teacher.classes || []
         }
       });
     }
@@ -406,7 +593,53 @@ app.post('/api/marks/bulk', (req, res) => {
   });
 
   saveDatabase(db);
+
+  // Dispatch Automated Email Notification Alert for Marks Saved
+  if (marks.length > 0) {
+    const firstSubject = marks[0].subject;
+    const firstTerm = marks[0].term;
+    const firstYear = marks[0].year;
+    const teacherName = marks[0].teacherName || 'Subject Teacher';
+    const alertCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Alert for Headteacher / DOS
+    dispatchMockCompanyEmail({
+      recipientEmail: 'dos@ashinaga.or.ug',
+      recipientName: 'Mr. David Ochieng (DOS)',
+      recipientRole: 'DOS',
+      subject: `[Academic Activity Alert] ${marks.length} Marks Recorded for ${firstSubject}`,
+      category: 'MARK_MODIFICATION',
+      code: alertCode,
+      body: `Director of Studies Audit Notice:\n\nInstructor ${teacherName} has saved/modified ${marks.length} pupil grade records for subject: ${firstSubject} (Term ${firstTerm}, ${firstYear}).\n\nAudit Alert Verification Key: ${alertCode}\n\nTimestamp: ${new Date().toLocaleString()}\nAshinaga Uganda Academic Registry`
+    });
+  }
+
   res.json({ success: true, updatedCount: marks.length });
+});
+
+// --- EMAIL NOTIFICATION GATEWAY ENDPOINTS ---
+app.get('/api/notifications/email-logs', (req, res) => {
+  res.json({ success: true, logs: emailGatewayLogs });
+});
+
+app.post('/api/notifications/send-email', (req, res) => {
+  const { recipientEmail, recipientName, recipientRole, subject, category, code, body } = req.body;
+
+  if (!recipientEmail || !subject || !body) {
+    return res.status(400).json({ success: false, message: 'Missing required email dispatch fields' });
+  }
+
+  const dispatchedLog = dispatchMockCompanyEmail({
+    recipientEmail,
+    recipientName: recipientName || recipientEmail,
+    recipientRole: recipientRole || 'Personnel',
+    subject,
+    category: category || 'ACTIVITY_ALERT',
+    code: code || Math.floor(100000 + Math.random() * 900000).toString(),
+    body
+  });
+
+  res.json({ success: true, message: 'Email dispatched successfully', emailLog: dispatchedLog });
 });
 
 // --- NEW SOCIAL WELFARE, ATTENDANCE & SAFEGUARDING ROUTES ---

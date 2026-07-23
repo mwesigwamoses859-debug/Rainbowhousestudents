@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CreditCard, 
   Award, 
@@ -12,6 +12,7 @@ import {
   CheckCircle,
   FileText
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import { Student, ClassName } from '../types';
 import AshinagaLogo from './AshinagaLogo';
 
@@ -25,12 +26,13 @@ export default function StudentIdCards({ students }: StudentIdCardsProps) {
   const [mode, setMode] = useState<'idcard' | 'certificate'>('idcard');
   const [certYear, setCertYear] = useState<string>('2026');
   const [certType, setCertType] = useState<string>('Primary Education Completion');
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
 
   const classesList: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
   const filteredStudents = students.filter(s => s.className === selectedClass);
 
   // Set first student as default when class shifts
-  React.useEffect(() => {
+  useEffect(() => {
     if (filteredStudents.length > 0) {
       setSelectedStudentId(filteredStudents[0].id);
     } else {
@@ -39,6 +41,18 @@ export default function StudentIdCards({ students }: StudentIdCardsProps) {
   }, [selectedClass]);
 
   const activeStudent = students.find(s => s.id === selectedStudentId);
+
+  // Generate unique QR code for active student linking directly to their digital profile
+  useEffect(() => {
+    if (activeStudent) {
+      const profileUrl = `${window.location.origin}${window.location.pathname}?studentId=${activeStudent.id}`;
+      QRCode.toDataURL(profileUrl, { margin: 1, width: 120 })
+        .then(url => setQrCodeDataUrl(url))
+        .catch(err => console.error('Error generating QR code for ID card:', err));
+    } else {
+      setQrCodeDataUrl('');
+    }
+  }, [activeStudent]);
 
   const handlePrint = () => {
     window.print();
@@ -267,8 +281,12 @@ export default function StudentIdCards({ students }: StudentIdCardsProps) {
                   </div>
                   <span className="text-[7px] text-slate-500 font-mono mt-1 uppercase">PUPIL-{activeStudent.id.substring(9, 15)}</span>
                 </div>
-                <div className="p-1 bg-slate-50 rounded-lg">
-                  <QrCode className="h-8 w-8 text-slate-700" />
+                <div className="p-1 bg-white rounded-lg border border-slate-200 shrink-0">
+                  {qrCodeDataUrl ? (
+                    <img src={qrCodeDataUrl} alt="Pupil Profile QR Code" className="h-9 w-9 object-contain" />
+                  ) : (
+                    <QrCode className="h-8 w-8 text-slate-700" />
+                  )}
                 </div>
               </div>
             </div>

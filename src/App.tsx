@@ -20,6 +20,8 @@ import AiAssistant from './components/AiAssistant';
 import AcademicAnalytics from './components/AcademicAnalytics';
 import ReportVerification from './components/ReportVerification';
 import AshinagaLogo from './components/AshinagaLogo';
+import SubjectWorkspaces from './components/SubjectWorkspaces';
+import EmailGatewayModal from './components/EmailGatewayModal';
 import { 
   ShieldAlert, 
   BookOpen, 
@@ -42,6 +44,7 @@ import {
   UserCheck,
   TrendingUp,
   Database,
+  Mail,
   Lock,
   FileText,
   Shield,
@@ -68,6 +71,7 @@ export default function App() {
 
   // Bell Notifications Dropdown State
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isEmailGatewayOpen, setIsEmailGatewayOpen] = useState(false);
 
   // 360-Degree Profile & Custom Documents state
   const [selectedProfileStudent, setSelectedProfileStudent] = useState<Student | null>(null);
@@ -161,6 +165,16 @@ export default function App() {
           year: Number(verifyYear) || 2026,
           verified: false
         });
+      }
+    }
+
+    // Direct student profile QR scan URL parameter handling
+    const studentIdParam = params.get('studentId') || params.get('verifyStudent');
+    if (studentIdParam) {
+      const foundStudent = students.find(s => s.id.toLowerCase() === studentIdParam.toLowerCase());
+      if (foundStudent) {
+        setSelectedProfileStudent(foundStudent);
+        setIsProfileModalOpen(true);
       }
     }
   }, [students, marks]);
@@ -579,28 +593,34 @@ export default function App() {
         </div>
       )}
 
-      {/* 1. Header Navigation Banner */}
-      <header className="bg-[#0b2d59] text-white px-8 py-3.5 flex items-center justify-between shadow-md relative z-40 select-none no-print">
+      {/* 1. Header Navigation Banner with Clean White High-Contrast Theme */}
+      <header className="bg-white text-slate-900 px-8 py-3 flex items-center justify-between shadow-sm relative z-40 select-none no-print border-b-2 border-amber-400">
         
         {/* Left Section: Shield Logo and Title */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center p-1 bg-white/10 rounded-xl">
-            <AshinagaLogo size={42} />
+          <div className="flex items-center justify-center p-1 bg-slate-900 rounded-xl shadow-sm">
+            <AshinagaLogo size={40} />
           </div>
           <div>
-            <h1 className="font-display font-extrabold text-base lg:text-lg tracking-tight leading-none text-white">
-              Ashinaga Uganda Rainbow House
-            </h1>
-            <p className="text-[10px] text-sky-200 mt-0.5 font-bold uppercase tracking-widest flex items-center gap-1.5">
-              <span>National EMIS Node</span>
-              <span className="w-1.5 h-1.5 bg-green-400 rounded-full inline-block"></span>
-              <span className="text-emerald-400">Online</span>
+            <div className="flex items-center gap-2">
+              <h1 className="font-display font-black text-base lg:text-lg tracking-tight leading-none text-slate-900">
+                Ashinaga Uganda Rainbow House
+              </h1>
+              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black rounded uppercase flex items-center gap-1 shadow-2xs">
+                <span>🇺🇬</span>
+                <span>Uganda Node</span>
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-0.5 font-extrabold uppercase tracking-widest flex items-center gap-1.5">
+              <span>National EMIS Database</span>
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full inline-block animate-pulse"></span>
+              <span className="text-emerald-700 font-black">Online & Secured</span>
             </p>
           </div>
         </div>
 
         {/* Center Section: Main Navigation Tabs */}
-        <div className="hidden md:flex items-center gap-1 bg-[#051c3a] p-1 rounded-xl border border-white/10">
+        <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
           {[
             { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
             { id: 'classes', name: 'Students', icon: Users },
@@ -617,10 +637,10 @@ export default function App() {
               <button
                 key={tab.id}
                 onClick={() => handleSetTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold tracking-wide transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-extrabold tracking-wide transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-[#1e4e8c] text-white shadow-sm border border-white/10'
-                    : 'text-sky-100 hover:bg-white/10'
+                    ? 'bg-slate-900 text-white shadow-md border border-slate-800 font-black'
+                    : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900'
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -637,11 +657,11 @@ export default function App() {
           <div className="relative">
             <button 
               onClick={() => setShowNotifications(!showNotifications)}
-              className="p-2.5 bg-[#051c3a] hover:bg-[#13315c] text-slate-300 hover:text-white rounded-full transition-colors relative cursor-pointer"
+              className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full transition-colors relative cursor-pointer border border-slate-200"
             >
               <Bell className="h-4.5 w-4.5" />
               {notificationAlerts.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white font-extrabold text-[9px] w-5 h-5 rounded-full flex items-center justify-center animate-bounce border-2 border-[#0b2d59]">
+                <span className="absolute -top-1 -right-1 bg-red-600 text-white font-extrabold text-[9px] w-5 h-5 rounded-full flex items-center justify-center animate-bounce border-2 border-white shadow">
                   {notificationAlerts.length}
                 </span>
               )}
@@ -696,8 +716,8 @@ export default function App() {
           </div>
 
           {/* System Role Selector */}
-          <div className="flex items-center gap-1.5 bg-[#051c3a] border border-white/10 px-3 py-1.5 rounded-xl text-white">
-            <span className="text-[10px] font-black uppercase tracking-wider text-sky-300">Active Role:</span>
+          <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-slate-800">
+            <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">Active Role:</span>
             <select
               value={currentRole}
               onChange={(e) => {
@@ -705,24 +725,35 @@ export default function App() {
                 setCurrentRole(newRole);
                 addAuditLog(`Switched active system role to: ${newRole.toUpperCase()}`);
               }}
-              className="bg-transparent text-xs font-black text-white focus:outline-none cursor-pointer border-none"
+              className="bg-transparent text-xs font-black text-slate-900 focus:outline-none cursor-pointer border-none"
             >
-              <option className="text-slate-850" value="administrator">Administrator</option>
-              <option className="text-slate-850" value="head_teacher">Head Teacher</option>
-              <option className="text-slate-850" value="subject_teacher">Subject Teacher</option>
-              <option className="text-slate-850" value="class_teacher">Class Teacher</option>
-              <option className="text-slate-850" value="community_worker">Community Worker</option>
-              <option className="text-slate-850" value="bursar">Bursar</option>
-              <option className="text-slate-850" value="parent_guardian">Parent/Guardian</option>
-              <option className="text-slate-850" value="data_entry">Data Entry Officer</option>
+              <option value="administrator">Administrator</option>
+              <option value="head_teacher">Head Teacher</option>
+              <option value="subject_teacher">Subject Teacher</option>
+              <option value="class_teacher">Class Teacher</option>
+              <option value="community_worker">Community Worker</option>
+              <option value="bursar">Bursar</option>
+              <option value="parent_guardian">Parent/Guardian</option>
+              <option value="data_entry">Data Entry Officer</option>
             </select>
           </div>
+
+          {/* Email Notification Gateway Button */}
+          <button
+            onClick={() => setIsEmailGatewayOpen(true)}
+            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="Company Email Gateway & 2FA Dispatch Log"
+          >
+            <Mail className="h-4 w-4 text-indigo-600" />
+            <span className="hidden lg:inline text-[11px] uppercase tracking-wider font-extrabold">Email Gateway</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          </button>
 
           {/* User Profile Card */}
           <div className="flex items-center gap-2.5">
             <div className="text-right hidden sm:block">
-              <p className="text-xs font-bold leading-tight">{teacher.name}</p>
-              <p className="text-[9px] text-sky-300 font-bold uppercase tracking-widest mt-0.5 leading-none">
+              <p className="text-xs font-bold text-slate-900 leading-tight">{teacher.name}</p>
+              <p className="text-[9px] text-indigo-600 font-black uppercase tracking-widest mt-0.5 leading-none">
                 {currentRole.replace('_', ' ').toUpperCase()}
               </p>
             </div>
@@ -836,6 +867,7 @@ export default function App() {
                   {studentsSubTab === 'list' ? (
                     <ClassList 
                       students={students}
+                      marks={marks}
                       onAddStudent={handleAddStudent}
                       onUpdateStudent={handleUpdateStudent}
                       onDeleteStudent={handleDeleteStudent}
@@ -857,6 +889,36 @@ export default function App() {
                     />
                   )}
                 </div>
+              )}
+
+              {/* 2.5 Subject Portals Tab */}
+              {activeTab === 'subjects' && (
+                <SubjectWorkspaces 
+                  students={students}
+                  marks={marks}
+                  currentTeacher={teacher!}
+                  teachers={teachers}
+                  onSaveMarks={async (updatedMarksList) => {
+                    const res = await fetch('/api/marks/bulk', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'x-teacher-username': teacher?.username || 'admin'
+                      },
+                      body: JSON.stringify({ marks: updatedMarksList })
+                    });
+                    if (res.ok) {
+                      const freshMarksRes = await fetch('/api/marks');
+                      if (freshMarksRes.ok) {
+                        const freshMarks = await freshMarksRes.json();
+                        setMarks(freshMarks);
+                      }
+                    } else {
+                      const errData = await res.json();
+                      throw new Error(errData.message || 'Failed to save marks');
+                    }
+                  }}
+                />
               )}
 
               {/* 3. Academics Tab (grouped: Marks entry, Timetable, Teachers, Promotion) */}
@@ -1198,7 +1260,12 @@ export default function App() {
 
       </div>
 
-      {/* 360-Degree Pupil Profile Modal popup */}
+      {/* Email Gateway Audit & Dispatch Modal */}
+      <EmailGatewayModal
+        isOpen={isEmailGatewayOpen}
+        onClose={() => setIsEmailGatewayOpen(false)}
+        currentTeacher={teacher!}
+      />
       {isProfileModalOpen && selectedProfileStudent && (
         <StudentProfileModal 
           student={selectedProfileStudent}

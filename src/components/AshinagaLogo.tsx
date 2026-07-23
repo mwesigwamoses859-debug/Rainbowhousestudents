@@ -7,105 +7,126 @@ interface AshinagaLogoProps {
 
 export default function AshinagaLogo({ className = '', size = 120 }: AshinagaLogoProps) {
   const width = size;
-  const height = Math.round(size * (250 / 350));
+  const height = Math.round(size * (240 / 340));
 
   return (
     <svg
       id="ashinaga_rainbow_house_logo"
       width={width}
       height={height}
-      viewBox="0 0 350 250"
+      viewBox="0 0 340 240"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={`${className} select-none`}
     >
       <defs>
-        {/* Soft fading gradient for the rainbow from left (opaque) to right (fully transparent) */}
-        <linearGradient id="rainbow-fade" x1="0" y1="1" x2="0.8" y2="0.1">
-          <stop offset="0%" stopColor="white" stopOpacity="1" />
-          <stop offset="55%" stopColor="white" stopOpacity="0.8" />
-          <stop offset="90%" stopColor="white" stopOpacity="0" />
+        {/* Soft fading gradient for the rainbow towards top-right */}
+        <linearGradient id="rainbow-fade" x1="0.1" y1="0.9" x2="0.85" y2="0.15">
+          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="1" />
+          <stop offset="60%" stopColor="#FFFFFF" stopOpacity="0.85" />
+          <stop offset="90%" stopColor="#FFFFFF" stopOpacity="0" />
         </linearGradient>
-        
-        {/* Mask applying the fade gradient */}
+
         <mask id="rainbow-mask">
-          <rect x="0" y="0" width="350" height="250" fill="url(#rainbow-fade)" />
+          <rect x="0" y="0" width="340" height="240" fill="url(#rainbow-fade)" />
         </mask>
       </defs>
 
-      {/* Rainbow arcs with the fade mask applied */}
+      {/* Rainbow Arcs - 4 Bands: Sky Blue, Soft Green, Warm Yellow, Vibrant Red */}
       <g mask="url(#rainbow-mask)">
-        {/* Outer Stripe: Beautiful Blue/Cyan */}
+        {/* Sky Blue / Light Cyan (Outer Band) */}
         <path
-          d="M 25,230 A 170,170 0 0,1 310,105"
-          stroke="#0091EA"
-          strokeWidth="13"
+          d="M 12 235 C 12 110, 105 18, 235 18"
+          stroke="#68C5F7"
+          strokeWidth="11"
           strokeLinecap="round"
           fill="none"
         />
-        {/* Middle Stripe: Warm Yellow */}
+        {/* Soft Green Band */}
         <path
-          d="M 37,230 A 158,158 0 0,1 300,117"
-          stroke="#FACC15"
-          strokeWidth="13"
+          d="M 23 235 C 23 120, 112 29, 232 29"
+          stroke="#9BD843"
+          strokeWidth="11"
           strokeLinecap="round"
           fill="none"
         />
-        {/* Inner Stripe: Vibrant Red */}
+        {/* Warm Yellow Band */}
         <path
-          d="M 49,230 A 146,146 0 0,1 290,129"
-          stroke="#EF4444"
-          strokeWidth="13"
+          d="M 34 235 C 34 130, 119 40, 229 40"
+          stroke="#F8D41A"
+          strokeWidth="11"
+          strokeLinecap="round"
+          fill="none"
+        />
+        {/* Bright Red Band (Innermost) */}
+        <path
+          d="M 45 235 C 45 140, 126 51, 226 51"
+          stroke="#E63928"
+          strokeWidth="11"
           strokeLinecap="round"
           fill="none"
         />
       </g>
 
-      {/* House structure */}
-      {/* Gable Roof: Styled as a solid blue trapezoid with rounded joints */}
-      <polygon
-        points="130,102 260,102 295,128 95,128"
-        fill="#0091EA"
-        stroke="#0091EA"
-        strokeWidth="8"
-        strokeLinejoin="round"
+      {/* HOUSE STRUCTURE */}
+      {/* House Color: Official Ashinaga Blue #008AD8 */}
+
+      {/* Roof: Distinctive wide trapezoid with rounded eave corners */}
+      <path
+        d="M 100 115 
+           L 240 115 
+           C 245 115 248 117 250 121
+           L 295 146
+           C 301 150 298 158 290 158
+           L 50 158
+           C 42 158 39 150 45 146
+           L 90 121
+           C 92 117 95 115 100 115 Z"
+        fill="#008AD8"
       />
 
-      {/* House Body: Sits right below the roof, top corners are hidden, bottom corners rounded */}
+      {/* House Body: Sits under the roof with rounded bottom corners */}
       <rect
-        x="110"
-        y="132"
-        width="170"
-        height="90"
-        rx="16"
-        fill="#0091EA"
+        x="68"
+        y="155"
+        width="204"
+        height="76"
+        rx="22"
+        fill="#008AD8"
       />
 
       {/* Left White Square Window */}
       <rect
-        x="132"
-        y="152"
-        width="26"
-        height="26"
-        rx="4"
+        x="92"
+        y="170"
+        width="24"
+        height="24"
+        rx="3"
         fill="#FFFFFF"
       />
 
       {/* Right White Square Window */}
       <rect
-        x="232"
-        y="152"
-        width="26"
-        height="26"
-        rx="4"
+        x="224"
+        y="170"
+        width="24"
+        height="24"
+        rx="3"
         fill="#FFFFFF"
       />
 
-      {/* Central White Heart shape */}
+      {/* Center White Heart */}
       <path
-        d="M 195,188 C 195,188 184,177 177,170 C 170,163 170,154 177,148 C 184,142 192,144 195,151 C 198,144 206,142 213,148 C 220,154 220,163 213,170 C 206,177 195,188 195,188 Z"
+        d="M 170 216
+           C 170 216, 155 201, 148 193
+           C 140 184, 140 173, 149 166
+           C 157 159, 166 161, 170 169
+           C 174 161, 183 159, 191 166
+           C 200 173, 200 184, 192 193
+           C 185 201, 170 216, 170 216 Z"
         fill="#FFFFFF"
       />
     </svg>
   );
 }
+

@@ -28,8 +28,33 @@ import {
   Send,
   ArrowUpRight,
   CheckSquare,
-  Sparkles
+  Sparkles,
+  BarChart3,
+  CalendarCheck,
+  Activity,
+  Percent,
+  Layers,
+  PieChart as PieChartIcon
 } from 'lucide-react';
+import { 
+  ResponsiveContainer, 
+  AreaChart, 
+  Area, 
+  LineChart, 
+  Line, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  PieChart, 
+  Pie, 
+  Cell,
+  ComposedChart,
+  ReferenceLine
+} from 'recharts';
 import { Student, Mark, Teacher } from '../types';
 import AshinagaLogo from './AshinagaLogo';
 
@@ -59,6 +84,57 @@ export default function Dashboard({ students, marks, setActiveTab, teacher, isAd
 
   // Academic Projection state
   const [selectedProjectionSubject, setSelectedProjectionSubject] = useState<'All' | 'Mathematics' | 'English' | 'Science' | 'Social Studies'>('All');
+
+  // Interactive Recharts Analytics States
+  const [performanceSubjectFilter, setPerformanceSubjectFilter] = useState<'All' | 'Mathematics' | 'English' | 'Science' | 'Social Studies'>('All');
+  const [attendanceViewMode, setAttendanceViewMode] = useState<'weekly' | 'byClass'>('weekly');
+  const [distributionViewMode, setDistributionViewMode] = useState<'divisions' | 'averages'>('divisions');
+
+  // Recharts Datasets
+  const performanceTrendData = React.useMemo(() => [
+    { term: 'T1 2024', Mathematics: 62, English: 68, Science: 65, SocialStudies: 70, Average: 66.3 },
+    { term: 'T2 2024', Mathematics: 65, English: 70, Science: 68, SocialStudies: 72, Average: 68.8 },
+    { term: 'T3 2024', Mathematics: 68, English: 74, Science: 71, SocialStudies: 75, Average: 72.0 },
+    { term: 'T1 2025', Mathematics: 71, English: 76, Science: 74, SocialStudies: 78, Average: 74.8 },
+    { term: 'T2 2025', Mathematics: 74, English: 80, Science: 77, SocialStudies: 81, Average: 78.0 },
+    { term: 'T3 2025', Mathematics: 78, English: 83, Science: 81, SocialStudies: 84, Average: 81.5 },
+    { term: 'T1 2026', Mathematics: 81, English: 85, Science: 83, SocialStudies: 87, Average: 84.0 },
+  ], []);
+
+  const weeklyAttendanceData = React.useMemo(() => [
+    { week: 'Wk 1', Present: 96.2, Excused: 2.5, Unexcused: 1.3 },
+    { week: 'Wk 2', Present: 97.4, Excused: 1.8, Unexcused: 0.8 },
+    { week: 'Wk 3', Present: 95.8, Excused: 2.9, Unexcused: 1.3 },
+    { week: 'Wk 4', Present: 98.1, Excused: 1.2, Unexcused: 0.7 },
+    { week: 'Wk 5', Present: 96.9, Excused: 2.1, Unexcused: 1.0 },
+    { week: 'Wk 6', Present: 94.5, Excused: 3.8, Unexcused: 1.7 },
+    { week: 'Wk 7', Present: 97.8, Excused: 1.5, Unexcused: 0.7 },
+    { week: 'Wk 8', Present: 98.4, Excused: 1.1, Unexcused: 0.5 },
+    { week: 'Wk 9', Present: 96.0, Excused: 2.8, Unexcused: 1.2 },
+    { week: 'Wk 10', Present: 97.2, Excused: 1.9, Unexcused: 0.9 },
+    { week: 'Wk 11', Present: 98.9, Excused: 0.8, Unexcused: 0.3 },
+    { week: 'Wk 12', Present: 99.1, Excused: 0.6, Unexcused: 0.3 },
+  ], []);
+
+  const classAttendanceData = React.useMemo(() => [
+    { className: 'P.1', AttendanceRate: 97.8, Target: 95 },
+    { className: 'P.2', AttendanceRate: 98.2, Target: 95 },
+    { className: 'P.3', AttendanceRate: 96.5, Target: 95 },
+    { className: 'P.4', AttendanceRate: 95.9, Target: 95 },
+    { className: 'P.5', AttendanceRate: 97.1, Target: 95 },
+    { className: 'P.6', AttendanceRate: 98.6, Target: 95 },
+    { className: 'P.7', AttendanceRate: 99.4, Target: 95 },
+  ], []);
+
+  const classAcademicDistribution = React.useMemo(() => [
+    { className: 'P.1', DivI: 54, DivII: 32, DivIII: 10, DivIV: 2, AvgScore: 78.4 },
+    { className: 'P.2', DivI: 58, DivII: 28, DivIII: 12, DivIV: 4, AvgScore: 79.1 },
+    { className: 'P.3', DivI: 49, DivII: 34, DivIII: 11, DivIV: 3, AvgScore: 75.8 },
+    { className: 'P.4', DivI: 46, DivII: 36, DivIII: 10, DivIV: 4, AvgScore: 74.2 },
+    { className: 'P.5', DivI: 52, DivII: 33, DivIII: 12, DivIV: 3, AvgScore: 77.0 },
+    { className: 'P.6', DivI: 56, DivII: 30, DivIII: 9, DivIV: 2, AvgScore: 80.2 },
+    { className: 'P.7', DivI: 68, DivII: 20, DivIII: 5, DivIV: 1, AvgScore: 85.6 },
+  ], []);
 
   const handleSmsBroadcast = (e: React.FormEvent) => {
     e.preventDefault();
@@ -492,200 +568,340 @@ export default function Dashboard({ students, marks, setActiveTab, teacher, isAd
         </div>
       </div>
 
-      {/* Main Charts: Enrollment Trend & Scholarship Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10">
+      {/* Recharts Analytics Dashboard Studio */}
+      <div className="space-y-6 relative z-10">
         
-        {/* Enrollment Trend Card */}
-        <div className="backdrop-blur-md bg-white/70 p-6 rounded-2xl border border-white/40 shadow-lg hover:shadow-xl transition-all duration-300 lg:col-span-2 flex flex-col justify-between group">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-[#032b5e]">Enrollment Trend</h3>
-            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-full uppercase">Annual Growth</span>
+        {/* Row 1: Student Performance Trends & Scholarship Status */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* 1. Student Performance Trends (Recharts Area/Line Chart) */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2 flex flex-col justify-between">
+            <div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-blue-600" />
+                    Student Performance Trends
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">Term-by-term score evolution across primary subjects</p>
+                </div>
+
+                {/* Subject filter selector */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold border border-slate-200 overflow-x-auto">
+                  {(['All', 'Mathematics', 'English', 'Science', 'Social Studies'] as const).map((subject) => (
+                    <button
+                      key={subject}
+                      onClick={() => setPerformanceSubjectFilter(subject)}
+                      className={`px-2.5 py-1 rounded-lg transition-all text-[11px] whitespace-nowrap cursor-pointer ${
+                        performanceSubjectFilter === subject
+                          ? 'bg-slate-900 text-white shadow-xs font-black'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {subject === 'Social Studies' ? 'SST' : subject}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recharts Area Chart Container */}
+              <div className="w-full h-64 mt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={performanceTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="mathGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0}/>
+                      </linearGradient>
+                      <linearGradient id="engGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.0}/>
+                      </linearGradient>
+                      <linearGradient id="sciGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0}/>
+                      </linearGradient>
+                      <linearGradient id="sstGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="term" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[50, 100]} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', color: '#fff', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.3)', fontSize: '12px' }}
+                      itemStyle={{ color: '#fff' }}
+                      formatter={(val: number) => [`${val}% Score`, 'Score']}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+
+                    {(performanceSubjectFilter === 'All' || performanceSubjectFilter === 'Mathematics') && (
+                      <Area type="monotone" dataKey="Mathematics" stroke="#3b82f6" strokeWidth={2.5} fillOpacity={1} fill="url(#mathGrad)" />
+                    )}
+                    {(performanceSubjectFilter === 'All' || performanceSubjectFilter === 'English') && (
+                      <Area type="monotone" dataKey="English" stroke="#8b5cf6" strokeWidth={2.5} fillOpacity={1} fill="url(#engGrad)" />
+                    )}
+                    {(performanceSubjectFilter === 'All' || performanceSubjectFilter === 'Science') && (
+                      <Area type="monotone" dataKey="Science" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#sciGrad)" />
+                    )}
+                    {(performanceSubjectFilter === 'All' || performanceSubjectFilter === 'Social Studies') && (
+                      <Area type="monotone" dataKey="SocialStudies" stroke="#f59e0b" strokeWidth={2.5} fillOpacity={1} fill="url(#sstGrad)" name="Social Studies" />
+                    )}
+                    {performanceSubjectFilter === 'All' && (
+                      <Line type="monotone" dataKey="Average" stroke="#0f172a" strokeWidth={3} dot={{ r: 4, fill: '#0f172a' }} name="Cohort Average" />
+                    )}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-3 mt-2 flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
+                Cohort Average Growth: <strong className="text-slate-800 font-extrabold">+17.7% over 6 Terms</strong>
+              </span>
+              <span className="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded text-[10px] uppercase">
+                UNEB Trend Compliant
+              </span>
+            </div>
           </div>
 
-          {/* SVG Line Chart */}
-          <div className="w-full h-44 mt-4 relative">
-            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
-              <defs>
-                {/* Blue gradient fill for area under line */}
-                <linearGradient id="blueAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#2563eb" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
-                </linearGradient>
-              </defs>
+          {/* 2. Scholarship & Support Ratio (Recharts PieChart) */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <PieChartIcon className="h-5 w-5 text-indigo-600" />
+                  Scholarship Distribution
+                </h3>
+                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-full uppercase">
+                  Ratio
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mb-3">Ashinaga Rainbow House support categorization</p>
 
-              {/* Grid Lines */}
-              {[450, 500, 550, 600, 650, 700, 750].map((level) => {
-                const y = paddingTop + chartH - ((level - 450) / (300)) * chartH;
-                return (
-                  <g key={level}>
-                    <line 
-                      x1={paddingLeft} 
-                      y1={y} 
-                      x2={width - paddingRight} 
-                      y2={y} 
-                      stroke="#f1f5f9" 
-                      strokeWidth="1" 
-                    />
-                    <text 
-                      x={paddingLeft - 8} 
-                      y={y + 3} 
-                      textAnchor="end" 
-                      className="text-[9px] fill-slate-400 font-mono font-medium"
+              <div className="w-full h-48 relative flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Full Scholar', value: Math.round(displayScholarships * 0.389) || 28, color: '#10b981' },
+                        { name: 'Partial Scholar', value: Math.round(displayScholarships * 0.611) || 44, color: '#3b82f6' },
+                        { name: 'Pending Review', value: 12, color: '#f43f5e' },
+                        { name: 'Self Sponsored', value: Math.max(10, displayTotal - displayScholarships), color: '#94a3b8' }
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={45}
+                      outerRadius={75}
+                      paddingAngle={3}
+                      dataKey="value"
                     >
-                      {level}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* Area Under Line */}
-              <path d={areaD} fill="url(#blueAreaGrad)" />
-
-              {/* Solid Chart Path Line */}
-              <path 
-                d={pathD} 
-                fill="none" 
-                stroke="#2563eb" 
-                strokeWidth="2.5" 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                className="transition-all duration-700"
-              />
-
-              {/* Data Point Dots & Value Labels */}
-              {points.map((p, idx) => {
-                const isDec = idx === 11;
-                return (
-                  <g key={idx} className="group/dot cursor-pointer">
-                    {/* Value text above dot */}
-                    <text
-                      x={p.x}
-                      y={p.y - 8}
-                      textAnchor="middle"
-                      className={`text-[9px] font-bold transition-all duration-300 ${isDec ? 'fill-[#f05a4a] text-xs' : 'fill-slate-600'} opacity-80 group-hover/dot:opacity-100 group-hover/dot:scale-110`}
-                    >
-                      {p.val}
-                    </text>
-
-                    {/* Circle joint dot */}
-                    <circle
-                      cx={p.x}
-                      cy={p.y}
-                      r={isDec ? 5 : 4}
-                      className={`transition-all duration-300 ${isDec ? 'fill-[#f05a4a] stroke-white stroke-2' : 'fill-white stroke-[#2563eb] stroke-2'} group-hover/dot:r-6`}
+                      {[
+                        { name: 'Full Scholar', color: '#10b981' },
+                        { name: 'Partial Scholar', color: '#3b82f6' },
+                        { name: 'Pending Review', color: '#f43f5e' },
+                        { name: 'Self Sponsored', color: '#94a3b8' }
+                      ].map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', color: '#fff', border: 'none', fontSize: '11px' }}
+                      formatter={(value: number) => [`${value} Pupils`, 'Count']}
                     />
-                  </g>
-                );
-              })}
+                  </PieChart>
+                </ResponsiveContainer>
+                
+                {/* Center metric ring callout */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-xl font-black text-slate-900">{displayScholarships}</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Scholars</span>
+                </div>
+              </div>
+            </div>
 
-              {/* X-axis labels (months) */}
-              {points.map((p, idx) => (
-                <text
-                  key={idx}
-                  x={p.x}
-                  y={height - 2}
-                  textAnchor="middle"
-                  className="text-[10px] fill-slate-400 font-semibold"
-                >
-                  {p.month}
-                </text>
-              ))}
-            </svg>
+            <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs font-semibold text-slate-600">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-emerald-500 rounded-full inline-block"></span>Full Scholarship</span>
+                <span className="font-extrabold text-slate-800">{Math.round(displayScholarships * 0.389) || 28}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-blue-500 rounded-full inline-block"></span>Partial Support</span>
+                <span className="font-extrabold text-slate-800">{Math.round(displayScholarships * 0.611) || 44}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-rose-500 rounded-full inline-block"></span>Pending Verification</span>
+                <span className="font-extrabold text-slate-800">12</span>
+              </div>
+            </div>
           </div>
+
         </div>
 
-        {/* Scholarship Status Card */}
-        <div className="backdrop-blur-md bg-white/70 p-6 rounded-2xl border border-white/40 shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col justify-between group">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-[#032b5e]">Scholarship Status</h3>
-            <span className="px-2 py-0.5 bg-emerald-100/60 text-emerald-700 text-[9px] font-bold rounded-full uppercase">Ratio</span>
-          </div>
+        {/* Row 2: Attendance Patterns & Class-Wise Academic Distribution */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-          <div className="flex items-center justify-between gap-4 py-2 my-auto">
-            {/* SVG Donut Chart */}
-            <div className="relative w-28 h-28 flex items-center justify-center shrink-0 transition-transform duration-500 group-hover:scale-105">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                {/* Ring Background */}
-                <circle 
-                  cx="50" 
-                  cy="50" 
-                  r="38" 
-                  fill="transparent" 
-                  stroke="#f1f5f9" 
-                  strokeWidth="11" 
-                />
-                {/* Arc 1: Partial Scholarship (61.1%) - Blue */}
-                <circle 
-                  cx="50" 
-                  cy="50" 
-                  r="38" 
-                  fill="transparent" 
-                  stroke="#2563eb" 
-                  strokeWidth="11" 
-                  strokeDasharray="146 238.7" 
-                  strokeDashoffset="0"
-                />
-                {/* Arc 2: Full Scholarship (38.9%) - Green */}
-                <circle 
-                  cx="50" 
-                  cy="50" 
-                  r="38" 
-                  fill="transparent" 
-                  stroke="#10b981" 
-                  strokeWidth="11" 
-                  strokeDasharray="92 238.7" 
-                  strokeDashoffset="-146"
-                />
-                {/* Arc 3: Pending Review - Orange */}
-                <circle 
-                  cx="50" 
-                  cy="50" 
-                  r="38" 
-                  fill="transparent" 
-                  stroke="#f05a4a" 
-                  strokeWidth="11" 
-                  strokeDasharray="25 238.7" 
-                  strokeDashoffset="-238"
-                />
-              </svg>
-              {/* Central Text */}
-              <div className="absolute flex flex-col items-center justify-center text-center">
-                <span className="text-xl font-bold text-[#032b5e] leading-none">{displayScholarships}</span>
-                <span className="text-[10px] text-slate-400 font-bold mt-0.5 leading-none">Total</span>
+          {/* 3. Attendance Patterns (Recharts ComposedChart / BarChart) */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                    <CalendarCheck className="h-5 w-5 text-emerald-600" />
+                    Attendance Patterns & Retention
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">Class attendance dynamics against Uganda 95% target</p>
+                </div>
+
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold border border-slate-200">
+                  <button
+                    onClick={() => setAttendanceViewMode('weekly')}
+                    className={`px-3 py-1 rounded-lg transition-all text-[11px] cursor-pointer ${
+                      attendanceViewMode === 'weekly'
+                        ? 'bg-slate-900 text-white shadow-xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Weekly Trend
+                  </button>
+                  <button
+                    onClick={() => setAttendanceViewMode('byClass')}
+                    className={`px-3 py-1 rounded-lg transition-all text-[11px] cursor-pointer ${
+                      attendanceViewMode === 'byClass'
+                        ? 'bg-slate-900 text-white shadow-xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Class Comparison
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-full h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  {attendanceViewMode === 'weekly' ? (
+                    <BarChart data={weeklyAttendanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="week" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis domain={[90, 100]} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', color: '#fff', border: 'none', fontSize: '12px' }}
+                        formatter={(val: number) => [`${val}%`, 'Attendance Rate']}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      <Bar dataKey="Present" fill="#10b981" radius={[4, 4, 0, 0]} name="Present (%)" />
+                      <Bar dataKey="Excused" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Excused (%)" />
+                      <Bar dataKey="Unexcused" fill="#f43f5e" radius={[4, 4, 0, 0]} name="Unexcused (%)" />
+                      <ReferenceLine y={95} stroke="#3b82f6" strokeDasharray="4 4" label={{ value: 'Target 95%', fill: '#3b82f6', fontSize: 10, position: 'insideTopRight' }} />
+                    </BarChart>
+                  ) : (
+                    <BarChart data={classAttendanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="className" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis domain={[90, 100]} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', color: '#fff', border: 'none', fontSize: '12px' }}
+                        formatter={(val: number) => [`${val}%`, 'Class Rate']}
+                      />
+                      <Bar dataKey="AttendanceRate" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Class Attendance (%)" />
+                      <ReferenceLine y={95} stroke="#10b981" strokeDasharray="4 4" label={{ value: 'National Target (95%)', fill: '#10b981', fontSize: 10 }} />
+                    </BarChart>
+                  )}
+                </ResponsiveContainer>
               </div>
             </div>
 
-            {/* Breakdown Indicators */}
-            <div className="flex-1 space-y-2 text-xs font-semibold text-slate-600">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 bg-[#10b981] rounded-full inline-block"></span>
-                  <span>Full Scholar</span>
-                </div>
-                <span className="font-bold text-slate-800">28 (38.9%)</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 bg-[#2563eb] rounded-full inline-block"></span>
-                  <span>Partial Scholar</span>
-                </div>
-                <span className="font-bold text-slate-800">44 (61.1%)</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 bg-[#f05a4a] rounded-full inline-block"></span>
-                  <span>Pending</span>
-                </div>
-                <span className="font-bold text-slate-800">12 (14.3%)</span>
-              </div>
+            <div className="border-t border-slate-100 pt-3 mt-2 flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>Average School Attendance: <strong className="text-emerald-700 font-extrabold">97.3%</strong></span>
+              <span className="text-xs font-bold text-slate-700 bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-md">
+                ✓ Exceeds 95% Standard
+              </span>
             </div>
           </div>
 
-          {/* Divider and Summary */}
-          <div className="border-t border-slate-100/80 pt-3 flex items-center justify-between text-xs">
-            <span className="text-slate-400 font-medium">Scholarship Coverage</span>
-            <span className="text-[#10b981] font-bold">{displayScholarshipPercent}% of total students</span>
+          {/* 4. Class-Wise Academic Distribution (Recharts Stacked BarChart) */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-indigo-600" />
+                    Class-Wise Academic Distribution
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">PLE UNEB Division Breakdown per class level (P.1 - P.7)</p>
+                </div>
+
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold border border-slate-200">
+                  <button
+                    onClick={() => setDistributionViewMode('divisions')}
+                    className={`px-3 py-1 rounded-lg transition-all text-[11px] cursor-pointer ${
+                      distributionViewMode === 'divisions'
+                        ? 'bg-slate-900 text-white shadow-xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    PLE Divisions
+                  </button>
+                  <button
+                    onClick={() => setDistributionViewMode('averages')}
+                    className={`px-3 py-1 rounded-lg transition-all text-[11px] cursor-pointer ${
+                      distributionViewMode === 'averages'
+                        ? 'bg-slate-900 text-white shadow-xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Class Score Avg
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-full h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  {distributionViewMode === 'divisions' ? (
+                    <BarChart data={classAcademicDistribution} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="className" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', color: '#fff', border: 'none', fontSize: '12px' }}
+                        formatter={(val: number) => [`${val} Pupils`, 'Pupil Count']}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      <Bar dataKey="DivI" stackId="a" fill="#10b981" name="Division I" />
+                      <Bar dataKey="DivII" stackId="a" fill="#3b82f6" name="Division II" />
+                      <Bar dataKey="DivIII" stackId="a" fill="#f59e0b" name="Division III" />
+                      <Bar dataKey="DivIV" stackId="a" fill="#f43f5e" name="Division IV & U" />
+                    </BarChart>
+                  ) : (
+                    <BarChart data={classAcademicDistribution} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="className" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis domain={[50, 100]} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', color: '#fff', border: 'none', fontSize: '12px' }}
+                        formatter={(val: number) => [`${val}% Average`, 'Mean Mark']}
+                      />
+                      <Bar dataKey="AvgScore" fill="#6366f1" radius={[6, 6, 0, 0]} name="Class Mean Score (%)" />
+                      <ReferenceLine y={75} stroke="#10b981" strokeDasharray="4 4" label={{ value: 'Distinction Benchmark (75%)', fill: '#10b981', fontSize: 10 }} />
+                    </BarChart>
+                  )}
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-3 mt-2 flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span>P.7 Candidate Distinction Rate: <strong className="text-slate-900 font-black">72.3% Division I</strong></span>
+              <button 
+                onClick={() => setActiveTab('marks')}
+                className="text-indigo-600 hover:underline font-extrabold flex items-center gap-0.5 cursor-pointer"
+              >
+                View Grade Ledger <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
+
         </div>
 
       </div>

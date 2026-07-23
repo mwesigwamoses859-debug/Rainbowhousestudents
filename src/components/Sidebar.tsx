@@ -5,10 +5,10 @@ import {
   Calendar, 
   FileSpreadsheet, 
   HeartHandshake, 
-  Megaphone, 
   Settings,
   LogOut,
-  Sparkles
+  Sparkles,
+  BookOpen
 } from 'lucide-react';
 import { Teacher } from '../types';
 
@@ -21,10 +21,11 @@ interface SidebarProps {
 
 export default function Sidebar({ activeTab, setActiveTab, teacher, onLogout }: SidebarProps) {
   
-  // Compact list mapping perfectly to the screenshot's exact labels and icons
+  // Compact list mapping perfectly to exact labels and icons
   const sidebarItems = [
     { id: 'dashboard', name: 'Dashboard', icon: Home },
     { id: 'classes', name: 'Students', icon: Users },
+    { id: 'subjects', name: 'Subject Portals', icon: BookOpen },
     { id: 'marks', name: 'Academics', icon: GraduationCap },
     { id: 'attendance', name: 'Attendance', icon: Calendar },
     { id: 'reports', name: 'Examinations', icon: FileSpreadsheet },

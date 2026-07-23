@@ -25,9 +25,11 @@ import {
   Smile,
   TrendingUp,
   TrendingDown,
-  Info
+  Info,
+  QrCode
 } from 'lucide-react';
 import { Student, Mark, ClassName } from '../types';
+import StudentQrCodeModal from './StudentQrCodeModal';
 import {
   ResponsiveContainer,
   LineChart,
@@ -144,6 +146,8 @@ export default function StudentProfileModal({
 
   if (!isOpen) return null;
 
+  const [showQrModal, setShowQrModal] = useState(false);
+
   // Filter marks for this specific student
   const studentMarks = marks.filter(m => m.studentId === student.id);
   const avgAcademicScore = studentMarks.length > 0 
@@ -237,6 +241,13 @@ export default function StudentProfileModal({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowQrModal(true)}
+              className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+            >
+              <QrCode className="h-3.5 w-3.5 text-slate-900" />
+              <span>Digital QR Code</span>
+            </button>
             <button
               onClick={() => setShowConfigThresholds(!showConfigThresholds)}
               className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all cursor-pointer border border-white/5"
@@ -400,6 +411,14 @@ export default function StudentProfileModal({
                     <span className="text-xs font-bold text-slate-700 block">{student.hasScholarship ? 'On Scholarship' : 'Self-Sponsored'}</span>
                   </div>
                 </div>
+
+                <button
+                  onClick={() => setShowQrModal(true)}
+                  className="w-full mt-4 py-2.5 px-4 bg-[#0b2d59] hover:bg-indigo-900 text-white rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-95"
+                >
+                  <QrCode className="h-4 w-4 text-amber-400" />
+                  <span>View Student QR Pass & Link</span>
+                </button>
               </div>
 
               {/* Bento cards details */}
@@ -1139,6 +1158,14 @@ export default function StudentProfileModal({
         </div>
 
       </div>
+
+      {/* Unique Student QR Code Modal */}
+      <StudentQrCodeModal
+        student={student}
+        isOpen={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        marks={marks}
+      />
     </div>
   );
 }
