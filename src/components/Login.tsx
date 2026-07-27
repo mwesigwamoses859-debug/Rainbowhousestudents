@@ -71,7 +71,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       });
       const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.message || 'That code could not be verified.');
-      onLoginSuccess(data.teacher);
+      onLoginSuccess({ ...data.teacher, authToken: data.token });
     } catch (err: any) {
       setError(err.message || 'Connection error. Please try again.');
     } finally {

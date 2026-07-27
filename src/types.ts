@@ -50,6 +50,7 @@ export interface Teacher {
   subjects: string[];
   classes: ClassName[];
   activeTerms?: (1 | 2 | 3)[];
+  authToken?: string;
 }
 
 export interface Subject {

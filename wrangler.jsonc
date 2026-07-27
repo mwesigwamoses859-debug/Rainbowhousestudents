@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "rainbowhousestudents",
+  "main": "cloudflare/worker.ts",
+  "compatibility_date": "2026-07-27",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "rainbow-house-students-db",
+      "database_id": "9797387c-888e-4822-9ee2-9b59e0c52667",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "EMAIL_FROM": "Rainbow House Portal <onboarding@resend.dev>"
+  }
+}

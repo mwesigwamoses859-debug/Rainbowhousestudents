@@ -221,10 +221,11 @@ export default function App() {
     setLoading(true);
     setError('');
     try {
+      const authHeaders = teacher?.authToken ? { Authorization: `Bearer ${teacher.authToken}` } : {};
       const [studentsRes, marksRes, teachersRes] = await Promise.all([
-        fetch('/api/students'),
-        fetch('/api/marks'),
-        fetch('/api/teachers')
+        fetch('/api/students', { headers: authHeaders }),
+        fetch('/api/marks', { headers: authHeaders }),
+        fetch('/api/teachers', { headers: authHeaders })
       ]);
 
       if (!studentsRes.ok || !marksRes.ok || !teachersRes.ok) {
