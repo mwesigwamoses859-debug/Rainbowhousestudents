@@ -1,11 +1,3 @@
-interface Env {
-  DB: any;
-  ASSETS: { fetch(request: Request): Promise<Response> };
-  RESEND_API_KEY: string;
-  SESSION_SECRET: string;
-  EMAIL_FROM: string;
-}
-
 type StaffRow = {
   username: string;
   name: string;
@@ -14,6 +6,11 @@ type StaffRow = {
   subjects: string;
   classes: string;
   active_terms: string;
+  password_hash?: string | null;
+  password_salt?: string | null;
+  password_iterations?: number;
+  failed_attempts?: number;
+  locked_until?: number;
 };
 
 const json = (data: unknown, status = 200) =>
@@ -23,6 +20,7 @@ const normalizeEmail = (value: unknown) => String(value || '').trim().toLowerCas
 const bytesToHex = (bytes: ArrayBuffer) =>
   [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join('');
 const textEncoder = new TextEncoder();
+const hexToBytes = (hex: string) => new Uint8Array(hex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []);
 
 async function hmac(secret: string, value: string) {
   const key = await crypto.subtle.importKey(
@@ -33,6 +31,32 @@ async function hmac(secret: string, value: string) {
     ['sign']
   );
   return bytesToHex(await crypto.subtle.sign('HMAC', key, textEncoder.encode(value)));
+}
+
+async function hashPassword(password: string, salt: Uint8Array, iterations = 210000) {
+  const material = await crypto.subtle.importKey('raw', textEncoder.encode(password), 'PBKDF2', false, ['deriveBits']);
+  return bytesToHex(await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
+    material,
+    256
+  ));
+}
+
+async function safeEqualHex(provided: string, expected: string) {
+  const providedBytes = hexToBytes(provided);
+  const expectedBytes = hexToBytes(expected);
+  return providedBytes.byteLength === expectedBytes.byteLength
+    ? crypto.subtle.timingSafeEqual(providedBytes, expectedBytes)
+    : !crypto.subtle.timingSafeEqual(providedBytes, providedBytes);
+}
+
+async function setPassword(env: Env, username: string, password: string) {
+  const salt = crypto.getRandomValues(new Uint8Array(24));
+  const iterations = 210000;
+  const passwordHash = await hashPassword(password, salt, iterations);
+  await env.DB.prepare(
+    'UPDATE staff SET password_hash = ?, password_salt = ?, password_iterations = ?, failed_attempts = 0, locked_until = 0 WHERE username = ?'
+  ).bind(passwordHash, bytesToHex(salt), iterations, username).run();
 }
 
 const encodeBase64Url = (value: string) =>
@@ -181,8 +205,52 @@ async function verifyCode(request: Request, env: Env) {
   return json({ success: true, teacher: toTeacher(staff), token: await issueSession(env, staff) });
 }
 
-async function api(request: Request, env: Env) {
+async function passwordLogin(request: Request, env: Env) {
+  const body = await readBody(request);
+  const username = String(body.username || '').trim().toLowerCase();
+  const password = String(body.password || '');
+  if (!username || password.length < 8) {
+    return json({ success: false, message: 'Enter your staff username and password.' }, 400);
+  }
+
+  const staff = await env.DB.prepare(
+    `SELECT username, name, email, role, subjects, classes, active_terms, password_hash, password_salt,
+            password_iterations, failed_attempts, locked_until
+     FROM staff WHERE username = ? COLLATE NOCASE AND active = 1`
+  ).bind(username).first() as StaffRow | null;
+  if (!staff) return json({ success: false, message: 'Invalid username or password.' }, 401);
+  if ((staff.locked_until || 0) > Date.now()) {
+    return json({ success: false, message: 'Account temporarily locked after repeated failed attempts. Try again later.' }, 423);
+  }
+
+  let valid = false;
+  if (staff.password_hash && staff.password_salt) {
+    const suppliedHash = await hashPassword(password, hexToBytes(staff.password_salt), staff.password_iterations || 210000);
+    valid = await safeEqualHex(suppliedHash, staff.password_hash);
+  } else if (staff.role === 'Headteacher' && env.ADMIN_BOOTSTRAP_PASSWORD) {
+    const [providedDigest, expectedDigest] = await Promise.all([
+      crypto.subtle.digest('SHA-256', textEncoder.encode(password)),
+      crypto.subtle.digest('SHA-256', textEncoder.encode(env.ADMIN_BOOTSTRAP_PASSWORD))
+    ]);
+    valid = crypto.subtle.timingSafeEqual(providedDigest, expectedDigest);
+    if (valid) await setPassword(env, staff.username, password);
+  }
+
+  if (!valid) {
+    const failures = (staff.failed_attempts || 0) + 1;
+    const lockedUntil = failures >= 5 ? Date.now() + 15 * 60 * 1000 : 0;
+    await env.DB.prepare('UPDATE staff SET failed_attempts = ?, locked_until = ? WHERE username = ?')
+      .bind(failures >= 5 ? 0 : failures, lockedUntil, staff.username).run();
+    return json({ success: false, message: 'Invalid username or password.' }, 401);
+  }
+
+  await env.DB.prepare('UPDATE staff SET failed_attempts = 0, locked_until = 0 WHERE username = ?').bind(staff.username).run();
+  return json({ success: true, teacher: toTeacher(staff), token: await issueSession(env, staff) });
+}
+
+async function api(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
+  if (request.method === 'POST' && url.pathname === '/api/auth/login') return passwordLogin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/auth/send-code') return sendCode(request, env);
   if (request.method === 'POST' && url.pathname === '/api/auth/verify-code') return verifyCode(request, env);
   if (request.method === 'GET' && url.pathname === '/api/health') return json({ ok: true, storage: 'D1' });
@@ -194,7 +262,37 @@ async function api(request: Request, env: Env) {
     const result = await env.DB.prepare(
       'SELECT username, name, email, role, subjects, classes, active_terms FROM staff WHERE active = 1 ORDER BY name'
     ).all();
-    return json(result.results.map(toTeacher));
+    return json((result.results as unknown as StaffRow[]).map(toTeacher));
+  }
+  if (request.method === 'POST' && url.pathname === '/api/teachers') {
+    if (session.role !== 'Headteacher' && session.role !== 'DOS') return json({ success: false, message: 'Administrator access required.' }, 403);
+    const body = await readBody(request);
+    const username = String(body.username || '').trim().toLowerCase();
+    const password = String(body.password || '');
+    const existing = await env.DB.prepare('SELECT username FROM staff WHERE username = ? COLLATE NOCASE').bind(username).first();
+    if (!/^[a-z0-9._-]{3,40}$/.test(username) || !body.name || (!existing && password.length < 8) || (password && password.length < 8)) {
+      return json({ success: false, message: 'Username, staff name and a password of at least 8 characters are required for new accounts.' }, 400);
+    }
+    const role = body.role === 'DOS' ? 'DOS' : body.role === 'Headteacher' ? 'Headteacher' : 'Subject Teacher';
+    await env.DB.prepare(
+      `INSERT INTO staff (username, name, email, role, subjects, classes, active_terms, active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+       ON CONFLICT(username) DO UPDATE SET name=excluded.name, email=excluded.email, role=excluded.role,
+         subjects=excluded.subjects, classes=excluded.classes, active_terms=excluded.active_terms, active=1`
+    ).bind(username, String(body.name), normalizeEmail(body.email), role, JSON.stringify(body.subjects || []),
+      JSON.stringify(body.classes || []), JSON.stringify(body.activeTerms || [1, 2, 3])).run();
+    if (password) await setPassword(env, username, password);
+    const saved = await env.DB.prepare(
+      'SELECT username, name, email, role, subjects, classes, active_terms FROM staff WHERE username = ?'
+    ).bind(username).first() as StaffRow;
+    return json(toTeacher(saved), 201);
+  }
+  const teacherMatch = url.pathname.match(/^\/api\/teachers\/([^/]+)$/);
+  if (teacherMatch && request.method === 'DELETE') {
+    if (session.role !== 'Headteacher') return json({ success: false, message: 'Headteacher access required.' }, 403);
+    if (teacherMatch[1] === session.sub) return json({ success: false, message: 'You cannot deactivate your own account.' }, 400);
+    await env.DB.prepare('UPDATE staff SET active = 0 WHERE username = ?').bind(teacherMatch[1]).run();
+    return json({ success: true });
   }
   if (request.method === 'GET' && url.pathname === '/api/students') {
     const result = await env.DB.prepare('SELECT payload FROM students ORDER BY created_at DESC').all();
@@ -281,7 +379,7 @@ async function api(request: Request, env: Env) {
         headers: request.headers,
         body: JSON.stringify(item)
       });
-      const result = await api(markRequest, env);
+      const result: Response = await api(markRequest, env);
       if (!result.ok) return result;
     }
     return json({ success: true, count: body.marks.length });

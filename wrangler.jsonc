@@ -3,6 +3,14 @@
   "name": "rainbowhousestudents",
   "main": "cloudflare/worker.ts",
   "compatibility_date": "2026-07-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "secrets": {
+    "required": ["SESSION_SECRET", "ADMIN_BOOTSTRAP_PASSWORD", "RESEND_API_KEY"]
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

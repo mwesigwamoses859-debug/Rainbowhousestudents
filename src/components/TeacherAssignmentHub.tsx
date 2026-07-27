@@ -50,6 +50,7 @@ export default function TeacherAssignmentHub({
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
+  const [selectedRole, setSelectedRole] = useState<'Headteacher' | 'DOS' | 'Subject Teacher'>('Subject Teacher');
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedClasses, setSelectedClasses] = useState<ClassName[]>([]);
   const [selectedTerms, setSelectedTerms] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
@@ -64,6 +65,7 @@ export default function TeacherAssignmentHub({
     setName('');
     setPassword('');
     setEmail('');
+    setSelectedRole('Subject Teacher');
     setSelectedSubjects([]);
     setSelectedClasses([]);
     setSelectedTerms([1, 2, 3]);
@@ -76,8 +78,9 @@ export default function TeacherAssignmentHub({
     setEditingTeacher(teacher);
     setUsername(teacher.username);
     setName(teacher.name);
-    setPassword((teacher as any).password || 'teacher123');
+    setPassword('');
     setEmail(teacher.email || `${teacher.username}@ashinaga.or.ug`);
+    setSelectedRole(teacher.role || 'Subject Teacher');
     setSelectedSubjects(teacher.subjects);
     setSelectedClasses(teacher.classes);
     setSelectedTerms(teacher.activeTerms || [1, 2, 3]);
@@ -118,6 +121,10 @@ export default function TeacherAssignmentHub({
       setStatus({ type: 'error', text: 'Username and Full Name are strictly required fields.' });
       return;
     }
+    if (!editingTeacher && password.trim().length < 8) {
+      setStatus({ type: 'error', text: 'New staff accounts require a password of at least 8 characters.' });
+      return;
+    }
 
     // Check username uniqueness if adding new
     if (!editingTeacher && teachers.some(t => t.username.toLowerCase() === username.trim().toLowerCase())) {
@@ -130,8 +137,9 @@ export default function TeacherAssignmentHub({
       await onAddOrUpdateTeacher({
         username: username.trim(),
         name: name.trim(),
-        password: password.trim() || 'teacher123',
+        password: password.trim(),
         email: email.trim() || `${username.trim()}@ashinaga.or.ug`,
+        role: selectedRole,
         subjects: selectedSubjects,
         classes: selectedClasses,
         activeTerms: selectedTerms
@@ -278,8 +286,8 @@ export default function TeacherAssignmentHub({
                   <span>Access Password</span>
                 </label>
                 <input
-                  type="text"
-                  placeholder="e.g. teacher123"
+                  type="password"
+                  placeholder={editingTeacher ? 'Leave blank to keep current password' : 'Minimum 8 characters'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-4 py-2.5 border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800"
@@ -300,7 +308,7 @@ export default function TeacherAssignmentHub({
 
               {/* Official Work Email */}
               <div>
-                <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase tracking-wider">Official Work Email (2FA Code Receiver)</label>
+                <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase tracking-wider">Official Work Email</label>
                 <input
                   type="email"
                   placeholder="e.g. florence@ashinaga.or.ug"
@@ -308,6 +316,18 @@ export default function TeacherAssignmentHub({
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-2.5 border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase tracking-wider">System Role</label>
+                <select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value as typeof selectedRole)}
+                  className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-xs font-semibold bg-white text-slate-800"
+                >
+                  <option value="Subject Teacher">Subject Teacher</option>
+                  <option value="DOS">Director of Studies (Admin)</option>
+                  <option value="Headteacher">Headteacher (Admin)</option>
+                </select>
               </div>
             </div>
 

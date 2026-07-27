@@ -277,7 +277,7 @@ export default function App() {
       if (!response.ok) throw new Error();
       
       // Refresh teachers list from server
-      const teachersResponse = await fetch('/api/teachers');
+      const teachersResponse = await fetch('/api/teachers', { headers: { Authorization: `Bearer ${teacher?.authToken || ''}` } });
       if (teachersResponse.ok) {
         const data = await teachersResponse.json();
         setTeachers(data);
@@ -299,6 +299,7 @@ export default function App() {
     try {
       const response = await fetch(`/api/teachers/${username}`, {
         method: 'DELETE',
+        headers: { Authorization: `Bearer ${teacher?.authToken || ''}` },
       });
       if (!response.ok) throw new Error();
       setTeachers(prev => prev.filter(t => t.username !== username));
@@ -312,7 +313,7 @@ export default function App() {
     try {
       const response = await fetch('/api/students/promote-bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
         body: JSON.stringify({ promotions }),
       });
 
