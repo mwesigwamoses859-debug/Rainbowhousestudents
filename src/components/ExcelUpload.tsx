@@ -29,7 +29,7 @@ import AshinagaLogo from './AshinagaLogo';
 
 interface ExcelUploadProps {
   students: Student[];
-  onBulkAddStudents: (students: any[]) => Promise<void>;
+  onBulkAddStudents: (students: any[]) => Promise<any>;
   onSuccessRedirect: () => void;
 }
 
@@ -661,7 +661,10 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
       
       let successMsg = `Successfully imported ${response?.count || 0} students into the school system!`;
       if (response?.skippedCount > 0) {
-        successMsg += ` ${response.skippedCount} duplicate name records were skipped to prevent repetitions.`;
+        const examples = (response.skipped || []).slice(0, 5)
+          .map((item: any) => `Row ${item.row}: ${item.name || 'Unnamed pupil'} — ${item.reason}`)
+          .join('; ');
+        successMsg += ` ${response.skippedCount} rows were skipped for review.${examples ? ` ${examples}` : ''}`;
       }
 
       setStatusMessage({ 
@@ -672,8 +675,8 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
       setTimeout(() => {
         onSuccessRedirect();
       }, 3000);
-    } catch (err) {
-      setStatusMessage({ type: 'error', text: 'Failed to import students. Please try again.' });
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err.message || 'Failed to import students. Please try again.' });
     } finally {
       setImporting(false);
     }

@@ -175,11 +175,9 @@ function editDistance(a: string, b: string) {
   return row[b.length];
 }
 
-async function findSimilarStudent(env: Env, candidate: Record<string, any>, excludeId?: string) {
-  const rows = await env.DB.prepare('SELECT payload FROM students').all();
+function findSimilarStudentInList(candidate: Record<string, any>, students: Record<string, any>[], excludeId?: string) {
   const target = normalizeName(`${candidate.surname || ''}${candidate.otherNames || ''}`);
-  for (const row of rows.results as any[]) {
-    const student = JSON.parse(row.payload);
+  for (const student of students) {
     if (student.id === excludeId) continue;
     const existing = normalizeName(`${student.surname || ''}${student.otherNames || ''}`);
     const sameBirthDate = candidate.dateOfBirth && student.dateOfBirth === candidate.dateOfBirth;
@@ -192,6 +190,15 @@ async function findSimilarStudent(env: Env, candidate: Record<string, any>, excl
     }
   }
   return null;
+}
+
+async function findSimilarStudent(env: Env, candidate: Record<string, any>, excludeId?: string) {
+  const rows = await env.DB.prepare('SELECT payload FROM students').all();
+  return findSimilarStudentInList(
+    candidate,
+    (rows.results as any[]).map(row => JSON.parse(row.payload)),
+    excludeId
+  );
 }
 
 function validateStudent(candidate: Record<string, any>) {
@@ -629,29 +636,44 @@ async function api(request: Request, env: Env): Promise<Response> {
     if (!isAdministrator(session.role)) return json({ success: false, message: 'Administrator access required.' }, 403);
     const body = await readBody(request);
     const candidates = Array.isArray(body) ? body : Array.isArray(body.students) ? body.students : [];
-    if (candidates.length === 0 || candidates.length > 1000) {
-      return json({ success: false, message: 'Bulk imports require between 1 and 1,000 pupils.' }, 400);
+    if (candidates.length === 0 || candidates.length > 500) {
+      return json({ success: false, message: 'Each bulk-import batch must contain between 1 and 500 pupils.' }, 400);
     }
+    const existingRows = await env.DB.prepare('SELECT payload FROM students').all();
+    const comparisonStudents = existingRows.results.map((row: any) => JSON.parse(row.payload));
     const students = [];
     const skipped = [];
-    for (const candidate of candidates) {
+    const insertStatements = [];
+    for (let rowIndex = 0; rowIndex < candidates.length; rowIndex += 1) {
+      const candidate = candidates[rowIndex];
       const validationError = validateStudent(candidate);
-      const duplicate = validationError ? null : await findSimilarStudent(env, candidate);
+      const duplicate = validationError ? null : findSimilarStudentInList(candidate, comparisonStudents);
       if (validationError || duplicate) {
         skipped.push({
+          row: rowIndex + 2,
           name: `${candidate.surname || ''} ${candidate.otherNames || ''}`.trim(),
-          reason: validationError || (duplicate?.kind === 'exact' ? 'Duplicate pupil' : 'Similar pupil requires review')
+          reason: validationError || (
+            duplicate?.kind === 'exact'
+              ? `Duplicate of ${duplicate.student.surname} ${duplicate.student.otherNames}`
+              : `Similar to ${duplicate?.student.surname} ${duplicate?.student.otherNames}; review before adding separately`
+          )
         });
         continue;
       }
       const student = { ...candidate, id: `st-${crypto.randomUUID()}` };
       const now = Date.now();
-      await env.DB.prepare('INSERT INTO students (id, payload, created_at, updated_at) VALUES (?, ?, ?, ?)')
-        .bind(student.id, JSON.stringify(student), now, now).run();
+      insertStatements.push(
+        env.DB.prepare('INSERT INTO students (id, payload, created_at, updated_at) VALUES (?, ?, ?, ?)')
+          .bind(student.id, JSON.stringify(student), now, now)
+      );
       students.push(student);
+      comparisonStudents.push(student);
+    }
+    for (let index = 0; index < insertStatements.length; index += 50) {
+      await env.DB.batch(insertStatements.slice(index, index + 50));
     }
     await writeAudit(env, request, session, 'STUDENTS_BULK_IMPORTED', 'student_import', `import-${Date.now()}`, undefined, { imported: students.length, skipped: skipped.length });
-    return json({ success: true, students, skipped, skippedCount: skipped.length }, 201);
+    return json({ success: true, count: students.length, students, skipped, skippedCount: skipped.length }, 201);
   }
   const studentIdMatch = url.pathname.match(/^\/api\/students\/([^/]+)$/);
   if (studentIdMatch && request.method === 'PUT') {

@@ -435,22 +435,38 @@ export default function App() {
 
   // Bulk student import
   const handleBulkAddStudents = async (importedStudents: any[]) => {
+    const batchSize = 200;
+    const imported: Student[] = [];
+    const skipped: any[] = [];
     try {
-      const response = await fetch('/api/students/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
-        body: JSON.stringify(importedStudents),
-      });
-
-      if (!response.ok) throw new Error();
-      const data = await response.json();
-
-      if (data.success) {
-        setStudents(prev => [...prev, ...data.students]);
+      for (let index = 0; index < importedStudents.length; index += batchSize) {
+        const batchNumber = Math.floor(index / batchSize) + 1;
+        const response = await fetch('/api/students/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
+          body: JSON.stringify(importedStudents.slice(index, index + batchSize)),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(`Batch ${batchNumber} failed: ${data.message || `server returned HTTP ${response.status}`}`);
+        }
+        imported.push(...(data.students || []));
+        skipped.push(...(data.skipped || []).map((item: any) => ({
+          ...item,
+          row: Number(item.row || 2) + index
+        })));
       }
-      return data;
-    } catch (err) {
-      alert('Bulk import transaction failed. Please ensure file formatting matches the template.');
+      setStudents(previous => [...previous, ...imported]);
+      return {
+        success: true,
+        count: imported.length,
+        students: imported,
+        skipped,
+        skippedCount: skipped.length
+      };
+    } catch (err: any) {
+      const partial = imported.length ? ` ${imported.length} pupils from earlier batches were imported successfully.` : '';
+      alert(`${err.message || 'Bulk import failed.'}${partial}`);
       throw err;
     }
   };
