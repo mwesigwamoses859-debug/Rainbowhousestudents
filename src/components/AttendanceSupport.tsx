@@ -18,7 +18,7 @@ import {
   UserCheck,
   Briefcase
 } from 'lucide-react';
-import { Student, ClassName } from '../types';
+import { Student, ClassName, Teacher, Mark } from '../types';
 import AshinagaLogo from './AshinagaLogo';
 
 interface SupportRecord {
@@ -42,9 +42,11 @@ interface AttendanceSupportProps {
   students: Student[];
   teacherClasses: ClassName[];
   isAdmin: boolean;
+  teacher: Teacher;
+  marks: Mark[];
 }
 
-export default function AttendanceSupport({ students, teacherClasses, isAdmin }: AttendanceSupportProps) {
+export default function AttendanceSupport({ students, teacherClasses, isAdmin, teacher, marks }: AttendanceSupportProps) {
   const [selectedClass, setSelectedClass] = useState<ClassName>('P.1');
   const [currentDate, setCurrentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [subTab, setSubTab] = useState<'attendance' | 'support'>('attendance');
@@ -71,15 +73,11 @@ export default function AttendanceSupport({ students, teacherClasses, isAdmin }:
     const fetchRecords = async () => {
       try {
         const [attRes, supRes] = await Promise.all([
-          fetch('/api/attendance'),
-          fetch('/api/support')
+          fetch('/api/attendance', { headers: { Authorization: `Bearer ${teacher.authToken || ''}` } }),
+          fetch('/api/support', { headers: { Authorization: `Bearer ${teacher.authToken || ''}` } })
         ]);
-        if (attRes.ok && supRes.ok) {
-          const attData = await attRes.json();
-          const supData = await supRes.json();
-          setAttendance(attData);
-          setSupportRecords(supData);
-        }
+        if (attRes.ok) setAttendance(await attRes.json());
+        if (supRes.ok) setSupportRecords(await supRes.json());
       } catch (err) {
         // Fallback mock
         console.log('Using local fallback for attendance and support');
@@ -94,6 +92,17 @@ export default function AttendanceSupport({ students, teacherClasses, isAdmin }:
   };
 
   const filteredStudents = students.filter(s => s.className === selectedClass);
+  const attendancePerformanceAlerts = filteredStudents.map(student => {
+    const pupilAttendance = attendance.filter(record => record.studentId === student.id);
+    const attendanceRate = pupilAttendance.length
+      ? Math.round((pupilAttendance.filter(record => record.status === 'present' || record.status === 'late').length / pupilAttendance.length) * 100)
+      : 100;
+    const pupilMarks = marks.filter(mark => mark.studentId === student.id);
+    const averageMark = pupilMarks.length
+      ? Math.round(pupilMarks.reduce((sum, mark) => sum + Number(mark.score || 0), 0) / pupilMarks.length)
+      : null;
+    return { student, attendanceRate, averageMark };
+  }).filter(item => item.attendanceRate < 85 || (item.averageMark !== null && item.averageMark < 50));
 
   // Manage daily attendance changes locally before saving
   const handleAttendanceChange = (studentId: string, status: 'present' | 'absent' | 'sick' | 'late') => {
@@ -125,7 +134,7 @@ export default function AttendanceSupport({ students, teacherClasses, isAdmin }:
 
       const res = await fetch('/api/attendance/bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher.authToken || ''}` },
         body: JSON.stringify({ records: recordsToSave })
       });
 
@@ -159,7 +168,7 @@ export default function AttendanceSupport({ students, teacherClasses, isAdmin }:
     try {
       const res = await fetch('/api/support', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher.authToken || ''}` },
         body: JSON.stringify(newRecord)
       });
       if (res.ok) {
@@ -229,6 +238,28 @@ export default function AttendanceSupport({ students, teacherClasses, isAdmin }:
           );
         })}
       </div>
+
+      <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-amber-600" />
+          <h2 className="text-sm font-black text-amber-950">Attendance and academic support alerts</h2>
+        </div>
+        <p className="mt-1 text-xs text-amber-800">
+          Pupils appear here when attendance is below 85% or their recorded academic average is below 50%.
+        </p>
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {attendancePerformanceAlerts.length ? attendancePerformanceAlerts.map(item => (
+            <div key={item.student.id} className="rounded-xl border border-amber-100 bg-white p-3">
+              <p className="text-xs font-black text-slate-900">{item.student.surname} {item.student.otherNames}</p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Attendance: <strong>{item.attendanceRate}%</strong> · Academic average: <strong>{item.averageMark ?? 'No marks'}{item.averageMark !== null ? '%' : ''}</strong>
+              </p>
+            </div>
+          )) : (
+            <p className="text-xs font-bold text-emerald-700">No attendance or academic-risk alerts for Class {selectedClass}.</p>
+          )}
+        </div>
+      </section>
 
       <div className="space-y-6">
         {/* Calendar Picker & Controls Banner */}

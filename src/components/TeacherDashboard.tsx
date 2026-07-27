@@ -50,7 +50,8 @@ export default function TeacherDashboard({ teacher, students, marks, setActiveTa
           <p className="mt-1 text-sm text-slate-500">Open your private grading workspace for assigned classes and subjects.</p>
           <div className="mt-5 space-y-3">
             {[
-              { tab: 'marks', title: 'Open my mark sheet', description: 'Record and update marks only for subjects and classes assigned to you', icon: GraduationCap }
+              { tab: 'marks', title: 'Open my mark sheet', description: 'Record and update marks only for subjects and classes assigned to you', icon: GraduationCap },
+              { tab: 'attendance', title: 'Take class attendance', description: 'Record daily attendance for pupils in your assigned classes', icon: CalendarCheck }
             ].map(({ tab, title, description, icon: Icon }) => (
               <button key={tab} onClick={() => setActiveTab(tab)} className="flex w-full items-center gap-4 rounded-2xl border border-slate-100 p-4 text-left transition hover:border-indigo-200 hover:bg-indigo-50/50">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700"><Icon className="h-5 w-5" /></span>

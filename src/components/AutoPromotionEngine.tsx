@@ -19,7 +19,7 @@ import AshinagaLogo from './AshinagaLogo';
 interface AutoPromotionEngineProps {
   students: Student[];
   marks: Mark[];
-  onPromoteStudents: (promotions: { studentId: string; nextClassName: any; hasScholarship?: boolean }[]) => Promise<void>;
+  onPromoteStudents: (promotions: { studentId: string; nextClassName: any; hasScholarship?: boolean; reason?: string }[], academicYear?: number) => Promise<void>;
   isAdmin: boolean;
 }
 
@@ -159,10 +159,11 @@ export default function AutoPromotionEngine({
       const promotions = eligibleList.map(item => ({
         studentId: item.student.id,
         nextClassName: item.nextClass,
-        hasScholarship: scholarshipAwards[item.student.id] !== undefined ? scholarshipAwards[item.student.id] : item.student.hasScholarship
+        hasScholarship: scholarshipAwards[item.student.id] !== undefined ? scholarshipAwards[item.student.id] : item.student.hasScholarship,
+        reason: item.reason
       }));
 
-      await onPromoteStudents(promotions);
+      await onPromoteStudents(promotions, selectedYear);
       setSuccessMessage(`Success! Automatically promoted ${promotions.length} students of Class ${selectedClass} to ${getNextClass(selectedClass)}.`);
       setTimeout(() => {
         setSuccessMessage('');

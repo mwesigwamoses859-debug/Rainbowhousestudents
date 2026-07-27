@@ -50,7 +50,15 @@ export interface Teacher {
   subjects: string[];
   classes: ClassName[];
   activeTerms?: (1 | 2 | 3)[];
+  assignments?: TeacherAssignment[];
+  mustChangePassword?: boolean;
   authToken?: string;
+}
+
+export interface TeacherAssignment {
+  className: ClassName;
+  subject: string;
+  activeTerms: (1 | 2 | 3)[];
 }
 
 export interface Subject {

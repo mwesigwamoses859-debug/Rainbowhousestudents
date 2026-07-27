@@ -30,11 +30,13 @@ export default function Sidebar({ activeTab, setActiveTab, teacher, onLogout }: 
     { id: 'attendance', name: 'Attendance', icon: Calendar },
     { id: 'reports', name: 'Examinations', icon: FileSpreadsheet },
     { id: 'ai-chat', name: 'AI Assistant', icon: Sparkles },
+    { id: 'operations', name: 'School Controls', icon: Settings },
     { id: 'upload', name: 'Settings', icon: Settings },
   ];
   const teacherItems = [
     { id: 'dashboard', name: 'My Desk', icon: Home },
     { id: 'marks', name: 'My Mark Sheet', icon: GraduationCap },
+    { id: 'attendance', name: 'My Attendance', icon: Calendar },
   ];
   const sidebarItems = teacher.role === 'Headteacher' || teacher.role === 'DOS' ? adminItems : teacherItems;
 

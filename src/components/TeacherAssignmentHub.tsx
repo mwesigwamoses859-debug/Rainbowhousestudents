@@ -14,7 +14,7 @@ import {
   Square
 } from 'lucide-react';
 import { Teacher, ClassName } from '../types';
-import { ALL_SUBJECTS } from '../curriculum';
+import { ALL_SUBJECTS, getSubjectsForClass, isSubjectForClass } from '../curriculum';
 import AshinagaLogo from './AshinagaLogo';
 
 interface TeacherAssignmentHubProps {
@@ -47,6 +47,7 @@ export default function TeacherAssignmentHub({
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedClasses, setSelectedClasses] = useState<ClassName[]>([]);
   const [selectedTerms, setSelectedTerms] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
+  const [selectedAssignmentKeys, setSelectedAssignmentKeys] = useState<string[]>([]);
   
   const [status, setStatus] = useState({ type: '', text: '' });
   const [loading, setLoading] = useState(false);
@@ -62,6 +63,7 @@ export default function TeacherAssignmentHub({
     setSelectedSubjects([]);
     setSelectedClasses([]);
     setSelectedTerms([1, 2, 3]);
+    setSelectedAssignmentKeys([]);
     setShowForm(true);
     setStatus({ type: '', text: '' });
   };
@@ -77,6 +79,15 @@ export default function TeacherAssignmentHub({
     setSelectedSubjects(teacher.subjects);
     setSelectedClasses(teacher.classes);
     setSelectedTerms(teacher.activeTerms || [1, 2, 3]);
+    setSelectedAssignmentKeys(
+      teacher.assignments?.length
+        ? teacher.assignments.map(item => `${item.className}|${item.subject}`)
+        : teacher.classes.flatMap(className =>
+          teacher.subjects
+            .filter(subject => isSubjectForClass(className, subject))
+            .map(subject => `${className}|${subject}`)
+        )
+    );
     setShowForm(true);
     setStatus({ type: '', text: '' });
   };
@@ -85,8 +96,15 @@ export default function TeacherAssignmentHub({
   const handleToggleSubject = (subject: string) => {
     if (selectedSubjects.includes(subject)) {
       setSelectedSubjects(prev => prev.filter(s => s !== subject));
+      setSelectedAssignmentKeys(prev => prev.filter(key => !key.endsWith(`|${subject}`)));
     } else {
       setSelectedSubjects(prev => [...prev, subject]);
+      setSelectedAssignmentKeys(prev => [...new Set([
+        ...prev,
+        ...selectedClasses
+          .filter(className => isSubjectForClass(className, subject))
+          .map(className => `${className}|${subject}`)
+      ])]);
     }
   };
 
@@ -94,9 +112,21 @@ export default function TeacherAssignmentHub({
   const handleToggleClass = (className: ClassName) => {
     if (selectedClasses.includes(className)) {
       setSelectedClasses(prev => prev.filter(c => c !== className));
+      setSelectedAssignmentKeys(prev => prev.filter(key => !key.startsWith(`${className}|`)));
     } else {
       setSelectedClasses(prev => [...prev, className]);
+      setSelectedAssignmentKeys(prev => [...new Set([
+        ...prev,
+        ...selectedSubjects
+          .filter(subject => isSubjectForClass(className, subject))
+          .map(subject => `${className}|${subject}`)
+      ])]);
     }
+  };
+
+  const handleToggleExactAssignment = (className: ClassName, subject: string) => {
+    const key = `${className}|${subject}`;
+    setSelectedAssignmentKeys(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key]);
   };
 
   // Toggle active term selection
@@ -118,6 +148,10 @@ export default function TeacherAssignmentHub({
       setStatus({ type: 'error', text: 'New staff accounts require a password of at least 8 characters.' });
       return;
     }
+    if (selectedRole === 'Subject Teacher' && selectedAssignmentKeys.length === 0) {
+      setStatus({ type: 'error', text: 'Select at least one exact class and subject assignment.' });
+      return;
+    }
 
     // Check username uniqueness if adding new
     if (!editingTeacher && teachers.some(t => t.username.toLowerCase() === username.trim().toLowerCase())) {
@@ -136,6 +170,11 @@ export default function TeacherAssignmentHub({
         subjects: selectedSubjects,
         classes: selectedClasses,
         activeTerms: selectedTerms
+        ,
+        assignments: selectedAssignmentKeys.map(key => {
+          const [className, subject] = key.split('|');
+          return { className, subject, activeTerms: selectedTerms };
+        })
       });
       
       setStatus({ 
@@ -382,6 +421,50 @@ export default function TeacherAssignmentHub({
                 })}
               </div>
             </div>
+
+            {selectedRole === 'Subject Teacher' && selectedClasses.length > 0 && (
+              <div className="rounded-2xl border-2 border-indigo-100 bg-indigo-50/30 p-4">
+                <div className="mb-4">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-indigo-900">Exact class–subject permissions</h3>
+                  <p className="mt-1 text-[11px] text-indigo-700">
+                    Uncheck any combination this teacher must not access. For example, Mathematics in P.5 can be enabled while Mathematics in P.6 remains disabled.
+                  </p>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {selectedClasses.map(className => (
+                    <div key={className} className="rounded-xl border border-indigo-100 bg-white p-3">
+                      <p className="mb-2 text-xs font-black text-slate-800">Class {className}</p>
+                      <div className="space-y-1.5">
+                        {getSubjectsForClass(className)
+                          .filter(subject => selectedSubjects.includes(subject))
+                          .map(subject => {
+                            const key = `${className}|${subject}`;
+                            const checked = selectedAssignmentKeys.includes(key);
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => handleToggleExactAssignment(className, subject)}
+                                className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-[11px] font-bold ${
+                                  checked
+                                    ? 'border-indigo-300 bg-indigo-50 text-indigo-900'
+                                    : 'border-slate-200 bg-white text-slate-400'
+                                }`}
+                              >
+                                {checked ? <CheckSquare className="h-4 w-4 text-indigo-600" /> : <Square className="h-4 w-4" />}
+                                {subject}
+                              </button>
+                            );
+                          })}
+                        {!getSubjectsForClass(className).some(subject => selectedSubjects.includes(subject)) && (
+                          <p className="text-[11px] italic text-amber-600">Choose at least one subject offered in {className}.</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Authorized Terms Selection */}
             <div>

@@ -4,6 +4,8 @@ import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import TeacherDashboard from './components/TeacherDashboard';
+import SchoolOperationsCenter from './components/SchoolOperationsCenter';
+import ForcePasswordChange from './components/ForcePasswordChange';
 import ClassList from './components/ClassList';
 import MarkEntry from './components/MarkEntry';
 import ReportCardView from './components/ReportCardView';
@@ -51,7 +53,8 @@ import {
   FileText,
   Shield,
   ShieldCheck,
-  FileKey
+  FileKey,
+  Settings
 } from 'lucide-react';
 
 export default function App() {
@@ -265,6 +268,22 @@ export default function App() {
     localStorage.removeItem('school_sms_teacher');
   };
 
+  useEffect(() => {
+    if (!teacher) return;
+    let timeout: ReturnType<typeof setTimeout>;
+    const resetTimeout = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(handleLogout, 30 * 60 * 1000);
+    };
+    const events = ['pointerdown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(event => window.addEventListener(event, resetTimeout, { passive: true }));
+    resetTimeout();
+    return () => {
+      clearTimeout(timeout);
+      events.forEach(event => window.removeEventListener(event, resetTimeout));
+    };
+  }, [teacher]);
+
   // Teacher Assignments
   const handleAddOrUpdateTeacher = async (teacherData: any) => {
     try {
@@ -274,7 +293,10 @@ export default function App() {
         body: JSON.stringify(teacherData),
       });
 
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || 'Failed to register or update teacher.');
+      }
       
       // Refresh teachers list from server
       const teachersResponse = await fetch('/api/teachers', { headers: { Authorization: `Bearer ${teacher?.authToken || ''}` } });
@@ -282,8 +304,8 @@ export default function App() {
         const data = await teachersResponse.json();
         setTeachers(data);
       }
-    } catch (err) {
-      alert('Failed to register or update teacher.');
+    } catch (err: any) {
+      alert(err.message || 'Failed to register or update teacher.');
       throw err;
     }
   };
@@ -309,12 +331,12 @@ export default function App() {
   };
 
   // Bulk / automatic student promotion
-  const handlePromoteStudents = async (promotions: { studentId: string; nextClassName: any }[]) => {
+  const handlePromoteStudents = async (promotions: { studentId: string; nextClassName: any; reason?: string }[], academicYear?: number) => {
     try {
       const response = await fetch('/api/students/promote-bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
-        body: JSON.stringify({ promotions }),
+        body: JSON.stringify({ promotions, academicYear }),
       });
 
       if (!response.ok) throw new Error();
@@ -334,7 +356,7 @@ export default function App() {
   // Student Transactions
   const handleAddStudent = async (studentData: Omit<Student, 'id'>) => {
     try {
-      const response = await fetch('/api/students', {
+      let response = await fetch('/api/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
         body: JSON.stringify(studentData),
@@ -342,6 +364,23 @@ export default function App() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        if (response.status === 409 && errorData.code === 'DUPLICATE_STUDENT' && errorData.matchStudent) {
+          const existingName = `${errorData.matchStudent.surname} ${errorData.matchStudent.otherNames}`.trim();
+          if (errorData.message?.includes('similar') && window.confirm(
+            `${errorData.message}\n\nExisting pupil: ${existingName}, ${errorData.matchStudent.className}.\n\nCreate a separate pupil anyway?`
+          )) {
+            response = await fetch('/api/students', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
+              body: JSON.stringify({ ...studentData, confirmSimilar: true }),
+            });
+            if (response.ok) {
+              const addedStudent = await response.json();
+              setStudents(previous => [...previous, addedStudent]);
+              return;
+            }
+          }
+        }
         throw new Error(errorData.message || 'Failed to register student.');
       }
       const addedStudent = await response.json();
@@ -382,6 +421,7 @@ export default function App() {
     try {
       const response = await fetch(`/api/students/${id}`, {
         method: 'DELETE',
+        headers: { Authorization: `Bearer ${teacher?.authToken || ''}` },
       });
 
       if (!response.ok) throw new Error();
@@ -398,7 +438,7 @@ export default function App() {
     try {
       const response = await fetch('/api/students/bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
         body: JSON.stringify(importedStudents),
       });
 
@@ -452,7 +492,7 @@ export default function App() {
 
   // Custom Navigation setter to sync subtabs
   const handleSetTab = (tab: string) => {
-    const permittedTab = teacher?.role === 'Subject Teacher' && !['dashboard', 'marks'].includes(tab)
+    const permittedTab = teacher?.role === 'Subject Teacher' && !['dashboard', 'marks', 'attendance'].includes(tab)
       ? 'marks'
       : tab;
     setActiveTab(permittedTab);
@@ -465,6 +505,18 @@ export default function App() {
   if (!teacher) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
+  if (teacher.mustChangePassword) {
+    return (
+      <ForcePasswordChange
+        teacher={teacher}
+        onLogout={handleLogout}
+        onComplete={updatedTeacher => {
+          setTeacher(updatedTeacher);
+          localStorage.setItem('school_sms_teacher', JSON.stringify(updatedTeacher));
+        }}
+      />
+    );
+  }
 
   const isAdmin = teacher.role === 'Headteacher' || teacher.role === 'DOS';
   const primaryTabs = isAdmin
@@ -473,10 +525,12 @@ export default function App() {
       { id: 'classes', name: 'Students', icon: Users },
       { id: 'marks', name: 'Academics', icon: GraduationCap },
       { id: 'reports', name: 'Reports', icon: FileSpreadsheet },
+      { id: 'operations', name: 'Controls', icon: Settings },
     ]
     : [
       { id: 'dashboard', name: 'My Desk', icon: LayoutDashboard },
       { id: 'marks', name: 'My Mark Sheet', icon: GraduationCap },
+      { id: 'attendance', name: 'Attendance', icon: Calendar },
     ];
 
   const activeTeacherClasses = currentRole === 'administrator' || currentRole === 'head_teacher' || currentRole === 'bursar'
@@ -1152,7 +1206,13 @@ export default function App() {
                   students={students}
                   teacherClasses={teacher.classes}
                   isAdmin={isAdmin}
+                  teacher={teacher}
+                  marks={marks}
                 />
+              )}
+
+              {activeTab === 'operations' && isAdmin && (
+                <SchoolOperationsCenter teacher={teacher} />
               )}
 
               {/* AI Assistant Tab */}
