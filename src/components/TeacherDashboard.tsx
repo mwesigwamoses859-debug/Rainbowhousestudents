@@ -1,4 +1,4 @@
-import { BookOpen, CalendarCheck, ChevronRight, ClipboardCheck, GraduationCap, Users } from 'lucide-react';
+import { CalendarCheck, ChevronRight, ClipboardCheck, GraduationCap, Users } from 'lucide-react';
 import { Mark, Student, Teacher } from '../types';
 
 interface TeacherDashboardProps {
@@ -46,13 +46,11 @@ export default function TeacherDashboard({ teacher, students, marks, setActiveTa
 
       <section className="mt-7 grid gap-5 lg:grid-cols-2">
         <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-black text-slate-900">Today’s teaching tools</h2>
-          <p className="mt-1 text-sm text-slate-500">Open the work areas you use most.</p>
+          <h2 className="text-lg font-black text-slate-900">My mark sheet</h2>
+          <p className="mt-1 text-sm text-slate-500">Open your private grading workspace for assigned classes and subjects.</p>
           <div className="mt-5 space-y-3">
             {[
-              { tab: 'subjects', title: 'Subject portals', description: 'Open your assigned subject workspace', icon: BookOpen },
-              { tab: 'marks', title: 'Enter assessments', description: 'Record BOT, MOT and EOT results', icon: GraduationCap },
-              { tab: 'attendance', title: 'Take attendance', description: 'Update today’s class register', icon: CalendarCheck }
+              { tab: 'marks', title: 'Open my mark sheet', description: 'Record and update marks only for subjects and classes assigned to you', icon: GraduationCap }
             ].map(({ tab, title, description, icon: Icon }) => (
               <button key={tab} onClick={() => setActiveTab(tab)} className="flex w-full items-center gap-4 rounded-2xl border border-slate-100 p-4 text-left transition hover:border-indigo-200 hover:bg-indigo-50/50">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700"><Icon className="h-5 w-5" /></span>

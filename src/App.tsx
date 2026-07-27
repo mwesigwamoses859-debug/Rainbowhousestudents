@@ -431,7 +431,9 @@ export default function App() {
       if (!response.ok) throw new Error();
 
       // Refresh marks list from server to ensure accurate syncing
-      const marksResponse = await fetch('/api/marks');
+      const marksResponse = await fetch('/api/marks', {
+        headers: { Authorization: `Bearer ${teacher?.authToken || ''}` }
+      });
       if (marksResponse.ok) {
         const marksData = await marksResponse.json();
         setMarks(marksData);
@@ -450,10 +452,13 @@ export default function App() {
 
   // Custom Navigation setter to sync subtabs
   const handleSetTab = (tab: string) => {
-    setActiveTab(tab);
-    if (tab === 'classes') setStudentsSubTab('list');
-    if (tab === 'marks') setAcademicsSubTab('marks');
-    if (tab === 'reports') setExamsSubTab('reports');
+    const permittedTab = teacher?.role === 'Subject Teacher' && !['dashboard', 'marks'].includes(tab)
+      ? 'marks'
+      : tab;
+    setActiveTab(permittedTab);
+    if (permittedTab === 'classes') setStudentsSubTab('list');
+    if (permittedTab === 'marks') setAcademicsSubTab('marks');
+    if (permittedTab === 'reports') setExamsSubTab('reports');
   };
 
   // If not logged in, force Login screen
@@ -462,6 +467,17 @@ export default function App() {
   }
 
   const isAdmin = teacher.role === 'Headteacher' || teacher.role === 'DOS';
+  const primaryTabs = isAdmin
+    ? [
+      { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
+      { id: 'classes', name: 'Students', icon: Users },
+      { id: 'marks', name: 'Academics', icon: GraduationCap },
+      { id: 'reports', name: 'Reports', icon: FileSpreadsheet },
+    ]
+    : [
+      { id: 'dashboard', name: 'My Desk', icon: LayoutDashboard },
+      { id: 'marks', name: 'My Mark Sheet', icon: GraduationCap },
+    ];
 
   const activeTeacherClasses = currentRole === 'administrator' || currentRole === 'head_teacher' || currentRole === 'bursar'
     ? ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'] as ClassName[]
@@ -639,12 +655,7 @@ export default function App() {
 
         {/* Center Section: Main Navigation Tabs */}
         <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-          {[
-            { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
-            { id: 'classes', name: 'Students', icon: Users },
-            { id: 'marks', name: 'Academics', icon: GraduationCap },
-            { id: 'reports', name: 'Reports', icon: FileSpreadsheet },
-          ].map((tab) => {
+          {primaryTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id || 
               (tab.id === 'classes' && activeTab === 'upload') ||
@@ -915,12 +926,15 @@ export default function App() {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${teacher?.authToken || ''}`,
                         'x-teacher-username': teacher?.username || 'admin'
                       },
                       body: JSON.stringify({ marks: updatedMarksList })
                     });
                     if (res.ok) {
-                      const freshMarksRes = await fetch('/api/marks');
+                      const freshMarksRes = await fetch('/api/marks', {
+                        headers: { Authorization: `Bearer ${teacher?.authToken || ''}` }
+                      });
                       if (freshMarksRes.ok) {
                         const freshMarks = await freshMarksRes.json();
                         setMarks(freshMarks);
@@ -937,7 +951,7 @@ export default function App() {
               {activeTab === 'marks' && (
                 <div className="p-8 space-y-6">
                   {/* Secondary Inner Toggles */}
-                  <div className="flex flex-wrap bg-white/80 p-1 rounded-xl gap-1 self-start w-fit border border-slate-200 no-print">
+                  <div className={`${isAdmin ? 'flex' : 'hidden'} flex-wrap bg-white/80 p-1 rounded-xl gap-1 self-start w-fit border border-slate-200 no-print`}>
                     <button
                       onClick={() => setAcademicsSubTab('marks')}
                       className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -995,7 +1009,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {academicsSubTab === 'marks' ? (
+                  {!isAdmin || academicsSubTab === 'marks' ? (
                     <MarkEntry 
                       students={students}
                       marks={marks}
@@ -1292,20 +1306,17 @@ export default function App() {
       )}
 
       {/* Global Floating Quick Actions Button (FAB) */}
-      <QuickActionFAB 
-        onAddStudent={handleQuickAddStudent}
-        onRegisterMark={handleQuickRegisterMark}
-        onGenerateIdCard={handleQuickGenerateIdCard}
-      />
+      {isAdmin && (
+        <QuickActionFAB 
+          onAddStudent={handleQuickAddStudent}
+          onRegisterMark={handleQuickRegisterMark}
+          onGenerateIdCard={handleQuickGenerateIdCard}
+        />
+      )}
 
       {/* Ergonomic Mobile Bottom Tab Navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#06182c] border-t border-[#0f243c] h-16 flex justify-around items-center px-2 shadow-[0_-5px_20px_rgba(0,0,0,0.3)] no-print">
-        {[
-          { id: 'dashboard', name: 'Dashboard', icon: Home, action: () => handleSetTab('dashboard') },
-          { id: 'classes', name: 'Students', icon: Users, action: () => handleSetTab('classes') },
-          { id: 'marks', name: 'Academics', icon: GraduationCap, action: () => handleSetTab('marks') },
-          { id: 'reports', name: 'Reports', icon: FileSpreadsheet, action: () => handleSetTab('reports') },
-        ].map((tab) => {
+        {primaryTabs.map((item) => ({ ...item, action: () => handleSetTab(item.id) })).map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id || 
             (tab.id === 'classes' && activeTab === 'upload') ||

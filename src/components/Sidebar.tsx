@@ -34,12 +34,7 @@ export default function Sidebar({ activeTab, setActiveTab, teacher, onLogout }: 
   ];
   const teacherItems = [
     { id: 'dashboard', name: 'My Desk', icon: Home },
-    { id: 'classes', name: 'My Students', icon: Users },
-    { id: 'subjects', name: 'My Subjects', icon: BookOpen },
-    { id: 'marks', name: 'Assessments', icon: GraduationCap },
-    { id: 'attendance', name: 'Attendance', icon: Calendar },
-    { id: 'reports', name: 'Class Reports', icon: FileSpreadsheet },
-    { id: 'ai-chat', name: 'Teaching Assistant', icon: Sparkles },
+    { id: 'marks', name: 'My Mark Sheet', icon: GraduationCap },
   ];
   const sidebarItems = teacher.role === 'Headteacher' || teacher.role === 'DOS' ? adminItems : teacherItems;
 

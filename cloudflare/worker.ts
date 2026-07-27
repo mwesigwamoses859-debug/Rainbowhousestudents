@@ -33,7 +33,7 @@ async function hmac(secret: string, value: string) {
   return bytesToHex(await crypto.subtle.sign('HMAC', key, textEncoder.encode(value)));
 }
 
-async function hashPassword(password: string, salt: Uint8Array, iterations = 210000) {
+async function hashPassword(password: string, salt: Uint8Array, iterations = 100000) {
   const material = await crypto.subtle.importKey('raw', textEncoder.encode(password), 'PBKDF2', false, ['deriveBits']);
   return bytesToHex(await crypto.subtle.deriveBits(
     { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
@@ -52,7 +52,7 @@ async function safeEqualHex(provided: string, expected: string) {
 
 async function setPassword(env: Env, username: string, password: string) {
   const salt = crypto.getRandomValues(new Uint8Array(24));
-  const iterations = 210000;
+  const iterations = 100000;
   const passwordHash = await hashPassword(password, salt, iterations);
   await env.DB.prepare(
     'UPDATE staff SET password_hash = ?, password_salt = ?, password_iterations = ?, failed_attempts = 0, locked_until = 0 WHERE username = ?'
@@ -225,7 +225,7 @@ async function passwordLogin(request: Request, env: Env) {
 
   let valid = false;
   if (staff.password_hash && staff.password_salt) {
-    const suppliedHash = await hashPassword(password, hexToBytes(staff.password_salt), staff.password_iterations || 210000);
+    const suppliedHash = await hashPassword(password, hexToBytes(staff.password_salt), staff.password_iterations || 100000);
     valid = await safeEqualHex(suppliedHash, staff.password_hash);
   } else if (staff.role === 'Headteacher' && env.ADMIN_BOOTSTRAP_PASSWORD) {
     const [providedDigest, expectedDigest] = await Promise.all([
@@ -259,9 +259,13 @@ async function api(request: Request, env: Env): Promise<Response> {
   if (!session) return json({ success: false, message: 'Your session has expired. Please sign in again.' }, 401);
 
   if (request.method === 'GET' && url.pathname === '/api/teachers') {
-    const result = await env.DB.prepare(
-      'SELECT username, name, email, role, subjects, classes, active_terms FROM staff WHERE active = 1 ORDER BY name'
-    ).all();
+    const result = session.role === 'Subject Teacher'
+      ? await env.DB.prepare(
+        'SELECT username, name, email, role, subjects, classes, active_terms FROM staff WHERE username = ? AND active = 1'
+      ).bind(session.sub).all()
+      : await env.DB.prepare(
+        'SELECT username, name, email, role, subjects, classes, active_terms FROM staff WHERE active = 1 ORDER BY name'
+      ).all();
     return json((result.results as unknown as StaffRow[]).map(toTeacher));
   }
   if (request.method === 'POST' && url.pathname === '/api/teachers') {
@@ -296,11 +300,26 @@ async function api(request: Request, env: Env): Promise<Response> {
   }
   if (request.method === 'GET' && url.pathname === '/api/students') {
     const result = await env.DB.prepare('SELECT payload FROM students ORDER BY created_at DESC').all();
-    return json(result.results.map((row: any) => JSON.parse(row.payload)));
+    const students = result.results.map((row: any) => JSON.parse(row.payload));
+    if (session.role !== 'Subject Teacher') return json(students);
+    const staff = await env.DB.prepare('SELECT classes FROM staff WHERE username = ?').bind(session.sub).first() as any;
+    const classes = JSON.parse(staff?.classes || '[]');
+    return json(students.filter((student: any) => classes.includes(student.className)));
   }
   if (request.method === 'GET' && url.pathname === '/api/marks') {
     const result = await env.DB.prepare('SELECT payload FROM marks ORDER BY updated_at DESC').all();
-    return json(result.results.map((row: any) => JSON.parse(row.payload)));
+    const marks = result.results.map((row: any) => JSON.parse(row.payload));
+    if (session.role !== 'Subject Teacher') return json(marks);
+    const staff = await env.DB.prepare('SELECT subjects, classes FROM staff WHERE username = ?').bind(session.sub).first() as any;
+    const subjects = JSON.parse(staff?.subjects || '[]');
+    const classes = JSON.parse(staff?.classes || '[]');
+    const studentsResult = await env.DB.prepare('SELECT id, payload FROM students').all();
+    const permittedStudentIds = new Set(
+      studentsResult.results
+        .filter((row: any) => classes.includes(JSON.parse(row.payload).className))
+        .map((row: any) => row.id)
+    );
+    return json(marks.filter((mark: any) => subjects.includes(mark.subject) && permittedStudentIds.has(mark.studentId)));
   }
   if (request.method === 'POST' && url.pathname === '/api/students') {
     if (session.role !== 'Headteacher' && session.role !== 'DOS') return json({ success: false, message: 'Administrator access required.' }, 403);
@@ -354,14 +373,19 @@ async function api(request: Request, env: Env): Promise<Response> {
   }
   if (request.method === 'POST' && url.pathname === '/api/marks') {
     const body = await readBody(request);
-    const staff = await env.DB.prepare('SELECT role, subjects, classes FROM staff WHERE username = ?').bind(session.sub).first() as any;
+    const staff = await env.DB.prepare('SELECT role, subjects, classes, active_terms FROM staff WHERE username = ?').bind(session.sub).first() as any;
     const studentRow = await env.DB.prepare('SELECT payload FROM students WHERE id = ?').bind(body.studentId).first() as any;
     if (!studentRow) return json({ success: false, message: 'Student not found.' }, 404);
     const student = JSON.parse(studentRow.payload);
     const subjects = JSON.parse(staff.subjects || '[]');
     const classes = JSON.parse(staff.classes || '[]');
-    if (staff.role === 'Subject Teacher' && (!subjects.includes(body.subject) || !classes.includes(student.className))) {
-      return json({ success: false, message: 'This class or subject is not assigned to you.' }, 403);
+    const activeTerms = JSON.parse(staff.active_terms || '[1,2,3]');
+    if (staff.role === 'Subject Teacher' && (
+      !subjects.includes(body.subject)
+      || !classes.includes(student.className)
+      || !activeTerms.includes(Number(body.term))
+    )) {
+      return json({ success: false, message: 'This class, subject or term is not assigned to you.' }, 403);
     }
     const mark: Record<string, any> = { ...body, id: body.id || `mk-${crypto.randomUUID()}` };
     await env.DB.prepare(
