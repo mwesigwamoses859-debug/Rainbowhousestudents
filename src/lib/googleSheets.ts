@@ -112,7 +112,8 @@ export function mapSheetRowsToStudents(rows: any[][]): Student[] {
       'class', 'classname', 'classlevel', 'grade', 'level',
       'yearofentry', 'entryyear', 'admissionyear',
       'zone', 'address', 'village', 'residence',
-      'guardian', 'parent', 'guardianname',
+      'guardian', 'parent', 'guardianname', 'guardiansname', 'relationship', 'contact1',
+      'contact2', 'communityworker', 'nextofkin', 'noinhousehold', 'deceased', 'causeofdeath', 'school',
       'scholarship', 'sponsored'
     ];
 
@@ -153,9 +154,17 @@ export function mapSheetRowsToStudents(rows: any[][]): Student[] {
     yearOfEntry: -1,
     guardianName: -1,
     guardianContact: -1,
+    guardianRelationship: -1,
+    guardianContact2: -1,
     communityWorker: -1,
     workerContact: -1,
     zoneInNansana: -1,
+    nextOfKin: -1,
+    nextOfKinContact: -1,
+    numberInHousehold: -1,
+    deceased: -1,
+    causeOfDeath: -1,
+    school: -1,
     hasScholarship: -1,
     combinedName: -1
   };
@@ -175,10 +184,21 @@ export function mapSheetRowsToStudents(rows: any[][]): Student[] {
   colIndices.className = findColIdx(['classname', 'class', 'grade', 'level', 'classid']);
   colIndices.yearOfEntry = findColIdx(['yearofentry', 'entryyear', 'year', 'joined', 'entry_year', 'admissionyear', 'admission_year']);
   colIndices.zoneInNansana = findColIdx(['zoneinnansana', 'zone', 'address', 'area', 'village', 'wherestaying', 'residencezone', 'residence', 'homezone', 'location', 'residencezoneinnansana']);
-  colIndices.guardianName = findColIdx(['guardianname', 'guardian', 'parent', 'parentguardian', 'parentname', 'guardiannameorparentname']);
-  colIndices.guardianContact = findColIdx(['guardiancontact', 'guardianphone', 'contact', 'phone', 'parentcontact', 'parentphone', 'phone_number', 'phonenumber', 'guardiancontactphone']);
+  colIndices.guardianName = findColIdx(["guardian'sname", 'guardiansname', 'guardianname', 'guardian', 'parent', 'parentguardian', 'parentname', 'guardiannameorparentname']);
+  colIndices.guardianRelationship = findColIdx(['relationship', 'guardianrelationship', 'relationshiptochild', 'relationshiptopupil']);
+  colIndices.guardianContact = findColIdx(['contact-1', 'contact1', 'guardiancontact1', 'guardiancontact', 'guardianphone', 'parentcontact', 'parentphone', 'phone_number', 'phonenumber', 'guardiancontactphone']);
+  colIndices.guardianContact2 = findColIdx(['contact-2', 'contact2', 'guardiancontact2', 'guardianphone2', 'alternatecontact', 'alternativecontact']);
   colIndices.communityWorker = findColIdx(['communityworker', 'worker', 'socialworker', 'communityworkername']);
   colIndices.workerContact = findColIdx(['communityworkercontact', 'workercontact', 'workerphone', 'socialworkerphone', 'communityworkercontactphone']);
+  colIndices.nextOfKin = findColIdx(['nextofkin', 'nextkin', 'kinname', 'nextofkinname']);
+  colIndices.nextOfKinContact = findColIdx(['nextofkincontact', 'kincontact', 'nextkincontact']);
+  if (colIndices.nextOfKinContact === -1 && colIndices.nextOfKin !== -1) {
+    colIndices.nextOfKinContact = sheetHeadersClean.findIndex((header, index) => header === 'contact' && index > colIndices.nextOfKin);
+  }
+  colIndices.numberInHousehold = findColIdx(['no.inhousehold', 'noinhousehold', 'numberinhousehold', 'householdsize', 'householdmembers']);
+  colIndices.deceased = findColIdx(['deceased', 'isdeceased', 'parentdeceased', 'guardian-deceased']);
+  colIndices.causeOfDeath = findColIdx(['causeofdeath', 'deathcause', 'cause']);
+  colIndices.school = findColIdx(['school', 'schoolname', 'previousschool', 'currentschool']);
   colIndices.hasScholarship = findColIdx(['scholarshipstatus', 'scholarship', 'sponsored', 'hasscholarship']);
 
   // Auto-detect columns by inspecting cell values if index is still -1
@@ -380,11 +400,9 @@ export function mapSheetRowsToStudents(rows: any[][]): Student[] {
 
     // Scholarship extraction
     const scholarshipRaw = getRowVal(colIndices.hasScholarship);
-    const hasScholarship = scholarshipRaw !== '' && (
-      scholarshipRaw.toLowerCase().includes('yes') ||
-      scholarshipRaw.toLowerCase() === 'true' ||
-      scholarshipRaw === '1'
-    );
+    const scholarshipValue = scholarshipRaw.trim().toLowerCase();
+    const hasScholarship = scholarshipValue !== ''
+      && !['no', 'none', 'false', '0', 'self', 'self-sponsored'].includes(scholarshipValue);
 
     // Residence Zone extraction
     const zoneInNansana = getRowVal(colIndices.zoneInNansana) || 'Nansana';
@@ -392,8 +410,17 @@ export function mapSheetRowsToStudents(rows: any[][]): Student[] {
     // Guardian Name extraction
     const guardianName = getRowVal(colIndices.guardianName) || 'Unknown';
     const guardianContact = getRowVal(colIndices.guardianContact);
+    const guardianRelationship = getRowVal(colIndices.guardianRelationship);
+    const guardianContact2 = getRowVal(colIndices.guardianContact2);
     const communityWorker = getRowVal(colIndices.communityWorker);
     const workerContact = getRowVal(colIndices.workerContact);
+    const nextOfKin = getRowVal(colIndices.nextOfKin);
+    const nextOfKinContact = getRowVal(colIndices.nextOfKinContact);
+    const numberInHouseholdRaw = getRowVal(colIndices.numberInHousehold);
+    const numberInHousehold = numberInHouseholdRaw ? Number(numberInHouseholdRaw) || undefined : undefined;
+    const deceased = getRowVal(colIndices.deceased);
+    const causeOfDeath = getRowVal(colIndices.causeOfDeath);
+    const school = getRowVal(colIndices.school);
 
     return {
       id: `st-sheet-${Date.now()}-${index}`,
@@ -406,10 +433,19 @@ export function mapSheetRowsToStudents(rows: any[][]): Student[] {
       photo: '',
       guardianName,
       guardianContact,
+      guardianRelationship,
+      guardianContact2,
       communityWorker,
       workerContact,
       zoneInNansana,
-      hasScholarship
+      nextOfKin,
+      nextOfKinContact,
+      numberInHousehold,
+      deceased,
+      causeOfDeath,
+      school,
+      hasScholarship,
+      scholarshipDetails: scholarshipRaw
     };
   });
 }
@@ -453,12 +489,19 @@ export async function createAndExportStudentsSheet(
       "Date of Birth",
       "Class Name",
       "Year of Entry",
-      "Zone in Nansana",
-      "Guardian Name",
-      "Guardian Contact",
+      "Guardian's Name",
+      "Relationship",
+      "Contact-1",
+      "Contact-2",
       "Community Worker",
-      "Community Worker Contact",
-      "Scholarship Status",
+      "Zone",
+      "Next of Kin",
+      "Contact",
+      "No. in Household",
+      "Deceased",
+      "Cause of death",
+      "School",
+      "Scholarship",
     ];
 
     const rows = students.map(s => [
@@ -468,19 +511,26 @@ export async function createAndExportStudentsSheet(
       s.dateOfBirth,
       s.className,
       s.yearOfEntry,
-      s.zoneInNansana,
       s.guardianName,
+      s.guardianRelationship || '',
       s.guardianContact,
+      s.guardianContact2 || '',
       s.communityWorker,
-      s.workerContact,
-      s.hasScholarship ? "Yes" : "No",
+      s.zoneInNansana,
+      s.nextOfKin || '',
+      s.nextOfKinContact || '',
+      s.numberInHousehold || '',
+      s.deceased || '',
+      s.causeOfDeath || '',
+      s.school || '',
+      s.scholarshipDetails || (s.hasScholarship ? "Yes" : "No"),
     ]);
 
     const values = [headers, ...rows];
 
     // 3. Write values to spreadsheet
     const writeResponse = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Sheet1!A1:L${values.length}?valueInputOption=USER_ENTERED`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Sheet1!A1:S${values.length}?valueInputOption=USER_ENTERED`,
       {
         method: "PUT",
         headers: {

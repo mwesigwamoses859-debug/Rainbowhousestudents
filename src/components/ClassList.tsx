@@ -152,10 +152,19 @@ export default function ClassList({
     photo: '',
     guardianName: '',
     guardianContact: '',
+    guardianRelationship: '',
+    guardianContact2: '',
     communityWorker: '',
     workerContact: '',
     zoneInNansana: '',
-    hasScholarship: false
+    nextOfKin: '',
+    nextOfKinContact: '',
+    numberInHousehold: 0,
+    deceased: '',
+    causeOfDeath: '',
+    school: '',
+    hasScholarship: false,
+    scholarshipDetails: ''
   });
 
   const [formError, setFormError] = useState('');
@@ -296,10 +305,19 @@ export default function ClassList({
       photo: '',
       guardianName: '',
       guardianContact: '',
+      guardianRelationship: '',
+      guardianContact2: '',
       communityWorker: '',
       workerContact: '',
       zoneInNansana: '',
-      hasScholarship: false
+      nextOfKin: '',
+      nextOfKinContact: '',
+      numberInHousehold: 0,
+      deceased: '',
+      causeOfDeath: '',
+      school: '',
+      hasScholarship: false,
+      scholarshipDetails: ''
     });
     setPhotoPreview('');
     setFormError('');
@@ -318,10 +336,19 @@ export default function ClassList({
       photo: student.photo,
       guardianName: student.guardianName,
       guardianContact: student.guardianContact,
+      guardianRelationship: student.guardianRelationship || '',
+      guardianContact2: student.guardianContact2 || '',
       communityWorker: student.communityWorker,
       workerContact: student.workerContact,
       zoneInNansana: student.zoneInNansana,
-      hasScholarship: student.hasScholarship
+      nextOfKin: student.nextOfKin || '',
+      nextOfKinContact: student.nextOfKinContact || '',
+      numberInHousehold: student.numberInHousehold || 0,
+      deceased: student.deceased || '',
+      causeOfDeath: student.causeOfDeath || '',
+      school: student.school || '',
+      hasScholarship: student.hasScholarship,
+      scholarshipDetails: student.scholarshipDetails || ''
     });
     setPhotoPreview(student.photo);
     setFormError('');
@@ -797,13 +824,34 @@ export default function ClassList({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Guardian Contact Phone *</label>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Relationship to Child</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Mother, Father, Aunt"
+                    value={formData.guardianRelationship}
+                    onChange={(e) => setFormData(prev => ({ ...prev, guardianRelationship: e.target.value }))}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Guardian Contact-1 *</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. +256 702 445588"
                     value={formData.guardianContact}
                     onChange={(e) => setFormData(prev => ({ ...prev, guardianContact: e.target.value }))}
+                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Guardian Contact-2</label>
+                  <input
+                    type="text"
+                    value={formData.guardianContact2}
+                    onChange={(e) => setFormData(prev => ({ ...prev, guardianContact2: e.target.value }))}
                     className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                   />
                 </div>
@@ -828,6 +876,41 @@ export default function ClassList({
                     onChange={(e) => setFormData(prev => ({ ...prev, workerContact: e.target.value }))}
                     className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Next of Kin</label>
+                  <input type="text" value={formData.nextOfKin} onChange={(e) => setFormData(prev => ({ ...prev, nextOfKin: e.target.value }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Next of Kin Contact</label>
+                  <input type="text" value={formData.nextOfKinContact} onChange={(e) => setFormData(prev => ({ ...prev, nextOfKinContact: e.target.value }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Number in Household</label>
+                  <input type="number" min="0" value={formData.numberInHousehold} onChange={(e) => setFormData(prev => ({ ...prev, numberInHousehold: Number(e.target.value) }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Deceased</label>
+                  <input type="text" placeholder="e.g. No, Father, Both parents" value={formData.deceased} onChange={(e) => setFormData(prev => ({ ...prev, deceased: e.target.value }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Cause of Death</label>
+                  <input type="text" value={formData.causeOfDeath} onChange={(e) => setFormData(prev => ({ ...prev, causeOfDeath: e.target.value }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">School</label>
+                  <input type="text" value={formData.school} onChange={(e) => setFormData(prev => ({ ...prev, school: e.target.value }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Scholarship Details</label>
+                  <input type="text" placeholder="e.g. Yes, Full, Partial, Sponsor name" value={formData.scholarshipDetails} onChange={(e) => setFormData(prev => ({ ...prev, scholarshipDetails: e.target.value, hasScholarship: Boolean(e.target.value && !/^no$/i.test(e.target.value)) }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
                 </div>
 
                 {/* Photo upload section */}

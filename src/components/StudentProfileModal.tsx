@@ -990,8 +990,16 @@ export default function StudentProfileModal({
                       <span className="font-bold text-slate-800">{student.guardianName}</span>
                     </p>
                     <p className="flex justify-between font-medium">
-                      <span className="text-slate-400">Mobile Phone:</span>
+                      <span className="text-slate-400">Relationship:</span>
+                      <span className="font-bold text-slate-800">{student.guardianRelationship || 'Not recorded'}</span>
+                    </p>
+                    <p className="flex justify-between font-medium">
+                      <span className="text-slate-400">Contact-1:</span>
                       <span className="font-bold text-slate-850 font-mono">{student.guardianContact || 'Missing!'}</span>
+                    </p>
+                    <p className="flex justify-between font-medium">
+                      <span className="text-slate-400">Contact-2:</span>
+                      <span className="font-bold text-slate-850 font-mono">{student.guardianContact2 || 'Not recorded'}</span>
                     </p>
                     <p className="flex justify-between font-medium">
                       <span className="text-slate-400">Residential Address:</span>
@@ -1015,6 +1023,19 @@ export default function StudentProfileModal({
                       <span className="text-slate-400">Case Allocation:</span>
                       <span className="font-bold text-slate-800">Nansana West & Gganda Node</span>
                     </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 space-y-2.5 md:col-span-2">
+                  <h4 className="font-black text-[#032b5e] uppercase tracking-wide border-b border-slate-200/60 pb-1.5">Household & Next of Kin</h4>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <p><span className="text-slate-400 block">Next of Kin</span><strong>{student.nextOfKin || 'Not recorded'}</strong></p>
+                    <p><span className="text-slate-400 block">Next of Kin Contact</span><strong className="font-mono">{student.nextOfKinContact || 'Not recorded'}</strong></p>
+                    <p><span className="text-slate-400 block">Number in Household</span><strong>{student.numberInHousehold || 'Not recorded'}</strong></p>
+                    <p><span className="text-slate-400 block">Deceased</span><strong>{student.deceased || 'No information'}</strong></p>
+                    <p><span className="text-slate-400 block">Cause of Death</span><strong>{student.causeOfDeath || 'Not applicable'}</strong></p>
+                    <p><span className="text-slate-400 block">School</span><strong>{student.school || 'Not recorded'}</strong></p>
+                    <p><span className="text-slate-400 block">Scholarship</span><strong>{student.scholarshipDetails || (student.hasScholarship ? 'Yes' : 'No')}</strong></p>
                   </div>
                 </div>
               </div>

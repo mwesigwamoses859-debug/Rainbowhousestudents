@@ -437,6 +437,7 @@ export default function App() {
   const handleBulkAddStudents = async (importedStudents: any[]) => {
     const batchSize = 200;
     const imported: Student[] = [];
+    const updated: Student[] = [];
     const skipped: any[] = [];
     try {
       for (let index = 0; index < importedStudents.length; index += batchSize) {
@@ -451,16 +452,23 @@ export default function App() {
           throw new Error(`Batch ${batchNumber} failed: ${data.message || `server returned HTTP ${response.status}`}`);
         }
         imported.push(...(data.students || []));
+        updated.push(...(data.updatedStudents || []));
         skipped.push(...(data.skipped || []).map((item: any) => ({
           ...item,
           row: Number(item.row || 2) + index
         })));
       }
-      setStudents(previous => [...previous, ...imported]);
+      const updatedById = new Map(updated.map(student => [student.id, student]));
+      setStudents(previous => [
+        ...previous.map(student => updatedById.get(student.id) || student),
+        ...imported
+      ]);
       return {
         success: true,
         count: imported.length,
         students: imported,
+        updatedStudents: updated,
+        updatedCount: updated.length,
         skipped,
         skippedCount: skipped.length
       };

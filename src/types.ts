@@ -17,10 +17,19 @@ export interface Student {
   photo: string; // Base64 data URI or placeholder URL
   guardianName: string;
   guardianContact: string;
+  guardianRelationship?: string;
+  guardianContact2?: string;
   communityWorker: string;
   workerContact: string;
   zoneInNansana: string;
+  nextOfKin?: string;
+  nextOfKinContact?: string;
+  numberInHousehold?: number;
+  deceased?: string;
+  causeOfDeath?: string;
+  school?: string;
   hasScholarship: boolean;
+  scholarshipDetails?: string;
   
   // Computed fields (optional to send/receive, can be calculated on fly)
   currentAge?: number;

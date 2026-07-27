@@ -217,6 +217,16 @@ function validateStudent(candidate: Record<string, any>) {
   if (candidate.guardianContact && String(candidate.guardianContact).replace(/\D/g, '').length < 9) {
     return 'Guardian contact must contain at least 9 digits.';
   }
+  if (candidate.guardianContact2 && String(candidate.guardianContact2).replace(/\D/g, '').length < 9) {
+    return 'Guardian Contact-2 must contain at least 9 digits when provided.';
+  }
+  if (candidate.nextOfKinContact && String(candidate.nextOfKinContact).replace(/\D/g, '').length < 9) {
+    return 'Next-of-kin contact must contain at least 9 digits when provided.';
+  }
+  if (candidate.numberInHousehold !== undefined && candidate.numberInHousehold !== null
+    && (!Number.isInteger(Number(candidate.numberInHousehold)) || Number(candidate.numberInHousehold) < 0 || Number(candidate.numberInHousehold) > 100)) {
+    return 'Number in household must be a whole number between 0 and 100.';
+  }
   return null;
 }
 
@@ -642,38 +652,84 @@ async function api(request: Request, env: Env): Promise<Response> {
     const existingRows = await env.DB.prepare('SELECT payload FROM students').all();
     const comparisonStudents = existingRows.results.map((row: any) => JSON.parse(row.payload));
     const students = [];
+    const updatedStudents = [];
     const skipped = [];
-    const insertStatements = [];
+    const writeStatements = [];
+    const enrichmentFields = [
+      'guardianName', 'guardianRelationship', 'guardianContact', 'guardianContact2',
+      'communityWorker', 'workerContact', 'zoneInNansana', 'nextOfKin', 'nextOfKinContact',
+      'numberInHousehold', 'deceased', 'causeOfDeath', 'school', 'hasScholarship', 'scholarshipDetails'
+    ];
     for (let rowIndex = 0; rowIndex < candidates.length; rowIndex += 1) {
       const candidate = candidates[rowIndex];
       const validationError = validateStudent(candidate);
       const duplicate = validationError ? null : findSimilarStudentInList(candidate, comparisonStudents);
-      if (validationError || duplicate) {
+      if (validationError) {
         skipped.push({
           row: rowIndex + 2,
           name: `${candidate.surname || ''} ${candidate.otherNames || ''}`.trim(),
-          reason: validationError || (
-            duplicate?.kind === 'exact'
-              ? `Duplicate of ${duplicate.student.surname} ${duplicate.student.otherNames}`
-              : `Similar to ${duplicate?.student.surname} ${duplicate?.student.otherNames}; review before adding separately`
-          )
+          reason: validationError
+        });
+        continue;
+      }
+      if (duplicate?.kind === 'exact') {
+        const merged = { ...duplicate.student };
+        let changed = false;
+        for (const field of enrichmentFields) {
+          const value = candidate[field];
+          if (value !== undefined && value !== null && value !== '' && merged[field] !== value) {
+            merged[field] = value;
+            changed = true;
+          }
+        }
+        if (changed) {
+          writeStatements.push(
+            env.DB.prepare('UPDATE students SET payload = ?, updated_at = ? WHERE id = ?')
+              .bind(JSON.stringify(merged), Date.now(), merged.id)
+          );
+          Object.assign(duplicate.student, merged);
+          updatedStudents.push(merged);
+        } else {
+          skipped.push({
+            row: rowIndex + 2,
+            name: `${candidate.surname || ''} ${candidate.otherNames || ''}`.trim(),
+            reason: `Already imported as ${duplicate.student.surname} ${duplicate.student.otherNames}`
+          });
+        }
+        continue;
+      }
+      if (duplicate) {
+        skipped.push({
+          row: rowIndex + 2,
+          name: `${candidate.surname || ''} ${candidate.otherNames || ''}`.trim(),
+          reason: `Similar to ${duplicate.student.surname} ${duplicate.student.otherNames}; review before adding separately`
         });
         continue;
       }
       const student = { ...candidate, id: `st-${crypto.randomUUID()}` };
       const now = Date.now();
-      insertStatements.push(
+      writeStatements.push(
         env.DB.prepare('INSERT INTO students (id, payload, created_at, updated_at) VALUES (?, ?, ?, ?)')
           .bind(student.id, JSON.stringify(student), now, now)
       );
       students.push(student);
       comparisonStudents.push(student);
     }
-    for (let index = 0; index < insertStatements.length; index += 50) {
-      await env.DB.batch(insertStatements.slice(index, index + 50));
+    for (let index = 0; index < writeStatements.length; index += 50) {
+      await env.DB.batch(writeStatements.slice(index, index + 50));
     }
-    await writeAudit(env, request, session, 'STUDENTS_BULK_IMPORTED', 'student_import', `import-${Date.now()}`, undefined, { imported: students.length, skipped: skipped.length });
-    return json({ success: true, count: students.length, students, skipped, skippedCount: skipped.length }, 201);
+    await writeAudit(env, request, session, 'STUDENTS_BULK_IMPORTED', 'student_import', `import-${Date.now()}`, undefined, {
+      imported: students.length, enriched: updatedStudents.length, skipped: skipped.length
+    });
+    return json({
+      success: true,
+      count: students.length,
+      updatedCount: updatedStudents.length,
+      students,
+      updatedStudents,
+      skipped,
+      skippedCount: skipped.length
+    }, 201);
   }
   const studentIdMatch = url.pathname.match(/^\/api\/students\/([^/]+)$/);
   if (studentIdMatch && request.method === 'PUT') {

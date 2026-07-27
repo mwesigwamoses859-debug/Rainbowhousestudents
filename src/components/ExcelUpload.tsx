@@ -87,12 +87,19 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
       'Date of Birth',
       'Class Name',
       'Year of Entry',
-      'Zone in Nansana',
-      'Guardian Name',
-      'Guardian Contact',
+      "Guardian's Name",
+      'Relationship',
+      'Contact-1',
+      'Contact-2',
       'Community Worker',
-      'Community Worker Contact',
-      'Scholarship Status'
+      'Zone',
+      'Next of Kin',
+      'Contact',
+      'No. in Household',
+      'Deceased',
+      'Cause of death',
+      'School',
+      'Scholarship'
     ];
 
     const sampleRows = [
@@ -103,12 +110,19 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
         'Date of Birth': '2016-04-10',
         'Class Name': 'P.5',
         'Year of Entry': 2022,
-        'Zone in Nansana': 'Nabweru',
-        'Guardian Name': 'Mukasa William',
-        'Guardian Contact': '+256 702 445588',
+        "Guardian's Name": 'Mukasa William',
+        'Relationship': 'Father',
+        'Contact-1': '+256 702 445588',
+        'Contact-2': '+256 752 445588',
         'Community Worker': 'Namatovu Florence',
-        'Community Worker Contact': '+256 772 112233',
-        'Scholarship Status': 'Yes'
+        'Zone': 'Nabweru',
+        'Next of Kin': 'Nabirye Sarah',
+        'Contact': '+256 772 112233',
+        'No. in Household': 6,
+        'Deceased': 'No',
+        'Cause of death': '',
+        'School': 'Rainbow House',
+        'Scholarship': 'Yes'
       },
       {
         'Surname': 'Nalweyiso',
@@ -117,12 +131,19 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
         'Date of Birth': '2015-11-22',
         'Class Name': 'P.6',
         'Year of Entry': 2021,
-        'Zone in Nansana': 'Gganda',
-        'Guardian Name': 'Nassolo Harriet',
-        'Guardian Contact': '+256 752 998877',
+        "Guardian's Name": 'Nassolo Harriet',
+        'Relationship': 'Mother',
+        'Contact-1': '+256 752 998877',
+        'Contact-2': '',
         'Community Worker': 'Kibirige Sula',
-        'Community Worker Contact': '+256 701 445522',
-        'Scholarship Status': 'No'
+        'Zone': 'Gganda',
+        'Next of Kin': 'Nassolo Maria',
+        'Contact': '+256 701 445522',
+        'No. in Household': 4,
+        'Deceased': 'No',
+        'Cause of death': '',
+        'School': 'Rainbow House',
+        'Scholarship': 'No'
       }
     ];
 
@@ -211,7 +232,8 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
             'class', 'classname', 'classlevel', 'grade', 'level',
             'yearofentry', 'entryyear', 'admissionyear',
             'zone', 'address', 'village', 'residence',
-            'guardian', 'parent', 'guardianname',
+            'guardian', 'parent', 'guardianname', 'guardiansname', 'relationship', 'contact1',
+            'contact2', 'communityworker', 'nextofkin', 'noinhousehold', 'deceased', 'causeofdeath', 'school',
             'scholarship', 'sponsored'
           ];
 
@@ -258,9 +280,17 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
           yearOfEntry: -1,
           guardianName: -1,
           guardianContact: -1,
+          guardianRelationship: -1,
+          guardianContact2: -1,
           communityWorker: -1,
           workerContact: -1,
           zoneInNansana: -1,
+          nextOfKin: -1,
+          nextOfKinContact: -1,
+          numberInHousehold: -1,
+          deceased: -1,
+          causeOfDeath: -1,
+          school: -1,
           hasScholarship: -1,
           combinedName: -1
         };
@@ -280,10 +310,21 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
         colIndices.className = findColIdx(['classname', 'class', 'grade', 'level', 'classid']);
         colIndices.yearOfEntry = findColIdx(['yearofentry', 'entryyear', 'year', 'joined', 'entry_year', 'admissionyear', 'admission_year']);
         colIndices.zoneInNansana = findColIdx(['zoneinnansana', 'zone', 'address', 'area', 'village', 'wherestaying', 'residencezone', 'residence', 'homezone', 'location', 'residencezoneinnansana']);
-        colIndices.guardianName = findColIdx(['guardianname', 'guardian', 'parent', 'parentguardian', 'parentname', 'guardiannameorparentname']);
-        colIndices.guardianContact = findColIdx(['guardiancontact', 'guardianphone', 'contact', 'phone', 'parentcontact', 'parentphone', 'phone_number', 'phonenumber', 'guardiancontactphone']);
+        colIndices.guardianName = findColIdx(["guardian'sname", 'guardiansname', 'guardianname', 'guardian', 'parent', 'parentguardian', 'parentname', 'guardiannameorparentname']);
+        colIndices.guardianRelationship = findColIdx(['relationship', 'guardianrelationship', 'relationshiptochild', 'relationshiptopupil']);
+        colIndices.guardianContact = findColIdx(['contact-1', 'contact1', 'guardiancontact1', 'guardiancontact', 'guardianphone', 'parentcontact', 'parentphone', 'phone_number', 'phonenumber', 'guardiancontactphone']);
+        colIndices.guardianContact2 = findColIdx(['contact-2', 'contact2', 'guardiancontact2', 'guardianphone2', 'alternatecontact', 'alternativecontact']);
         colIndices.communityWorker = findColIdx(['communityworker', 'worker', 'socialworker', 'communityworkername']);
         colIndices.workerContact = findColIdx(['communityworkercontact', 'workercontact', 'workerphone', 'socialworkerphone', 'communityworkercontactphone']);
+        colIndices.nextOfKin = findColIdx(['nextofkin', 'nextkin', 'kinname', 'nextofkinname']);
+        colIndices.nextOfKinContact = findColIdx(['nextofkincontact', 'kincontact', 'nextkincontact']);
+        if (colIndices.nextOfKinContact === -1 && colIndices.nextOfKin !== -1) {
+          colIndices.nextOfKinContact = sheetHeadersClean.findIndex((header, index) => header === 'contact' && index > colIndices.nextOfKin);
+        }
+        colIndices.numberInHousehold = findColIdx(['no.inhousehold', 'noinhousehold', 'numberinhousehold', 'householdsize', 'householdmembers']);
+        colIndices.deceased = findColIdx(['deceased', 'isdeceased', 'parentdeceased', 'guardian-deceased']);
+        colIndices.causeOfDeath = findColIdx(['causeofdeath', 'deathcause', 'cause']);
+        colIndices.school = findColIdx(['school', 'schoolname', 'previousschool', 'currentschool']);
         colIndices.hasScholarship = findColIdx(['scholarshipstatus', 'scholarship', 'sponsored', 'hasscholarship']);
 
         // Auto-detect columns by inspecting cell values if index is still -1
@@ -485,11 +526,9 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
 
           // Scholarship extraction
           const scholarshipRaw = getRowVal(colIndices.hasScholarship);
-          const hasScholarship = scholarshipRaw !== '' && (
-            scholarshipRaw.toLowerCase().includes('yes') ||
-            scholarshipRaw.toLowerCase() === 'true' ||
-            scholarshipRaw === '1'
-          );
+          const scholarshipValue = scholarshipRaw.trim().toLowerCase();
+          const hasScholarship = scholarshipValue !== ''
+            && !['no', 'none', 'false', '0', 'self', 'self-sponsored'].includes(scholarshipValue);
 
           // Residence Zone extraction
           const zoneInNansana = getRowVal(colIndices.zoneInNansana) || 'Nansana';
@@ -497,8 +536,17 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
           // Guardian Name extraction
           const guardianName = getRowVal(colIndices.guardianName) || 'Unknown';
           const guardianContact = getRowVal(colIndices.guardianContact);
+          const guardianRelationship = getRowVal(colIndices.guardianRelationship);
+          const guardianContact2 = getRowVal(colIndices.guardianContact2);
           const communityWorker = getRowVal(colIndices.communityWorker);
           const workerContact = getRowVal(colIndices.workerContact);
+          const nextOfKin = getRowVal(colIndices.nextOfKin);
+          const nextOfKinContact = getRowVal(colIndices.nextOfKinContact);
+          const numberInHouseholdRaw = getRowVal(colIndices.numberInHousehold);
+          const numberInHousehold = numberInHouseholdRaw ? Number(numberInHouseholdRaw) || undefined : undefined;
+          const deceased = getRowVal(colIndices.deceased);
+          const causeOfDeath = getRowVal(colIndices.causeOfDeath);
+          const school = getRowVal(colIndices.school);
 
           return {
             surname,
@@ -510,10 +558,19 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
             photo: '',
             guardianName,
             guardianContact,
+            guardianRelationship,
+            guardianContact2,
             communityWorker,
             workerContact,
             zoneInNansana,
-            hasScholarship
+            nextOfKin,
+            nextOfKinContact,
+            numberInHousehold,
+            deceased,
+            causeOfDeath,
+            school,
+            hasScholarship,
+            scholarshipDetails: scholarshipRaw
           };
         });
 
@@ -660,6 +717,9 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
       const response: any = await onBulkAddStudents(parsedData);
       
       let successMsg = `Successfully imported ${response?.count || 0} students into the school system!`;
+      if (response?.updatedCount > 0) {
+        successMsg += ` Guardian and household details were added or refreshed for ${response.updatedCount} existing pupils.`;
+      }
       if (response?.skippedCount > 0) {
         const examples = (response.skipped || []).slice(0, 5)
           .map((item: any) => `Row ${item.row}: ${item.name || 'Unnamed pupil'} — ${item.reason}`)
@@ -1055,6 +1115,10 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
                   <th className="px-5 py-3">Residence Zone</th>
                   <th className="px-5 py-3">Scholarship</th>
                   <th className="px-5 py-3">Guardian Name</th>
+                  <th className="px-5 py-3">Relationship</th>
+                  <th className="px-5 py-3">Contact-1</th>
+                  <th className="px-5 py-3">Contact-2</th>
+                  <th className="px-5 py-3">Next of Kin</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 text-slate-600 font-sans">
@@ -1084,6 +1148,10 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-slate-500 truncate max-w-xs">{row.guardianName}</td>
+                      <td className="px-5 py-3.5 text-slate-500">{row.guardianRelationship || '—'}</td>
+                      <td className="px-5 py-3.5 text-slate-500 font-mono">{row.guardianContact || '—'}</td>
+                      <td className="px-5 py-3.5 text-slate-500 font-mono">{row.guardianContact2 || '—'}</td>
+                      <td className="px-5 py-3.5 text-slate-500">{row.nextOfKin || '—'}</td>
                     </tr>
                   );
                 })}
@@ -1104,7 +1172,7 @@ export default function ExcelUpload({ students, onBulkAddStudents, onSuccessRedi
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-600">
           <ul className="space-y-2 list-disc pl-5">
             <li>
-              <strong>Required Columns:</strong> Your spreadsheet must have headers matching the template precisely, such as <code>Surname</code>, <code>Other Names</code>, <code>Gender</code>, and <code>Class Name</code>.
+              <strong>Recognized family columns:</strong> <code>Guardian&apos;s Name</code>, <code>Relationship</code>, <code>Contact-1</code>, <code>Contact-2</code>, <code>Community Worker</code>, <code>Zone</code>, <code>Next of Kin</code>, <code>Contact</code>, <code>No. in Household</code>, <code>Deceased</code>, <code>Cause of death</code>, <code>School</code>, and <code>Scholarship</code>.
             </li>
             <li>
               <strong>Class Levels:</strong> Values must range from <code>P.1</code> to <code>P.7</code>. Values like "P1" or "P.1" are handled and normalized automatically.
