@@ -81,6 +81,36 @@ async function readBody(request: Request) {
   }
 }
 
+const normalizeName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+function editDistance(a: string, b: string) {
+  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let previous = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const saved = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
+      previous = saved;
+    }
+  }
+  return row[b.length];
+}
+
+async function findSimilarStudent(env: Env, candidate: Record<string, any>, excludeId?: string) {
+  const rows = await env.DB.prepare('SELECT payload FROM students').all();
+  const target = normalizeName(`${candidate.surname || ''}${candidate.otherNames || ''}`);
+  for (const row of rows.results as any[]) {
+    const student = JSON.parse(row.payload);
+    if (student.id === excludeId) continue;
+    const existing = normalizeName(`${student.surname || ''}${student.otherNames || ''}`);
+    if (target === existing) return { kind: 'exact', student };
+    if (target.length > 5 && existing.length > 5 && editDistance(target, existing) <= 2) {
+      return { kind: 'similar', student };
+    }
+  }
+  return null;
+}
+
 async function sendCode(request: Request, env: Env) {
   const body = await readBody(request);
   const email = normalizeEmail(body.email);
@@ -177,11 +207,52 @@ async function api(request: Request, env: Env) {
   if (request.method === 'POST' && url.pathname === '/api/students') {
     if (session.role !== 'Headteacher' && session.role !== 'DOS') return json({ success: false, message: 'Administrator access required.' }, 403);
     const body = await readBody(request);
+    const duplicate = await findSimilarStudent(env, body);
+    if (duplicate) {
+      return json({
+        success: false,
+        code: 'DUPLICATE_STUDENT',
+        message: duplicate.kind === 'exact'
+          ? 'A student with this name already exists. Update the existing record instead.'
+          : 'A very similar student name already exists. Review the existing record before continuing.',
+        matchStudent: duplicate.student
+      }, 409);
+    }
     const student = { ...body, id: `st-${crypto.randomUUID()}` };
     const now = Date.now();
     await env.DB.prepare('INSERT INTO students (id, payload, created_at, updated_at) VALUES (?, ?, ?, ?)')
       .bind(student.id, JSON.stringify(student), now, now).run();
     return json(student, 201);
+  }
+  const studentIdMatch = url.pathname.match(/^\/api\/students\/([^/]+)$/);
+  if (studentIdMatch && request.method === 'PUT') {
+    if (session.role !== 'Headteacher' && session.role !== 'DOS') return json({ success: false, message: 'Administrator access required.' }, 403);
+    const current = await env.DB.prepare('SELECT payload FROM students WHERE id = ?').bind(studentIdMatch[1]).first() as any;
+    if (!current) return json({ success: false, message: 'Student not found.' }, 404);
+    const body = await readBody(request);
+    const updated = { ...JSON.parse(current.payload), ...body, id: studentIdMatch[1] };
+    const duplicate = await findSimilarStudent(env, updated, studentIdMatch[1]);
+    if (duplicate?.kind === 'exact') {
+      return json({ success: false, code: 'DUPLICATE_STUDENT', message: 'Another student already has this name.', matchStudent: duplicate.student }, 409);
+    }
+    await env.DB.prepare('UPDATE students SET payload = ?, updated_at = ? WHERE id = ?')
+      .bind(JSON.stringify(updated), Date.now(), studentIdMatch[1]).run();
+    return json(updated);
+  }
+  if (request.method === 'POST' && url.pathname === '/api/students/promote-bulk') {
+    if (session.role !== 'Headteacher' && session.role !== 'DOS') return json({ success: false, message: 'Administrator access required.' }, 403);
+    const body = await readBody(request);
+    if (!Array.isArray(body.promotions)) return json({ success: false, message: 'Expected promotions array.' }, 400);
+    let promotedCount = 0;
+    for (const promotion of body.promotions) {
+      const row = await env.DB.prepare('SELECT payload FROM students WHERE id = ?').bind(promotion.studentId).first() as any;
+      if (!row) continue;
+      const student = { ...JSON.parse(row.payload), className: promotion.nextClassName };
+      await env.DB.prepare('UPDATE students SET payload = ?, updated_at = ? WHERE id = ?')
+        .bind(JSON.stringify(student), Date.now(), promotion.studentId).run();
+      promotedCount += 1;
+    }
+    return json({ success: true, promotedCount });
   }
   if (request.method === 'POST' && url.pathname === '/api/marks') {
     const body = await readBody(request);
@@ -200,6 +271,20 @@ async function api(request: Request, env: Env) {
        ON CONFLICT(student_id, subject, term, year) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at`
     ).bind(mark.id, mark.studentId, mark.subject, Number(mark.term), Number(mark.year), JSON.stringify(mark), Date.now()).run();
     return json({ success: true, mark });
+  }
+  if (request.method === 'POST' && url.pathname === '/api/marks/bulk') {
+    const body = await readBody(request);
+    if (!Array.isArray(body.marks)) return json({ success: false, message: 'Expected marks array.' }, 400);
+    for (const item of body.marks) {
+      const markRequest = new Request(new URL('/api/marks', request.url), {
+        method: 'POST',
+        headers: request.headers,
+        body: JSON.stringify(item)
+      });
+      const result = await api(markRequest, env);
+      if (!result.ok) return result;
+    }
+    return json({ success: true, count: body.marks.length });
   }
   return json({ success: false, message: 'API route not found.' }, 404);
 }

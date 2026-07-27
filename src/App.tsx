@@ -270,7 +270,7 @@ export default function App() {
     try {
       const response = await fetch('/api/teachers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
         body: JSON.stringify(teacherData),
       });
 
@@ -319,7 +319,7 @@ export default function App() {
       if (!response.ok) throw new Error();
       
       // Refresh students
-      const studentsRes = await fetch('/api/students');
+      const studentsRes = await fetch('/api/students', { headers: { Authorization: `Bearer ${teacher?.authToken || ''}` } });
       if (studentsRes.ok) {
         const data = await studentsRes.json();
         setStudents(data);
@@ -335,7 +335,7 @@ export default function App() {
     try {
       const response = await fetch('/api/students', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
         body: JSON.stringify(studentData),
       });
 
@@ -356,7 +356,7 @@ export default function App() {
     try {
       const response = await fetch(`/api/students/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
         body: JSON.stringify(updatedData),
       });
 
@@ -421,6 +421,7 @@ export default function App() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${teacher?.authToken || ''}`,
           'x-teacher-username': teacher?.username || ''
         },
         body: JSON.stringify({ marks: marksToSave }),

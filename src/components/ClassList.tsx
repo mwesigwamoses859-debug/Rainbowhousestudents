@@ -335,8 +335,8 @@ export default function ClassList({
       return;
     }
 
-    if (similarityWarning && similarityWarning.type === 'exact_class') {
-      setFormError(`Cannot register: A student named "${formData.surname} ${formData.otherNames}" is already registered in Class ${formData.className}.`);
+    if (similarityWarning && (similarityWarning.type === 'exact_class' || similarityWarning.type === 'exact_school')) {
+      setFormError(`Cannot register a second record: "${formData.surname} ${formData.otherNames}" already exists. Open and update the existing student instead.`);
       return;
     }
 

@@ -33,7 +33,6 @@ export default function AutoPromotionEngine({
 }: AutoPromotionEngineProps) {
   // Promotion settings
   const [selectedClass, setSelectedClass] = useState<ClassName>('P.1');
-  const [selectedTerm, setSelectedTerm] = useState<1 | 2 | 3>(1);
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [passThreshold, setPassThreshold] = useState<number>(50);
   const [requireAllSubjects, setRequireAllSubjects] = useState<boolean>(true);
@@ -68,9 +67,7 @@ export default function AutoPromotionEngine({
     const updatedAwards: Record<string, boolean> = {};
     classStudents.forEach(student => {
       const studentMarks = marks.filter(
-        m => m.studentId === student.id && 
-             m.term === selectedTerm && 
-             m.year === selectedYear
+        m => m.studentId === student.id && m.year === selectedYear
       );
       const totalScore = studentMarks.reduce((sum, m) => sum + m.score, 0);
       const averageScore = studentMarks.length > 0 ? Math.round(totalScore / studentMarks.length) : 0;
@@ -84,15 +81,13 @@ export default function AutoPromotionEngine({
       }
     });
     setScholarshipAwards(updatedAwards);
-  }, [selectedClass, selectedTerm, selectedYear, scholarshipThreshold, students, marks]);
+  }, [selectedClass, selectedYear, scholarshipThreshold, students, marks]);
 
   // Calculate promotion stats for current class
   const compiledStudents = classStudents.map(student => {
     // Retrieve marks for student
     const studentMarks = marks.filter(
-      m => m.studentId === student.id && 
-           m.term === selectedTerm && 
-           m.year === selectedYear
+      m => m.studentId === student.id && m.year === selectedYear
     );
 
     // Subject coverage
@@ -116,16 +111,16 @@ export default function AutoPromotionEngine({
 
     if (studentMarks.length === 0) {
       eligibility = 'Incomplete';
-      reason = 'No assessment marks entered this term.';
+      reason = 'No assessment marks entered for this academic year.';
     } else if (requireAllSubjects && !isFullyAssessed) {
       eligibility = 'Incomplete';
-      reason = `Incomplete term records. Missing: ${missingSubjects.join(', ')}`;
+      reason = `Incomplete annual records. Missing: ${missingSubjects.join(', ')}`;
     } else if (averageScore < passThreshold) {
       eligibility = 'Repeats';
       reason = `Average mark (${averageScore}%) is below pass threshold (${passThreshold}%).`;
     } else {
       eligibility = 'Eligible';
-      reason = `Meets pass threshold with average score of ${averageScore}%.`;
+      reason = `Annual average is ${averageScore}%; promotion to ${getNextClass(student.className)} is recommended.`;
     }
 
     return {
@@ -217,21 +212,7 @@ export default function AutoPromotionEngine({
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {/* Term selector */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">School Term</label>
-              <select
-                value={selectedTerm}
-                onChange={(e) => setSelectedTerm(Number(e.target.value) as any)}
-                className="w-full px-3.5 py-2.5 border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer font-semibold"
-              >
-                <option value={1}>Term 1</option>
-                <option value={2}>Term 2</option>
-                <option value={3}>Term 3</option>
-              </select>
-            </div>
-
+          <div className="grid grid-cols-1 gap-3">
             {/* Year selector */}
             <div className="space-y-1.5">
               <label className="block text-xs font-black text-slate-500 uppercase tracking-wider">Academic Year</label>
@@ -260,7 +241,7 @@ export default function AutoPromotionEngine({
               onChange={(e) => setPassThreshold(Number(e.target.value))}
               className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#FF5E4D]"
             />
-            <p className="text-[10px] text-slate-400 leading-snug">Average term score of assessed subjects needed to qualify for next level promotion.</p>
+            <p className="text-[10px] text-slate-400 leading-snug">Average score across all marks entered during the selected academic year.</p>
           </div>
 
           {/* Promotion Criteria: Scholarship Nominee Threshold */}
