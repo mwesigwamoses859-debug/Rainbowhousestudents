@@ -3,6 +3,7 @@ import { Teacher, Student, Mark, ClassName } from './types';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
+import TeacherDashboard from './components/TeacherDashboard';
 import ClassList from './components/ClassList';
 import MarkEntry from './components/MarkEntry';
 import ReportCardView from './components/ReportCardView';
@@ -54,6 +55,8 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const systemRoleFor = (staff: Teacher) =>
+    staff.role === 'Headteacher' || staff.role === 'DOS' ? 'administrator' : 'class_teacher';
   const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   
@@ -206,11 +209,7 @@ export default function App() {
       try {
         const parsed = JSON.parse(savedTeacher);
         setTeacher(parsed);
-        if (parsed.username === 'admin') {
-          setCurrentRole('administrator');
-        } else {
-          setCurrentRole('class_teacher');
-        }
+        setCurrentRole(systemRoleFor(parsed));
       } catch (err) {
         localStorage.removeItem('school_sms_teacher');
       }
@@ -256,11 +255,7 @@ export default function App() {
   const handleLoginSuccess = (loggedInTeacher: Teacher) => {
     setTeacher(loggedInTeacher);
     localStorage.setItem('school_sms_teacher', JSON.stringify(loggedInTeacher));
-    if (loggedInTeacher.username === 'admin') {
-      setCurrentRole('administrator');
-    } else {
-      setCurrentRole('class_teacher');
-    }
+    setCurrentRole(systemRoleFor(loggedInTeacher));
     setActiveTab('dashboard');
   };
 
@@ -463,7 +458,7 @@ export default function App() {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
-  const isAdmin = currentRole === 'administrator';
+  const isAdmin = teacher.role === 'Headteacher' || teacher.role === 'DOS';
 
   const activeTeacherClasses = currentRole === 'administrator' || currentRole === 'head_teacher' || currentRole === 'bursar'
     ? ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'] as ClassName[]
@@ -735,31 +730,15 @@ export default function App() {
             )}
           </div>
 
-          {/* System Role Selector */}
+          {/* Server-assigned role (display only) */}
           <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-slate-800">
-            <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">Active Role:</span>
-            <select
-              value={currentRole}
-              onChange={(e) => {
-                const newRole = e.target.value;
-                setCurrentRole(newRole);
-                addAuditLog(`Switched active system role to: ${newRole.toUpperCase()}`);
-              }}
-              className="bg-transparent text-xs font-black text-slate-900 focus:outline-none cursor-pointer border-none"
-            >
-              <option value="administrator">Administrator</option>
-              <option value="head_teacher">Head Teacher</option>
-              <option value="subject_teacher">Subject Teacher</option>
-              <option value="class_teacher">Class Teacher</option>
-              <option value="community_worker">Community Worker</option>
-              <option value="bursar">Bursar</option>
-              <option value="parent_guardian">Parent/Guardian</option>
-              <option value="data_entry">Data Entry Officer</option>
-            </select>
+            <ShieldCheck className="h-4 w-4 text-emerald-600" />
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Signed in as</span>
+            <span className="text-xs font-black text-slate-900">{teacher.role}</span>
           </div>
 
           {/* Email Notification Gateway Button */}
-          <button
+          {isAdmin && <button
             onClick={() => setIsEmailGatewayOpen(true)}
             className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
             title="Company Email Gateway & 2FA Dispatch Log"
@@ -767,7 +746,7 @@ export default function App() {
             <Mail className="h-4 w-4 text-indigo-600" />
             <span className="hidden lg:inline text-[11px] uppercase tracking-wider font-extrabold">Email Gateway</span>
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          </button>
+          </button>}
 
           {/* User Profile Card */}
           <div className="flex items-center gap-2.5">
@@ -841,7 +820,7 @@ export default function App() {
               
               {/* 1. Dashboard Tab */}
               {activeTab === 'dashboard' && (
-                <Dashboard 
+                isAdmin ? <Dashboard
                   students={students} 
                   marks={marks} 
                   teacher={teacher || undefined}
@@ -855,6 +834,11 @@ export default function App() {
                     if (tab === 'marks') setAcademicsSubTab('marks');
                     if (tab === 'reports') setExamsSubTab('reports');
                   }} 
+                /> : <TeacherDashboard
+                  teacher={teacher}
+                  students={students}
+                  marks={marks}
+                  setActiveTab={handleSetTab}
                 />
               )}
 

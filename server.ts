@@ -41,7 +41,7 @@ function getDatabase(): DatabaseSchema {
         username: 'admin',
         name: 'Headteacher / Administrator',
         role: 'Headteacher',
-        email: 'headteacher@ashinaga.or.ug',
+        email: 'mwesigwa.m@ashinaga.org',
         subjects: ['All'],
         classes: ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7']
       },
@@ -49,7 +49,7 @@ function getDatabase(): DatabaseSchema {
         username: 'dos',
         name: 'Mr. David Ochieng (DOS)',
         role: 'DOS',
-        email: 'dos@ashinaga.or.ug',
+        email: 'dos@ashinaga.org',
         subjects: ['All'],
         classes: ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7']
       },
@@ -57,7 +57,7 @@ function getDatabase(): DatabaseSchema {
         username: 'teacher1',
         name: 'Mr. John Mukasa',
         role: 'Subject Teacher',
-        email: 'john.mukasa@ashinaga.or.ug',
+        email: 'john.mukasa@ashinaga.org',
         subjects: ['Mathematics', 'Science'],
         classes: ['P.5', 'P.6', 'P.7']
       },
@@ -65,7 +65,7 @@ function getDatabase(): DatabaseSchema {
         username: 'teacher2',
         name: 'Mrs. Sarah Babirye',
         role: 'Subject Teacher',
-        email: 'sarah.babirye@ashinaga.or.ug',
+        email: 'sarah.babirye@ashinaga.org',
         subjects: ['English', 'Social Studies', 'Religious Education'],
         classes: ['P.1', 'P.2', 'P.3', 'P.4']
       }
@@ -156,7 +156,50 @@ if (db.vapidKeys) {
 // --- API ROUTES ---
 
 // --- 2FA OTP Store in memory & Email Gateway Logs ---
-const otpStore: Record<string, { code: string; expiresAt: number }> = {};
+const otpStore: Record<string, { codeHash: string; expiresAt: number; attempts: number }> = {};
+
+const normalizeEmail = (value: unknown) => String(value || '').trim().toLowerCase();
+const hashOtp = (email: string, code: string) =>
+  crypto.createHash('sha256').update(`${email}:${code}:${process.env.OTP_PEPPER || 'local-development'}`).digest('hex');
+
+async function sendLoginCode(email: string, name: string, code: string) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM || 'Rainbow House Portal <onboarding@resend.dev>';
+
+  if (!apiKey) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Email delivery is not configured. Set RESEND_API_KEY and EMAIL_FROM.');
+    }
+    console.log(`[DEV LOGIN CODE] ${email}: ${code}`);
+    return;
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from,
+      to: [email],
+      subject: 'Your Rainbow House sign-in code',
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">
+        <h2 style="color:#082f49">Rainbow House staff sign-in</h2>
+        <p>Hello ${name},</p>
+        <p>Use this one-time code to sign in:</p>
+        <p style="font-size:32px;font-weight:800;letter-spacing:8px;color:#4f46e5">${code}</p>
+        <p>This code expires in 10 minutes. If you did not request it, you can ignore this email.</p>
+      </div>`
+    })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    console.error('Email provider error:', response.status, detail);
+    throw new Error('The confirmation email could not be sent.');
+  }
+}
 
 export interface EmailGatewayEntry {
   id: string;
@@ -223,136 +266,94 @@ function dispatchMockCompanyEmail(entry: Omit<EmailGatewayEntry, 'id' | 'timesta
 }
 
 // 1. Authentication
-app.post('/api/auth/send-code', (req, res) => {
-  const { username, password } = req.body;
+app.post('/api/auth/send-code', async (req, res) => {
+  const email = normalizeEmail(req.body.email);
   const db = getDatabase();
 
-  const teacher = db.teachers.find(t => t.username === username);
+  if (!email || !email.endsWith('@ashinaga.org')) {
+    return res.status(400).json({ success: false, message: 'Enter your official @ashinaga.org email address.' });
+  }
+
+  const teacher = db.teachers.find(t => normalizeEmail(t.email) === email && t.active !== false);
   if (!teacher) {
-    return res.status(401).json({ success: false, message: 'Account not found' });
+    return res.status(401).json({ success: false, message: 'This email is not registered for staff access. Ask an administrator to add it.' });
   }
 
-  const expectedPassword = teacher.password || (username === 'admin' ? 'admin123' : 'teacher123');
-  if (password !== expectedPassword) {
-    return res.status(401).json({ success: false, message: 'Invalid username or password' });
-  }
-
-  // Determine official email
-  const officialEmail = teacher.email || `${username.toLowerCase()}@ashinaga.or.ug`;
-  const teacherRole = teacher.role || (username === 'admin' ? 'Headteacher' : username === 'dos' ? 'DOS' : 'Subject Teacher');
-  
-  // Generate 6-digit OTP code
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore[username] = {
-    code,
-    expiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes
+  const code = crypto.randomInt(100000, 1000000).toString();
+  otpStore[email] = {
+    codeHash: hashOtp(email, code),
+    expiresAt: Date.now() + 10 * 60 * 1000,
+    attempts: 0
   };
 
-  // Dispatch to Company Email Gateway
-  dispatchMockCompanyEmail({
-    recipientEmail: officialEmail,
-    recipientName: teacher.name,
-    recipientRole: teacherRole,
-    subject: `[2FA Confirmation Code] Ashinaga Portal Access - ${code}`,
-    category: 'CONFIRMATION_CODE',
-    code,
-    body: `Hello ${teacher.name},\n\nA login request was received for your official Ashinaga account (${officialEmail}).\n\nYour 6-Digit Security Confirmation Code is: ${code}\n\nThis code expires in 10 minutes. Enter it in the login prompt to access your subject workspace.\n\nAshinaga Uganda Rainbow House Administration`
-  });
+  try {
+    await sendLoginCode(email, teacher.name, code);
+  } catch (error: any) {
+    delete otpStore[email];
+    return res.status(503).json({ success: false, message: error.message || 'The confirmation email could not be sent.' });
+  }
 
   return res.json({
     success: true,
-    message: `Security confirmation code dispatched to company email: ${officialEmail}`,
-    email: officialEmail,
-    demoCode: code, // Sent for testing/demonstration in sandbox
-    teacherName: teacher.name,
-    role: teacherRole
+    message: 'A six-digit confirmation code was sent to your email.',
+    email: email.replace(/^(.{2}).*(@.*)$/, '$1••••$2'),
+    ...(process.env.NODE_ENV !== 'production' && !process.env.RESEND_API_KEY ? { demoCode: code } : {})
   });
 });
 
 app.post('/api/auth/verify-code', (req, res) => {
-  const { username, password, code } = req.body;
+  const email = normalizeEmail(req.body.email);
+  const code = String(req.body.code || '').trim();
   const db = getDatabase();
 
-  const teacher = db.teachers.find(t => t.username === username);
+  const teacher = db.teachers.find(t => normalizeEmail(t.email) === email && t.active !== false);
   if (!teacher) {
     return res.status(401).json({ success: false, message: 'Account not found' });
   }
 
-  const expectedPassword = teacher.password || (username === 'admin' ? 'admin123' : 'teacher123');
-  if (password !== expectedPassword) {
-    return res.status(401).json({ success: false, message: 'Invalid credentials' });
-  }
-
-  const storedOtp = otpStore[username];
+  const storedOtp = otpStore[email];
   if (!storedOtp) {
     return res.status(400).json({ success: false, message: 'No confirmation code was requested or code expired. Please request a new code.' });
   }
 
   if (Date.now() > storedOtp.expiresAt) {
-    delete otpStore[username];
+    delete otpStore[email];
     return res.status(400).json({ success: false, message: 'Confirmation code expired. Please request a new code.' });
   }
 
-  if (storedOtp.code !== String(code).trim()) {
+  storedOtp.attempts += 1;
+  if (storedOtp.attempts > 5) {
+    delete otpStore[email];
+    return res.status(429).json({ success: false, message: 'Too many attempts. Request a new code.' });
+  }
+
+  const expectedHash = Buffer.from(storedOtp.codeHash, 'hex');
+  const suppliedHash = Buffer.from(hashOtp(email, code), 'hex');
+  if (!crypto.timingSafeEqual(expectedHash, suppliedHash)) {
     return res.status(400).json({ success: false, message: 'Invalid 6-digit confirmation code. Please check your email.' });
   }
 
-  // Clear OTP on successful verification
-  delete otpStore[username];
-
-  const defaultRole = username === 'admin' ? 'Headteacher' : username === 'dos' ? 'DOS' : 'Subject Teacher';
-  const defaultEmail = `${username.toLowerCase()}@ashinaga.or.ug`;
+  delete otpStore[email];
 
   return res.json({
     success: true,
     teacher: {
       username: teacher.username,
       name: teacher.name,
-      role: teacher.role || defaultRole,
-      email: teacher.email || defaultEmail,
+      role: teacher.role,
+      email: teacher.email,
       subjects: teacher.subjects || [],
-      classes: teacher.classes || []
+      classes: teacher.classes || [],
+      activeTerms: teacher.activeTerms || [1, 2, 3]
     }
   });
 });
 
 app.post('/api/auth/login', (req, res) => {
-  const { username, password, code } = req.body;
-  const db = getDatabase();
-  
-  // Find teacher in database
-  const teacher = db.teachers.find(t => t.username === username);
-  
-  if (teacher) {
-    const expectedPassword = teacher.password || (username === 'admin' ? 'admin123' : 'teacher123');
-    if (password === expectedPassword) {
-      // If code provided, verify it
-      if (code) {
-        const storedOtp = otpStore[username];
-        if (!storedOtp || storedOtp.code !== String(code).trim()) {
-          return res.status(400).json({ success: false, message: 'Invalid confirmation code' });
-        }
-        delete otpStore[username];
-      }
-
-      const defaultRole = username === 'admin' ? 'Headteacher' : username === 'dos' ? 'DOS' : 'Subject Teacher';
-      const defaultEmail = `${username.toLowerCase()}@ashinaga.or.ug`;
-
-      return res.json({
-        success: true,
-        teacher: {
-          username: teacher.username,
-          name: teacher.name,
-          role: teacher.role || defaultRole,
-          email: teacher.email || defaultEmail,
-          subjects: teacher.subjects || [],
-          classes: teacher.classes || []
-        }
-      });
-    }
-  }
-  
-  return res.status(401).json({ success: false, message: 'Invalid username or password' });
+  return res.status(410).json({
+    success: false,
+    message: 'Password sign-in has been retired. Request a confirmation code with your official email.'
+  });
 });
 
 // 2. Students API

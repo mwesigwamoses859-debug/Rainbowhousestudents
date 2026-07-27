@@ -22,7 +22,7 @@ interface SidebarProps {
 export default function Sidebar({ activeTab, setActiveTab, teacher, onLogout }: SidebarProps) {
   
   // Compact list mapping perfectly to exact labels and icons
-  const sidebarItems = [
+  const adminItems = [
     { id: 'dashboard', name: 'Dashboard', icon: Home },
     { id: 'classes', name: 'Students', icon: Users },
     { id: 'subjects', name: 'Subject Portals', icon: BookOpen },
@@ -32,6 +32,16 @@ export default function Sidebar({ activeTab, setActiveTab, teacher, onLogout }: 
     { id: 'ai-chat', name: 'AI Assistant', icon: Sparkles },
     { id: 'upload', name: 'Settings', icon: Settings },
   ];
+  const teacherItems = [
+    { id: 'dashboard', name: 'My Desk', icon: Home },
+    { id: 'classes', name: 'My Students', icon: Users },
+    { id: 'subjects', name: 'My Subjects', icon: BookOpen },
+    { id: 'marks', name: 'Assessments', icon: GraduationCap },
+    { id: 'attendance', name: 'Attendance', icon: Calendar },
+    { id: 'reports', name: 'Class Reports', icon: FileSpreadsheet },
+    { id: 'ai-chat', name: 'Teaching Assistant', icon: Sparkles },
+  ];
+  const sidebarItems = teacher.role === 'Headteacher' || teacher.role === 'DOS' ? adminItems : teacherItems;
 
   return (
     <aside id="app_sidebar" className="hidden md:flex w-64 bg-[#06182c] text-[#a5b4fc] min-h-[calc(100vh-70px)] flex-col justify-between shrink-0 shadow-xl no-print select-none border-r border-[#0f243c]">

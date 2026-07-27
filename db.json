@@ -5,6 +5,8 @@
     {
       "username": "admin",
       "name": "Headteacher / Administrator",
+      "email": "mwesigwa.m@ashinaga.org",
+      "role": "Headteacher",
       "subjects": [
         "All"
       ],
@@ -21,6 +23,8 @@
     {
       "username": "teacher1",
       "name": "Mr. John Mukasa",
+      "email": "john.mukasa@ashinaga.org",
+      "role": "Subject Teacher",
       "subjects": [
         "Mathematics",
         "Science"
@@ -34,6 +38,8 @@
     {
       "username": "teacher2",
       "name": "Mrs. Sarah Babirye",
+      "email": "sarah.babirye@ashinaga.org",
+      "role": "Subject Teacher",
       "subjects": [
         "English",
         "Social Studies",
