@@ -12,6 +12,9 @@ routes.
 - `OTP_PEPPER`: a long random secret used to hash one-time codes.
 - `GEMINI_API_KEY`: required only for the AI assistant.
 - `NODE_ENV=production`.
+- `VITE_API_BASE_URL`: required in the frontend build when the UI and Node API
+  are hosted on different domains, for example `https://api.example.com`.
+- `CORS_ORIGIN`: comma-separated frontend origins allowed by the Node API.
 
 Verify the `ashinaga.org` sending domain with the email provider before enabling
 staff sign-in. Never commit real secret values to Git.

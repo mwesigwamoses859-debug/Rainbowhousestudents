@@ -7,6 +7,27 @@ interface LoginProps {
   onLoginSuccess: (teacher: Teacher) => void;
 }
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
+async function readApiResponse(response: Response) {
+  const body = await response.text();
+  if (body) {
+    try {
+      return JSON.parse(body);
+    } catch {
+      throw new Error('The server returned an invalid response. Check the backend deployment and API URL.');
+    }
+  }
+
+  if (response.status === 405) {
+    throw new Error(
+      'Login API unavailable: this website is deployed as static files only. Configure VITE_API_BASE_URL to point to the Node.js backend.'
+    );
+  }
+
+  throw new Error(`The server returned an empty response (HTTP ${response.status}).`);
+}
+
 export default function Login({ onLoginSuccess }: LoginProps) {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -21,12 +42,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/auth/send-code', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/send-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase() })
       });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.message || 'Unable to send a confirmation code.');
       setMaskedEmail(data.email);
       setDemoCode(data.demoCode || '');
@@ -43,12 +64,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/auth/verify-code', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/verify-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase(), code })
       });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.message || 'That code could not be verified.');
       onLoginSuccess(data.teacher);
     } catch (err: any) {

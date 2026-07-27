@@ -11,6 +11,26 @@ const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'db.json');
 
 app.use(express.json({ limit: '10mb' }));
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = (process.env.CORS_ORIGIN || process.env.APP_URL || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Teacher-Username');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  }
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(origin && allowedOrigins.includes(origin) ? 204 : 403);
+  }
+
+  next();
+});
 
 // Helper to get or initialize the database
 interface DatabaseSchema {
