@@ -10,6 +10,7 @@ import {
   FileCheck
 } from 'lucide-react';
 import { Student, Mark } from '../types';
+import { UPPER_PRIMARY_SUBJECTS } from '../curriculum';
 import AshinagaLogo from './AshinagaLogo';
 
 interface GraduationListProps {
@@ -21,7 +22,7 @@ export default function GraduationList({ students, marks }: GraduationListProps)
   // P.7 Students are candidates for graduation
   const candidates = students.filter(s => s.className === 'P.7');
   
-  const subjects = ['Mathematics', 'English', 'Science', 'Social Studies', 'Religious Education'];
+  const subjects = [...UPPER_PRIMARY_SUBJECTS];
 
   // Helper to compute eligibility for a student
   const checkEligibility = (student: Student) => {

@@ -17,10 +17,10 @@ import {
   Microscope,
   Compass,
   HeartHandshake,
-  Palette,
   Info
 } from 'lucide-react';
 import { Student, Mark, Teacher, ClassName } from '../types';
+import { getSubjectsForClass } from '../curriculum';
 import AshinagaLogo from './AshinagaLogo';
 
 interface SubjectWorkspacesProps {
@@ -87,15 +87,11 @@ const SUBJECT_LIST: SubjectDef[] = [
     bgGradient: 'from-indigo-600 to-blue-950',
     description: 'Christian Religious Education (CRE) & Islamic Religious Education (IRE)'
   },
-  {
-    id: 'pe_arts',
-    name: 'Physical Education & Arts',
-    code: 'PEA',
-    icon: Palette,
-    color: 'text-rose-600 border-rose-200 bg-rose-50',
-    bgGradient: 'from-rose-600 to-red-800',
-    description: 'Physical Fitness, Sports Science, Fine Art, Crafts, and Performing Arts'
-  }
+  { id: 'literacy1', name: 'Literacy 1', code: 'LIT1', icon: BookOpen, color: 'text-cyan-600 border-cyan-200 bg-cyan-50', bgGradient: 'from-cyan-600 to-blue-800', description: 'Foundational language, comprehension, vocabulary, and communication' },
+  { id: 'literacy2', name: 'Literacy 2 (Reading and Writing)', code: 'LIT2', icon: FileText, color: 'text-violet-600 border-violet-200 bg-violet-50', bgGradient: 'from-violet-600 to-purple-800', description: 'Reading fluency, handwriting, spelling, and written expression' },
+  { id: 'luganda', name: 'Luganda', code: 'LUG', icon: BookOpen, color: 'text-orange-600 border-orange-200 bg-orange-50', bgGradient: 'from-orange-600 to-amber-800', description: 'Luganda language, reading, writing, vocabulary, and oral communication' },
+  { id: 'ict', name: 'Computer/ ICT', code: 'ICT', icon: Sparkles, color: 'text-sky-600 border-sky-200 bg-sky-50', bgGradient: 'from-sky-600 to-indigo-800', description: 'Digital literacy, computer skills, responsible technology use, and ICT practice' },
+  { id: 'kumon', name: 'KUMON', code: 'KUM', icon: Calculator, color: 'text-rose-600 border-rose-200 bg-rose-50', bgGradient: 'from-rose-600 to-red-800', description: 'Structured individual practice for numeracy and learning fluency' }
 ];
 
 const ALL_CLASSES: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
@@ -112,6 +108,15 @@ export default function SubjectWorkspaces({
   const [selectedTerm, setSelectedTerm] = useState<1 | 2 | 3>(1);
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [activeTab, setActiveTab] = useState<'marks' | 'syllabus' | 'analytics'>('marks');
+  const availableSubjects = SUBJECT_LIST.filter(subject =>
+    getSubjectsForClass(selectedClass).includes(subject.name as never)
+  );
+
+  useEffect(() => {
+    if (!availableSubjects.some(subject => subject.name === selectedSubject.name)) {
+      setSelectedSubject(availableSubjects[0]);
+    }
+  }, [selectedClass]);
 
   // Mark edit buffers
   const [scoresBuffer, setScoresBuffer] = useState<{ [studentId: string]: string }>({});
@@ -257,7 +262,7 @@ export default function SubjectWorkspaces({
 
       {/* Subject Navigation Tabs / Selector Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {SUBJECT_LIST.map(sub => {
+        {availableSubjects.map(sub => {
           const IconComp = sub.icon;
           const isSelected = selectedSubject.id === sub.id;
           const isAllowed = isHeadteacherOrDos || currentTeacher.subjects.includes('All') || currentTeacher.subjects.some(s => s.toLowerCase() === sub.name.toLowerCase() || (sub.name === 'Science' && s.toLowerCase().includes('science')) || (sub.name === 'English' && s.toLowerCase().includes('english')));

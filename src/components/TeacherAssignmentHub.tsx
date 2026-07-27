@@ -14,6 +14,7 @@ import {
   Square
 } from 'lucide-react';
 import { Teacher, ClassName } from '../types';
+import { ALL_SUBJECTS } from '../curriculum';
 import AshinagaLogo from './AshinagaLogo';
 
 interface TeacherAssignmentHubProps {
@@ -23,14 +24,6 @@ interface TeacherAssignmentHubProps {
   currentTeacher: Teacher;
   isAdmin: boolean;
 }
-
-const SUBJECT_LIST = [
-  'Mathematics', 
-  'English', 
-  'Science', 
-  'Social Studies', 
-  'Religious Education'
-];
 
 const CLASSES_LIST: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
 
@@ -337,8 +330,11 @@ export default function TeacherAssignmentHub({
                 <BookOpen className="h-3.5 w-3.5 text-blue-500" />
                 <span>Assigned Curriculum Subjects</span>
               </label>
+              <p className="mb-3 text-[11px] font-medium text-slate-500">
+                Lower primary: P.1–P.3. Upper primary: P.4–P.7. The mark sheet automatically shows only subjects valid for its selected class.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                {SUBJECT_LIST.map(subject => {
+                {ALL_SUBJECTS.map(subject => {
                   const isChecked = selectedSubjects.includes(subject);
                   return (
                     <button

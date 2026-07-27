@@ -14,6 +14,7 @@ import {
   Printer
 } from 'lucide-react';
 import { Student, ClassName } from '../types';
+import { getSubjectsForClass } from '../curriculum';
 import AshinagaLogo from './AshinagaLogo';
 
 interface TimetableSlot {
@@ -43,6 +44,13 @@ export default function SchoolTimetable({ teacherClasses, isAdmin }: SchoolTimet
   const [formSubject, setFormSubject] = useState('Mathematics');
   const [formTeacher, setFormTeacher] = useState('Madam Namutebi Proscovia');
   const [formRoom, setFormRoom] = useState('Stream A Room');
+  const classSubjects = getSubjectsForClass(selectedClass);
+
+  useEffect(() => {
+    if (!classSubjects.includes(formSubject as never)) {
+      setFormSubject(classSubjects[0]);
+    }
+  }, [selectedClass]);
 
   const classesList: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
   const daysList: ('Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday')[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -335,13 +343,9 @@ export default function SchoolTimetable({ teacherClasses, isAdmin }: SchoolTimet
                   className="w-full px-3.5 py-2.5 bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 rounded-xl text-xs text-slate-850 focus:outline-none font-bold"
                   required
                 >
-                  <option value="Mathematics">Mathematics</option>
-                  <option value="English Language">English Language</option>
-                  <option value="Integrated Science">Integrated Science</option>
-                  <option value="Social Studies (SST)">Social Studies (SST)</option>
-                  <option value="Religious Education (RE)">Religious Education (RE)</option>
-                  <option value="Art & Crafts">Art & Crafts</option>
-                  <option value="Physical Education">Physical Education</option>
+                  {classSubjects.map(subject => (
+                    <option key={subject} value={subject}>{subject}</option>
+                  ))}
                 </select>
               </div>
 

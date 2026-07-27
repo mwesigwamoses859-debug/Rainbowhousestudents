@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { BookOpenCheck, CheckCircle, AlertTriangle, HelpCircle, Save } from 'lucide-react';
 import { Student, Mark, ClassName, Teacher, GradeResult } from '../types';
+import { getSubjectsForClass } from '../curriculum';
 import AshinagaLogo from './AshinagaLogo';
 
 interface MarkEntryProps {
@@ -11,24 +12,19 @@ interface MarkEntryProps {
   isAdmin: boolean;
 }
 
-const SUBJECT_LIST = [
-  'Mathematics', 
-  'English', 
-  'Science', 
-  'Social Studies', 
-  'Religious Education'
-];
-
 export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdmin }: MarkEntryProps) {
   // Available classes for active teacher
   const classesList: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
   const filteredClasses = isAdmin ? classesList : teacher.classes;
-  const filteredSubjects = isAdmin ? SUBJECT_LIST : teacher.subjects;
   const allowedTerms: (1 | 2 | 3)[] = isAdmin ? [1, 2, 3] : (teacher.activeTerms || [1, 2, 3]);
 
   // Selected parameters
   const [selectedClass, setSelectedClass] = useState<ClassName>(filteredClasses[0] || 'P.1');
-  const [selectedSubject, setSelectedSubject] = useState<string>(filteredSubjects[0] || 'Mathematics');
+  const filteredSubjects = useMemo(
+    () => getSubjectsForClass(selectedClass).filter(subject => isAdmin || teacher.subjects.includes(subject)),
+    [selectedClass, isAdmin, teacher.subjects]
+  );
+  const [selectedSubject, setSelectedSubject] = useState<string>('Mathematics');
   const [selectedTerm, setSelectedTerm] = useState<1 | 2 | 3>(allowedTerms[0] || 1);
   const [selectedYear, setSelectedYear] = useState<number>(2026);
 

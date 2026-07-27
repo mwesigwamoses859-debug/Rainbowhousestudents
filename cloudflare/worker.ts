@@ -1,3 +1,5 @@
+import { isSubjectForClass } from '../src/curriculum';
+
 type StaffRow = {
   username: string;
   name: string;
@@ -278,6 +280,19 @@ async function api(request: Request, env: Env): Promise<Response> {
       return json({ success: false, message: 'Username, staff name and a password of at least 8 characters are required for new accounts.' }, 400);
     }
     const role = body.role === 'DOS' ? 'DOS' : body.role === 'Headteacher' ? 'Headteacher' : 'Subject Teacher';
+    if (role === 'Subject Teacher') {
+      const assignedClasses = Array.isArray(body.classes) ? body.classes : [];
+      const assignedSubjects = Array.isArray(body.subjects) ? body.subjects : [];
+      const invalidSubject = assignedSubjects.find((subject: string) =>
+        !assignedClasses.some((className: any) => isSubjectForClass(className, subject))
+      );
+      if (invalidSubject) {
+        return json({
+          success: false,
+          message: `${invalidSubject} is not offered in any of the classes assigned to this teacher.`
+        }, 400);
+      }
+    }
     await env.DB.prepare(
       `INSERT INTO staff (username, name, email, role, subjects, classes, active_terms, active)
        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
@@ -377,6 +392,12 @@ async function api(request: Request, env: Env): Promise<Response> {
     const studentRow = await env.DB.prepare('SELECT payload FROM students WHERE id = ?').bind(body.studentId).first() as any;
     if (!studentRow) return json({ success: false, message: 'Student not found.' }, 404);
     const student = JSON.parse(studentRow.payload);
+    if (!isSubjectForClass(student.className, String(body.subject))) {
+      return json({
+        success: false,
+        message: `${body.subject} is not part of the ${student.className} curriculum.`
+      }, 400);
+    }
     const subjects = JSON.parse(staff.subjects || '[]');
     const classes = JSON.parse(staff.classes || '[]');
     const activeTerms = JSON.parse(staff.active_terms || '[1,2,3]');

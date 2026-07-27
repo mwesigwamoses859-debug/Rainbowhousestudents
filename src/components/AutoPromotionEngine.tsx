@@ -13,6 +13,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { Student, Mark, ClassName } from '../types';
+import { getSubjectsForClass } from '../curriculum';
 import AshinagaLogo from './AshinagaLogo';
 
 interface AutoPromotionEngineProps {
@@ -23,7 +24,6 @@ interface AutoPromotionEngineProps {
 }
 
 const CLASSES_LIST: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
-const CORE_SUBJECTS = ['Mathematics', 'English', 'Science', 'Social Studies', 'Religious Education'];
 
 export default function AutoPromotionEngine({
   students,
@@ -92,7 +92,8 @@ export default function AutoPromotionEngine({
 
     // Subject coverage
     const assessedSubjects = studentMarks.map(m => m.subject);
-    const missingSubjects = CORE_SUBJECTS.filter(s => !assessedSubjects.includes(s));
+    const requiredSubjects = getSubjectsForClass(selectedClass);
+    const missingSubjects = requiredSubjects.filter(s => !assessedSubjects.includes(s));
     const isFullyAssessed = missingSubjects.length === 0;
 
     // Average score
