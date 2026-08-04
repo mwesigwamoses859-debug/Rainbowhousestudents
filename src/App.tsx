@@ -1,31 +1,33 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 import { Teacher, Student, Mark, ClassName } from './types';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
-import Dashboard from './components/Dashboard';
-import TeacherDashboard from './components/TeacherDashboard';
-import SchoolOperationsCenter from './components/SchoolOperationsCenter';
 import ForcePasswordChange from './components/ForcePasswordChange';
-import ClassList from './components/ClassList';
-import MarkEntry from './components/MarkEntry';
-import ReportCardView from './components/ReportCardView';
-import GraduationList from './components/GraduationList';
-import ExcelUpload from './components/ExcelUpload';
-import AttendanceSupport from './components/AttendanceSupport';
-import StudentIdCards from './components/StudentIdCards';
-import SchoolTimetable from './components/SchoolTimetable';
-import TeacherAssignmentHub from './components/TeacherAssignmentHub';
-import AutoPromotionEngine from './components/AutoPromotionEngine';
-import BackupRecovery from './components/BackupRecovery';
-import StudentProfileModal from './components/StudentProfileModal';
-import DocumentGenerator from './components/DocumentGenerator';
-import AiAssistant from './components/AiAssistant';
-import AcademicAnalytics from './components/AcademicAnalytics';
-import ReportVerification from './components/ReportVerification';
 import AshinagaLogo from './components/AshinagaLogo';
-import SubjectWorkspaces from './components/SubjectWorkspaces';
-import EmailGatewayModal from './components/EmailGatewayModal';
 import QuickActionFAB from './components/QuickActionFAB';
+
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const TeacherDashboard = lazy(() => import('./components/TeacherDashboard'));
+const SchoolOperationsCenter = lazy(() => import('./components/SchoolOperationsCenter'));
+const ClassList = lazy(() => import('./components/ClassList'));
+const MarkEntry = lazy(() => import('./components/MarkEntry'));
+const ReportCardView = lazy(() => import('./components/ReportCardView'));
+const GraduationList = lazy(() => import('./components/GraduationList'));
+const ExcelUpload = lazy(() => import('./components/ExcelUpload'));
+const AttendanceSupport = lazy(() => import('./components/AttendanceSupport'));
+const StudentIdCards = lazy(() => import('./components/StudentIdCards'));
+const SchoolTimetable = lazy(() => import('./components/SchoolTimetable'));
+const TeacherAssignmentHub = lazy(() => import('./components/TeacherAssignmentHub'));
+const AutoPromotionEngine = lazy(() => import('./components/AutoPromotionEngine'));
+const BackupRecovery = lazy(() => import('./components/BackupRecovery'));
+const StudentProfileModal = lazy(() => import('./components/StudentProfileModal'));
+const DocumentGenerator = lazy(() => import('./components/DocumentGenerator'));
+const AiAssistant = lazy(() => import('./components/AiAssistant'));
+const AcademicAnalytics = lazy(() => import('./components/AcademicAnalytics'));
+const ReportVerification = lazy(() => import('./components/ReportVerification'));
+const SubjectWorkspaces = lazy(() => import('./components/SubjectWorkspaces'));
+const EmailGatewayModal = lazy(() => import('./components/EmailGatewayModal'));
+const SecuritySettings = lazy(() => import('./components/SecuritySettings'));
 import { 
   ShieldAlert, 
   BookOpen, 
@@ -67,7 +69,7 @@ export default function App() {
   const [studentsSubTab, setStudentsSubTab] = useState<'list' | 'upload'>('list');
   const [academicsSubTab, setAcademicsSubTab] = useState<'marks' | 'timetable' | 'teachers' | 'promotion' | 'analytics'>('marks');
   const [examsSubTab, setExamsSubTab] = useState<'reports' | 'graduation' | 'idcards' | 'docgen' | 'verification'>('reports');
-  const [settingsSubTab, setSettingsSubTab] = useState<'upload' | 'backup' | 'audit'>('upload');
+  const [settingsSubTab, setSettingsSubTab] = useState<'upload' | 'backup' | 'audit' | 'security'>('upload');
 
   // Data State
   const [students, setStudents] = useState<Student[]>([]);
@@ -516,7 +518,7 @@ export default function App() {
 
   // Custom Navigation setter to sync subtabs
   const handleSetTab = (tab: string) => {
-    const permittedTab = teacher?.role === 'Subject Teacher' && !['dashboard', 'marks', 'attendance'].includes(tab)
+    const permittedTab = teacher?.role === 'Subject Teacher' && !['dashboard', 'marks', 'attendance', 'security'].includes(tab)
       ? 'marks'
       : tab;
     setActiveTab(permittedTab);
@@ -613,6 +615,7 @@ export default function App() {
   }
 
   return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F4F7FA] grid place-items-center text-sm font-bold text-slate-500">Loading workspace…</div>}>
     <div className="min-h-screen bg-[#F4F7FA] flex flex-col font-sans text-slate-800">
       
       {/* Dynamic QR Verification Modal from URL Query */}
@@ -1239,6 +1242,10 @@ export default function App() {
                 <SchoolOperationsCenter teacher={teacher} />
               )}
 
+              {activeTab === 'security' && (
+                <div className="p-8"><SecuritySettings authToken={teacher.authToken || ''} /></div>
+              )}
+
               {/* AI Assistant Tab */}
               {activeTab === 'ai-chat' && (
                 <AiAssistant />
@@ -1284,6 +1291,17 @@ export default function App() {
                       <Shield className="h-4 w-4" />
                       <span>System Audit Logs</span>
                     </button>
+                    <button
+                      onClick={() => setSettingsSubTab('security')}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        settingsSubTab === 'security'
+                          ? 'bg-[#0b2d59] text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                      <span>Login Security</span>
+                    </button>
                   </div>
 
                   {settingsSubTab === 'upload' ? (
@@ -1297,6 +1315,8 @@ export default function App() {
                     />
                   ) : settingsSubTab === 'backup' && isAdmin ? (
                     <BackupRecovery onRestoreSuccess={fetchData} />
+                  ) : settingsSubTab === 'security' ? (
+                    <SecuritySettings authToken={teacher.authToken || ''} />
                   ) : settingsSubTab === 'audit' ? (
                     <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm space-y-4">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -1425,5 +1445,6 @@ export default function App() {
       </div>
 
     </div>
+    </Suspense>
   );
 }

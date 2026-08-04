@@ -15,6 +15,18 @@ type StaffRow = {
   locked_until?: number;
   must_change_password?: number;
   password_changed_at?: number;
+  two_factor_enabled?: number;
+};
+
+type AuthChallengePurpose = 'login_2fa' | 'password_reset' | 'enable_2fa';
+
+type AuthChallengeRow = {
+  id: string;
+  username: string;
+  purpose: AuthChallengePurpose;
+  code_hash: string;
+  expires_at: number;
+  attempts: number;
 };
 
 type StaffAssignment = {
@@ -31,6 +43,45 @@ const bytesToHex = (bytes: ArrayBuffer) =>
   [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join('');
 const textEncoder = new TextEncoder();
 const hexToBytes = (hex: string) => new Uint8Array(hex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []);
+
+const getClientIp = (request: Request) => request.headers.get('CF-Connecting-IP') || 'unknown';
+
+async function rateLimitKey(env: Env, scope: string, identifier: string) {
+  return `${scope}:${await hmac(env.SESSION_SECRET, identifier.trim().toLowerCase())}`;
+}
+
+async function consumeRateLimit(
+  env: Env,
+  scope: string,
+  identifier: string,
+  limit: number,
+  windowMs: number,
+  blockMs: number
+) {
+  const key = await rateLimitKey(env, scope, identifier);
+  const now = Date.now();
+  const record = await env.DB.prepare(
+    'SELECT attempts, window_started_at, blocked_until FROM auth_rate_limits WHERE rate_key = ?'
+  ).bind(key).first<{ attempts: number; window_started_at: number; blocked_until: number }>();
+  if (record && record.blocked_until > now) return false;
+
+  const withinWindow = Boolean(record && now - record.window_started_at < windowMs);
+  const attempts = withinWindow ? record!.attempts + 1 : 1;
+  const windowStartedAt = withinWindow ? record!.window_started_at : now;
+  const blockedUntil = attempts > limit ? now + blockMs : 0;
+  await env.DB.prepare(
+    `INSERT INTO auth_rate_limits (rate_key, attempts, window_started_at, blocked_until)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(rate_key) DO UPDATE SET attempts=excluded.attempts,
+       window_started_at=excluded.window_started_at, blocked_until=excluded.blocked_until`
+  ).bind(key, attempts, windowStartedAt, blockedUntil).run();
+  return blockedUntil === 0;
+}
+
+async function clearRateLimit(env: Env, scope: string, identifier: string) {
+  const key = await rateLimitKey(env, scope, identifier);
+  await env.DB.prepare('DELETE FROM auth_rate_limits WHERE rate_key = ?').bind(key).run();
+}
 
 async function hmac(secret: string, value: string) {
   const key = await crypto.subtle.importKey(
@@ -90,7 +141,7 @@ async function getSession(request: Request, env: Env) {
   const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
   const [payload, signature] = token.split('.');
-  if (!payload || !signature || (await hmac(env.SESSION_SECRET, payload)) !== signature) return null;
+  if (!payload || !signature || !(await safeEqualHex(await hmac(env.SESSION_SECRET, payload), signature))) return null;
   try {
     const session = JSON.parse(decodeBase64Url(payload));
     return session.exp > Date.now() ? session : null;
@@ -272,6 +323,111 @@ async function sendCode(request: Request, env: Env) {
   return json({ success: true, email: email.replace(/^(.{2}).*(@.*)$/, '$1••••$2') });
 }
 
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+}[character] || character));
+
+async function createAuthChallenge(
+  env: Env,
+  staff: StaffRow,
+  purpose: AuthChallengePurpose,
+  subject: string,
+  intro: string
+) {
+  const id = crypto.randomUUID();
+  const random = new Uint32Array(1);
+  crypto.getRandomValues(random);
+  const code = String((random[0] % 900000) + 100000);
+  const codeHash = await hmac(env.SESSION_SECRET, `${id}:${code}:${purpose}`);
+  const now = Date.now();
+  await env.DB.prepare('DELETE FROM auth_challenges WHERE username = ? AND purpose = ?')
+    .bind(staff.username, purpose).run();
+  await env.DB.prepare(
+    `INSERT INTO auth_challenges (id, username, purpose, code_hash, expires_at, attempts, created_at)
+     VALUES (?, ?, ?, ?, ?, 0, ?)`
+  ).bind(id, staff.username, purpose, codeHash, now + 10 * 60 * 1000, now).run();
+
+  const mailResponse = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: [staff.email],
+      subject,
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto"><h2>Rainbow House security</h2><p>Hello ${escapeHtml(staff.name)},</p><p>${escapeHtml(intro)}</p><p style="font-size:32px;font-weight:800;letter-spacing:8px;color:#4f46e5">${code}</p><p>This code expires in 10 minutes. If you did not request it, ignore this email.</p></div>`
+    })
+  });
+  if (!mailResponse.ok) {
+    await env.DB.prepare('DELETE FROM auth_challenges WHERE id = ?').bind(id).run();
+    throw new Error('Security code email could not be sent.');
+  }
+  return id;
+}
+
+async function verifyAuthChallenge(
+  env: Env,
+  challengeId: string,
+  code: string,
+  purpose: AuthChallengePurpose
+) {
+  const record = await env.DB.prepare(
+    'SELECT id, username, purpose, code_hash, expires_at, attempts FROM auth_challenges WHERE id = ? AND purpose = ?'
+  ).bind(challengeId, purpose).first<AuthChallengeRow>();
+  if (!record || record.expires_at < Date.now()) {
+    if (record) await env.DB.prepare('DELETE FROM auth_challenges WHERE id = ?').bind(challengeId).run();
+    return null;
+  }
+  if (record.attempts >= 5) {
+    await env.DB.prepare('DELETE FROM auth_challenges WHERE id = ?').bind(challengeId).run();
+    return null;
+  }
+  const suppliedHash = await hmac(env.SESSION_SECRET, `${challengeId}:${code}:${purpose}`);
+  if (!(await safeEqualHex(suppliedHash, record.code_hash))) {
+    await env.DB.prepare('UPDATE auth_challenges SET attempts = attempts + 1 WHERE id = ?').bind(challengeId).run();
+    return null;
+  }
+  await env.DB.prepare('DELETE FROM auth_challenges WHERE id = ?').bind(challengeId).run();
+  return record;
+}
+
+async function requestPasswordReset(request: Request, env: Env) {
+  const body = await readBody(request);
+  const account = String(body.account || '').trim().toLowerCase();
+  const allowed = await consumeRateLimit(env, 'password-reset', `${getClientIp(request)}:${account}`, 3, 15 * 60 * 1000, 30 * 60 * 1000);
+  if (!allowed) return json({ success: false, message: 'Too many recovery requests. Try again later.' }, 429);
+
+  const staff = await env.DB.prepare(
+    `SELECT username, name, email, role, subjects, classes, active_terms
+     FROM staff WHERE active = 1 AND (username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE)`
+  ).bind(account, account).first<StaffRow>();
+  if (staff?.email) {
+    try {
+      const challengeId = await createAuthChallenge(env, staff, 'password_reset', 'Reset your Rainbow House password', 'Use this code to reset your staff password:');
+      return json({ success: true, challengeId, message: 'If the account exists, a reset code has been sent to its registered email.' });
+    } catch {
+      return json({ success: true, challengeId: crypto.randomUUID(), message: 'If the account exists, a reset code has been sent to its registered email.' });
+    }
+  }
+  return json({ success: true, challengeId: crypto.randomUUID(), message: 'If the account exists, a reset code has been sent to its registered email.' });
+}
+
+async function resetPassword(request: Request, env: Env) {
+  const body = await readBody(request);
+  const challengeId = String(body.challengeId || '');
+  const code = String(body.code || '').trim();
+  const newPassword = String(body.newPassword || '');
+  if (newPassword.length < 12 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+    return json({ success: false, message: 'Use at least 12 characters, including a letter and a number.' }, 400);
+  }
+  const allowed = await consumeRateLimit(env, 'password-reset-verify', `${getClientIp(request)}:${challengeId}`, 5, 15 * 60 * 1000, 30 * 60 * 1000);
+  if (!allowed) return json({ success: false, message: 'Too many attempts. Request a new reset code.' }, 429);
+  const challenge = await verifyAuthChallenge(env, challengeId, code, 'password_reset');
+  if (!challenge) return json({ success: false, message: 'The reset code is invalid or expired.' }, 400);
+  await setPassword(env, challenge.username, newPassword, false);
+  await writeAudit(env, request, { sub: challenge.username, role: 'Staff' }, 'PASSWORD_RESET', 'staff', challenge.username);
+  return json({ success: true, message: 'Password reset. You can now sign in.' });
+}
+
 async function verifyCode(request: Request, env: Env) {
   const body = await readBody(request);
   const email = normalizeEmail(body.email);
@@ -307,10 +463,15 @@ async function passwordLogin(request: Request, env: Env) {
   if (!username || password.length < 8) {
     return json({ success: false, message: 'Enter your staff username and password.' }, 400);
   }
+  const ipAllowed = await consumeRateLimit(env, 'login-ip', getClientIp(request), 30, 15 * 60 * 1000, 15 * 60 * 1000);
+  const accountAllowed = await consumeRateLimit(env, 'login-account', username, 10, 15 * 60 * 1000, 15 * 60 * 1000);
+  if (!ipAllowed || !accountAllowed) {
+    return json({ success: false, message: 'Too many sign-in attempts. Try again in 15 minutes.' }, 429);
+  }
 
   const staff = await env.DB.prepare(
     `SELECT username, name, email, role, subjects, classes, active_terms, password_hash, password_salt,
-            password_iterations, failed_attempts, locked_until, must_change_password, password_changed_at
+            password_iterations, failed_attempts, locked_until, must_change_password, password_changed_at, two_factor_enabled
      FROM staff WHERE username = ? COLLATE NOCASE AND active = 1`
   ).bind(username).first() as StaffRow | null;
   if (!staff) return json({ success: false, message: 'Invalid username or password.' }, 401);
@@ -351,20 +512,102 @@ async function passwordLogin(request: Request, env: Env) {
 
   await env.DB.prepare('UPDATE staff SET failed_attempts = 0, locked_until = 0, last_login_at = ? WHERE username = ?')
     .bind(Date.now(), staff.username).run();
+  await clearRateLimit(env, 'login-account', username);
+  if (staff.two_factor_enabled) {
+    try {
+      const challengeId = await createAuthChallenge(
+        env,
+        staff,
+        'login_2fa',
+        'Your Rainbow House verification code',
+        'Complete your sign-in with this verification code:'
+      );
+      return json({ success: true, requiresTwoFactor: true, challengeId, maskedEmail: staff.email.replace(/^(.{2}).*(@.*)$/, '$1••••$2') });
+    } catch {
+      return json({ success: false, message: 'The verification code could not be sent. Try again shortly.' }, 503);
+    }
+  }
   const assignments = await getAssignments(env, staff.username);
   await writeAudit(env, request, { sub: staff.username, role: staff.role }, 'LOGIN_SUCCESS', 'staff', staff.username);
+  return json({ success: true, teacher: toTeacher(staff, assignments), token: await issueSession(env, staff) });
+}
+
+async function verifyTwoFactorLogin(request: Request, env: Env) {
+  const body = await readBody(request);
+  const challengeId = String(body.challengeId || '');
+  const code = String(body.code || '').trim();
+  const allowed = await consumeRateLimit(env, 'login-2fa', `${getClientIp(request)}:${challengeId}`, 5, 15 * 60 * 1000, 30 * 60 * 1000);
+  if (!allowed) return json({ success: false, message: 'Too many verification attempts. Sign in again.' }, 429);
+  const challenge = await verifyAuthChallenge(env, challengeId, code, 'login_2fa');
+  if (!challenge) return json({ success: false, message: 'The verification code is invalid or expired.' }, 400);
+  const staff = await env.DB.prepare(
+    `SELECT username, name, email, role, subjects, classes, active_terms, must_change_password, two_factor_enabled
+     FROM staff WHERE username = ? AND active = 1`
+  ).bind(challenge.username).first<StaffRow>();
+  if (!staff) return json({ success: false, message: 'Account unavailable.' }, 401);
+  const assignments = await getAssignments(env, staff.username);
+  await writeAudit(env, request, { sub: staff.username, role: staff.role }, 'LOGIN_2FA_SUCCESS', 'staff', staff.username);
   return json({ success: true, teacher: toTeacher(staff, assignments), token: await issueSession(env, staff) });
 }
 
 async function api(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   if (request.method === 'POST' && url.pathname === '/api/auth/login') return passwordLogin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/auth/verify-2fa') return verifyTwoFactorLogin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/auth/request-password-reset') return requestPasswordReset(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/auth/reset-password') return resetPassword(request, env);
   if (request.method === 'POST' && url.pathname === '/api/auth/send-code') return sendCode(request, env);
   if (request.method === 'POST' && url.pathname === '/api/auth/verify-code') return verifyCode(request, env);
   if (request.method === 'GET' && url.pathname === '/api/health') return json({ ok: true, storage: 'D1' });
 
   const session = await getSession(request, env);
   if (!session) return json({ success: false, message: 'Your session has expired. Please sign in again.' }, 401);
+
+  if (request.method === 'GET' && url.pathname === '/api/auth/security') {
+    const staff = await env.DB.prepare('SELECT email, two_factor_enabled FROM staff WHERE username = ? AND active = 1')
+      .bind(session.sub).first<{ email: string; two_factor_enabled: number }>();
+    if (!staff) return json({ success: false, message: 'Account unavailable.' }, 404);
+    return json({ twoFactorEnabled: Boolean(staff.two_factor_enabled), maskedEmail: staff.email.replace(/^(.{2}).*(@.*)$/, '$1••••$2') });
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/auth/2fa/setup') {
+    const staff = await env.DB.prepare(
+      'SELECT username, name, email, role, subjects, classes, active_terms, two_factor_enabled FROM staff WHERE username = ? AND active = 1'
+    ).bind(session.sub).first<StaffRow>();
+    if (!staff) return json({ success: false, message: 'Account unavailable.' }, 404);
+    if (staff.two_factor_enabled) return json({ success: true, alreadyEnabled: true });
+    const allowed = await consumeRateLimit(env, 'enable-2fa', `${getClientIp(request)}:${session.sub}`, 3, 15 * 60 * 1000, 30 * 60 * 1000);
+    if (!allowed) return json({ success: false, message: 'Too many code requests. Try again later.' }, 429);
+    try {
+      const challengeId = await createAuthChallenge(env, staff, 'enable_2fa', 'Enable two-step verification', 'Confirm two-step verification with this code:');
+      return json({ success: true, challengeId, maskedEmail: staff.email.replace(/^(.{2}).*(@.*)$/, '$1••••$2') });
+    } catch {
+      return json({ success: false, message: 'The verification email could not be sent.' }, 503);
+    }
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/auth/2fa/confirm') {
+    const body = await readBody(request);
+    const challenge = await verifyAuthChallenge(env, String(body.challengeId || ''), String(body.code || '').trim(), 'enable_2fa');
+    if (!challenge || challenge.username !== session.sub) return json({ success: false, message: 'The verification code is invalid or expired.' }, 400);
+    await env.DB.prepare('UPDATE staff SET two_factor_enabled = 1 WHERE username = ?').bind(session.sub).run();
+    await writeAudit(env, request, session, 'TWO_FACTOR_ENABLED', 'staff', session.sub);
+    return json({ success: true });
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/auth/2fa/disable') {
+    const body = await readBody(request);
+    const password = String(body.password || '');
+    const staff = await env.DB.prepare(
+      'SELECT password_hash, password_salt, password_iterations FROM staff WHERE username = ? AND active = 1'
+    ).bind(session.sub).first<{ password_hash: string | null; password_salt: string | null; password_iterations: number }>();
+    if (!staff?.password_hash || !staff.password_salt) return json({ success: false, message: 'Password account unavailable.' }, 400);
+    const suppliedHash = await hashPassword(password, hexToBytes(staff.password_salt), staff.password_iterations || 100000);
+    if (!(await safeEqualHex(suppliedHash, staff.password_hash))) return json({ success: false, message: 'Password is incorrect.' }, 401);
+    await env.DB.prepare('UPDATE staff SET two_factor_enabled = 0 WHERE username = ?').bind(session.sub).run();
+    await writeAudit(env, request, session, 'TWO_FACTOR_DISABLED', 'staff', session.sub);
+    return json({ success: true });
+  }
 
   if (request.method === 'POST' && url.pathname === '/api/auth/change-password') {
     const body = await readBody(request);

@@ -8,7 +8,8 @@ import {
   Settings,
   LogOut,
   Sparkles,
-  BookOpen
+  BookOpen,
+  ShieldCheck
 } from 'lucide-react';
 import { Teacher } from '../types';
 
@@ -32,11 +33,13 @@ export default function Sidebar({ activeTab, setActiveTab, teacher, onLogout }: 
     { id: 'ai-chat', name: 'AI Assistant', icon: Sparkles },
     { id: 'operations', name: 'School Controls', icon: Settings },
     { id: 'upload', name: 'Settings', icon: Settings },
+    { id: 'security', name: 'Login Security', icon: ShieldCheck },
   ];
   const teacherItems = [
     { id: 'dashboard', name: 'My Desk', icon: Home },
     { id: 'marks', name: 'My Mark Sheet', icon: GraduationCap },
     { id: 'attendance', name: 'My Attendance', icon: Calendar },
+    { id: 'security', name: 'Login Security', icon: ShieldCheck },
   ];
   const sidebarItems = teacher.role === 'Headteacher' || teacher.role === 'DOS' ? adminItems : teacherItems;
 
