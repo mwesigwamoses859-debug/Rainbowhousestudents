@@ -60,7 +60,6 @@ import {
 } from 'recharts';
 import { Student, Mark, Teacher } from '../types';
 import AshinagaLogo from './AshinagaLogo';
-import AttendanceHeatmap from './AttendanceHeatmap';
 
 interface DashboardProps {
   students: Student[];
@@ -801,95 +800,6 @@ export default function Dashboard({
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-rose-500 rounded-full inline-block"></span>Pending Verification</span>
                 <span className="font-extrabold text-slate-800">12</span>
               </div>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Interactive D3.js Attendance Heatmap Studio Module */}
-        <AttendanceHeatmap 
-          totalStudentsCount={displayTotal} 
-          selectedClass={selectedClassFilter !== 'All Classes' ? selectedClassFilter : undefined} 
-        />
-
-        {/* Row 2: Attendance Patterns & Class-Wise Academic Distribution */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          {/* 3. Attendance Patterns (Recharts ComposedChart / BarChart) */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-            <div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                    <CalendarCheck className="h-5 w-5 text-emerald-600" />
-                    Attendance Patterns & Retention
-                  </h3>
-                  <p className="text-xs text-slate-500 font-medium">Class attendance dynamics against Uganda 95% target</p>
-                </div>
-
-                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold border border-slate-200">
-                  <button
-                    onClick={() => setAttendanceViewMode('weekly')}
-                    className={`px-3 py-1 rounded-lg transition-all text-[11px] cursor-pointer ${
-                      attendanceViewMode === 'weekly'
-                        ? 'bg-slate-900 text-white shadow-xs font-black'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Weekly Trend
-                  </button>
-                  <button
-                    onClick={() => setAttendanceViewMode('byClass')}
-                    className={`px-3 py-1 rounded-lg transition-all text-[11px] cursor-pointer ${
-                      attendanceViewMode === 'byClass'
-                        ? 'bg-slate-900 text-white shadow-xs font-black'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Class Comparison
-                  </button>
-                </div>
-              </div>
-
-              <div className="w-full h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  {attendanceViewMode === 'weekly' ? (
-                    <BarChart data={weeklyAttendanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                      <XAxis dataKey="week" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <YAxis domain={[90, 100]} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', color: '#fff', border: 'none', fontSize: '12px' }}
-                        formatter={(val: number) => [`${val}%`, 'Attendance Rate']}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                      <Bar dataKey="Present" fill="#10b981" radius={[4, 4, 0, 0]} name="Present (%)" />
-                      <Bar dataKey="Excused" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Excused (%)" />
-                      <Bar dataKey="Unexcused" fill="#f43f5e" radius={[4, 4, 0, 0]} name="Unexcused (%)" />
-                      <ReferenceLine y={95} stroke="#3b82f6" strokeDasharray="4 4" label={{ value: 'Target 95%', fill: '#3b82f6', fontSize: 10, position: 'insideTopRight' }} />
-                    </BarChart>
-                  ) : (
-                    <BarChart data={classAttendanceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                      <XAxis dataKey="className" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <YAxis domain={[90, 100]} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', color: '#fff', border: 'none', fontSize: '12px' }}
-                        formatter={(val: number) => [`${val}%`, 'Class Rate']}
-                      />
-                      <Bar dataKey="AttendanceRate" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Class Attendance (%)" />
-                      <ReferenceLine y={95} stroke="#10b981" strokeDasharray="4 4" label={{ value: 'National Target (95%)', fill: '#10b981', fontSize: 10 }} />
-                    </BarChart>
-                  )}
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="border-t border-slate-100 pt-3 mt-2 flex items-center justify-between text-xs text-slate-500 font-medium">
-              <span>Average School Attendance: <strong className="text-emerald-700 font-extrabold">97.3%</strong></span>
-              <span className="text-xs font-bold text-slate-700 bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-md">
-                ✓ Exceeds 95% Standard
-              </span>
             </div>
           </div>
 

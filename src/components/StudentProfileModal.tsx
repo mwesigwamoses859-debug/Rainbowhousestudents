@@ -67,7 +67,7 @@ export default function StudentProfileModal({
   marks,
   onUpdateStudent
 }: StudentProfileModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'academics' | 'attendance' | 'support' | 'community' | 'guardians' | 'health' | 'documents' | 'history'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'academics' | 'support' | 'community' | 'guardians' | 'health' | 'documents' | 'history'>('overview');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('all');
   
   // Local editable alert thresholds
@@ -157,12 +157,7 @@ export default function StudentProfileModal({
     : 0;
 
   // Calculate dynamic warning checks
-  const hasThreeConsecutiveAbsences = attendanceLogs.length >= 3 && 
-    attendanceLogs.slice(0, 3).every(l => l.status === 'Absent');
 
-  const attendanceRate = Math.round(
-    (attendanceLogs.filter(l => l.status === 'Present').length / attendanceLogs.length) * 100
-  ) || 92;
 
   const academicDrop = avgAcademicScore < thresholds.minAcademicScore && studentMarks.length > 0;
   
@@ -180,12 +175,6 @@ export default function StudentProfileModal({
   const redAlerts: string[] = [];
   const orangeAlerts: string[] = [];
 
-  if (hasThreeConsecutiveAbsences) {
-    redAlerts.push(`Missed ${thresholds.consecutiveAbsences}+ consecutive school days (Intensive case intervention required)`);
-  }
-  if (attendanceRate < thresholds.minAttendanceRate) {
-    redAlerts.push(`Overall Attendance is ${attendanceRate}% (Below acceptable threshold of ${thresholds.minAttendanceRate}%)`);
-  }
   if (academicDrop) {
     orangeAlerts.push(`Academic Performance Average is ${avgAcademicScore}% (Below safety benchmark of ${thresholds.minAcademicScore}%)`);
   }
@@ -328,7 +317,6 @@ export default function StudentProfileModal({
           {[
             { id: 'overview', name: 'Overview', icon: User },
             { id: 'academics', name: 'Academics', icon: GraduationCap },
-            { id: 'attendance', name: 'Attendance', icon: Calendar },
             { id: 'support', name: 'Support', icon: Smile },
             { id: 'community', name: 'Community', icon: HeartHandshake },
             { id: 'guardians', name: 'Guardians', icon: Phone },
@@ -440,10 +428,6 @@ export default function StudentProfileModal({
                       <h4 className="text-xs font-black uppercase tracking-wide">Academics Status</h4>
                     </div>
                     <p className="text-xs text-slate-500">Overall academic average across assessed terms.</p>
-                    <div className="flex items-baseline gap-2 pt-2">
-                      <span className="text-3xl font-black text-indigo-600">{avgAcademicScore}%</span>
-                      <span className="text-[10px] font-bold text-slate-400">Average Score</span>
-                    </div>
                   </div>
 
                   <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-1.5">
@@ -452,10 +436,6 @@ export default function StudentProfileModal({
                       <h4 className="text-xs font-black uppercase tracking-wide">Attendance Matrix</h4>
                     </div>
                     <p className="text-xs text-slate-500">Calculated attendance logging rate this term.</p>
-                    <div className="flex items-baseline gap-2 pt-2">
-                      <span className="text-3xl font-black text-emerald-600">{attendanceRate}%</span>
-                      <span className="text-[10px] font-bold text-slate-400">Regularity Status</span>
-                    </div>
                   </div>
                 </div>
 
@@ -856,48 +836,6 @@ export default function StudentProfileModal({
               </div>
             );
           })()}
-
-          {/* TAB 3: ATTENDANCE */}
-          {activeTab === 'attendance' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm text-center flex flex-col justify-center space-y-2">
-                <span className="text-5xl font-black text-emerald-600">{attendanceRate}%</span>
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Termly Attendance Rate</h4>
-                <p className="text-[11px] text-slate-400">Based on dynamic daily registry sync with class teacher.</p>
-                <div className="pt-4 border-t border-slate-50 grid grid-cols-2 gap-2 text-left">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-center">
-                    <span className="text-[9px] text-slate-400 font-extrabold uppercase block">Present Days</span>
-                    <span className="text-sm font-black text-emerald-600">142 Days</span>
-                  </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-center">
-                    <span className="text-[9px] text-slate-400 font-extrabold uppercase block">Absences</span>
-                    <span className="text-sm font-black text-rose-500">12 Days</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="md:col-span-2 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-                <h3 className="text-xs font-black text-[#032b5e] uppercase tracking-wider border-b border-slate-50 pb-2">Recent Daily Attendance Logs</h3>
-                <div className="space-y-2.5 max-h-60 overflow-y-auto">
-                  {attendanceLogs.map((log, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-100 rounded-xl transition-all">
-                      <div className="flex items-center gap-3">
-                        <span className={`w-2.5 h-2.5 rounded-full ${log.status === 'Present' ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`} />
-                        <div>
-                          <p className="text-xs font-extrabold text-slate-800">{log.date}</p>
-                          <p className="text-[10px] text-slate-400">{log.notes}</p>
-                        </div>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${log.status === 'Present' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'}`}>
-                        {log.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* TAB 4: SUPPORT */}
           {activeTab === 'support' && (
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-6">
@@ -1336,7 +1274,6 @@ export default function StudentProfileModal({
               Attendance & Social Support Summary
             </h4>
             <p className="text-[10px] text-slate-700">
-              • Overall Attendance Rate: <strong className="text-slate-900">{attendanceRate}%</strong> ({attendanceLogs.filter(l => l.status === 'Present').length} days present)
             </p>
             <p className="text-[10px] text-slate-700">
               • Academic Performance Average: <strong className="text-slate-900">{avgAcademicScore}%</strong>

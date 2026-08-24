@@ -3,15 +3,11 @@ import { Teacher, Student, Mark, ClassName } from './types';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
-import TeacherDashboard from './components/TeacherDashboard';
-import SchoolOperationsCenter from './components/SchoolOperationsCenter';
-import ForcePasswordChange from './components/ForcePasswordChange';
 import ClassList from './components/ClassList';
 import MarkEntry from './components/MarkEntry';
 import ReportCardView from './components/ReportCardView';
 import GraduationList from './components/GraduationList';
 import ExcelUpload from './components/ExcelUpload';
-import AttendanceSupport from './components/AttendanceSupport';
 import StudentIdCards from './components/StudentIdCards';
 import SchoolTimetable from './components/SchoolTimetable';
 import TeacherAssignmentHub from './components/TeacherAssignmentHub';
@@ -24,7 +20,6 @@ import AcademicAnalytics from './components/AcademicAnalytics';
 import ReportVerification from './components/ReportVerification';
 import AshinagaLogo from './components/AshinagaLogo';
 import SubjectWorkspaces from './components/SubjectWorkspaces';
-import EmailGatewayModal from './components/EmailGatewayModal';
 import QuickActionFAB from './components/QuickActionFAB';
 import { 
   ShieldAlert, 
@@ -53,13 +48,10 @@ import {
   FileText,
   Shield,
   ShieldCheck,
-  FileKey,
-  Settings
+  FileKey
 } from 'lucide-react';
 
 export default function App() {
-  const systemRoleFor = (staff: Teacher) =>
-    staff.role === 'Headteacher' || staff.role === 'DOS' ? 'administrator' : 'class_teacher';
   const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   
@@ -78,7 +70,6 @@ export default function App() {
 
   // Bell Notifications Dropdown State
   const [showNotifications, setShowNotifications] = useState(false);
-  const [isEmailGatewayOpen, setIsEmailGatewayOpen] = useState(false);
 
   // Floating Quick Actions FAB triggers
   const [autoOpenAddStudent, setAutoOpenAddStudent] = useState(false);
@@ -212,7 +203,11 @@ export default function App() {
       try {
         const parsed = JSON.parse(savedTeacher);
         setTeacher(parsed);
-        setCurrentRole(systemRoleFor(parsed));
+        if (parsed.username === 'admin') {
+          setCurrentRole('administrator');
+        } else {
+          setCurrentRole('class_teacher');
+        }
       } catch (err) {
         localStorage.removeItem('school_sms_teacher');
       }
@@ -224,11 +219,10 @@ export default function App() {
     setLoading(true);
     setError('');
     try {
-      const authHeaders = teacher?.authToken ? { Authorization: `Bearer ${teacher.authToken}` } : {};
       const [studentsRes, marksRes, teachersRes] = await Promise.all([
-        fetch('/api/students', { headers: authHeaders }),
-        fetch('/api/marks', { headers: authHeaders }),
-        fetch('/api/teachers', { headers: authHeaders })
+        fetch('/api/students'),
+        fetch('/api/marks'),
+        fetch('/api/teachers')
       ]);
 
       if (!studentsRes.ok || !marksRes.ok || !teachersRes.ok) {
@@ -259,7 +253,11 @@ export default function App() {
   const handleLoginSuccess = (loggedInTeacher: Teacher) => {
     setTeacher(loggedInTeacher);
     localStorage.setItem('school_sms_teacher', JSON.stringify(loggedInTeacher));
-    setCurrentRole(systemRoleFor(loggedInTeacher));
+    if (loggedInTeacher.username === 'admin') {
+      setCurrentRole('administrator');
+    } else {
+      setCurrentRole('class_teacher');
+    }
     setActiveTab('dashboard');
   };
 
@@ -268,44 +266,25 @@ export default function App() {
     localStorage.removeItem('school_sms_teacher');
   };
 
-  useEffect(() => {
-    if (!teacher) return;
-    let timeout: ReturnType<typeof setTimeout>;
-    const resetTimeout = () => {
-      clearTimeout(timeout);
-      timeout = setTimeout(handleLogout, 30 * 60 * 1000);
-    };
-    const events = ['pointerdown', 'keydown', 'scroll', 'touchstart'];
-    events.forEach(event => window.addEventListener(event, resetTimeout, { passive: true }));
-    resetTimeout();
-    return () => {
-      clearTimeout(timeout);
-      events.forEach(event => window.removeEventListener(event, resetTimeout));
-    };
-  }, [teacher]);
-
   // Teacher Assignments
   const handleAddOrUpdateTeacher = async (teacherData: any) => {
     try {
       const response = await fetch('/api/teachers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(teacherData),
       });
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Failed to register or update teacher.');
-      }
+      if (!response.ok) throw new Error();
       
       // Refresh teachers list from server
-      const teachersResponse = await fetch('/api/teachers', { headers: { Authorization: `Bearer ${teacher?.authToken || ''}` } });
+      const teachersResponse = await fetch('/api/teachers');
       if (teachersResponse.ok) {
         const data = await teachersResponse.json();
         setTeachers(data);
       }
-    } catch (err: any) {
-      alert(err.message || 'Failed to register or update teacher.');
+    } catch (err) {
+      alert('Failed to register or update teacher.');
       throw err;
     }
   };
@@ -321,7 +300,6 @@ export default function App() {
     try {
       const response = await fetch(`/api/teachers/${username}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${teacher?.authToken || ''}` },
       });
       if (!response.ok) throw new Error();
       setTeachers(prev => prev.filter(t => t.username !== username));
@@ -331,18 +309,18 @@ export default function App() {
   };
 
   // Bulk / automatic student promotion
-  const handlePromoteStudents = async (promotions: { studentId: string; nextClassName: any; reason?: string }[], academicYear?: number) => {
+  const handlePromoteStudents = async (promotions: { studentId: string; nextClassName: any }[]) => {
     try {
       const response = await fetch('/api/students/promote-bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
-        body: JSON.stringify({ promotions, academicYear }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ promotions }),
       });
 
       if (!response.ok) throw new Error();
       
       // Refresh students
-      const studentsRes = await fetch('/api/students', { headers: { Authorization: `Bearer ${teacher?.authToken || ''}` } });
+      const studentsRes = await fetch('/api/students');
       if (studentsRes.ok) {
         const data = await studentsRes.json();
         setStudents(data);
@@ -356,31 +334,14 @@ export default function App() {
   // Student Transactions
   const handleAddStudent = async (studentData: Omit<Student, 'id'>) => {
     try {
-      let response = await fetch('/api/students', {
+      const response = await fetch('/api/students', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(studentData),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        if (response.status === 409 && errorData.code === 'DUPLICATE_STUDENT' && errorData.matchStudent) {
-          const existingName = `${errorData.matchStudent.surname} ${errorData.matchStudent.otherNames}`.trim();
-          if (errorData.message?.includes('similar') && window.confirm(
-            `${errorData.message}\n\nExisting pupil: ${existingName}, ${errorData.matchStudent.className}.\n\nCreate a separate pupil anyway?`
-          )) {
-            response = await fetch('/api/students', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
-              body: JSON.stringify({ ...studentData, confirmSimilar: true }),
-            });
-            if (response.ok) {
-              const addedStudent = await response.json();
-              setStudents(previous => [...previous, addedStudent]);
-              return;
-            }
-          }
-        }
         throw new Error(errorData.message || 'Failed to register student.');
       }
       const addedStudent = await response.json();
@@ -396,7 +357,7 @@ export default function App() {
     try {
       const response = await fetch(`/api/students/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedData),
       });
 
@@ -421,7 +382,6 @@ export default function App() {
     try {
       const response = await fetch(`/api/students/${id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${teacher?.authToken || ''}` },
       });
 
       if (!response.ok) throw new Error();
@@ -435,46 +395,22 @@ export default function App() {
 
   // Bulk student import
   const handleBulkAddStudents = async (importedStudents: any[]) => {
-    const batchSize = 200;
-    const imported: Student[] = [];
-    const updated: Student[] = [];
-    const skipped: any[] = [];
     try {
-      for (let index = 0; index < importedStudents.length; index += batchSize) {
-        const batchNumber = Math.floor(index / batchSize) + 1;
-        const response = await fetch('/api/students/bulk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
-          body: JSON.stringify(importedStudents.slice(index, index + batchSize)),
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(`Batch ${batchNumber} failed: ${data.message || `server returned HTTP ${response.status}`}`);
-        }
-        imported.push(...(data.students || []));
-        updated.push(...(data.updatedStudents || []));
-        skipped.push(...(data.skipped || []).map((item: any) => ({
-          ...item,
-          row: Number(item.row || 2) + index
-        })));
+      const response = await fetch('/api/students/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(importedStudents),
+      });
+
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+
+      if (data.success) {
+        setStudents(prev => [...prev, ...data.students]);
       }
-      const updatedById = new Map(updated.map(student => [student.id, student]));
-      setStudents(previous => [
-        ...previous.map(student => updatedById.get(student.id) || student),
-        ...imported
-      ]);
-      return {
-        success: true,
-        count: imported.length,
-        students: imported,
-        updatedStudents: updated,
-        updatedCount: updated.length,
-        skipped,
-        skippedCount: skipped.length
-      };
-    } catch (err: any) {
-      const partial = imported.length ? ` ${imported.length} pupils from earlier batches were imported successfully.` : '';
-      alert(`${err.message || 'Bulk import failed.'}${partial}`);
+      return data;
+    } catch (err) {
+      alert('Bulk import transaction failed. Please ensure file formatting matches the template.');
       throw err;
     }
   };
@@ -486,7 +422,6 @@ export default function App() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${teacher?.authToken || ''}`,
           'x-teacher-username': teacher?.username || ''
         },
         body: JSON.stringify({ marks: marksToSave }),
@@ -495,9 +430,7 @@ export default function App() {
       if (!response.ok) throw new Error();
 
       // Refresh marks list from server to ensure accurate syncing
-      const marksResponse = await fetch('/api/marks', {
-        headers: { Authorization: `Bearer ${teacher?.authToken || ''}` }
-      });
+      const marksResponse = await fetch('/api/marks');
       if (marksResponse.ok) {
         const marksData = await marksResponse.json();
         setMarks(marksData);
@@ -516,46 +449,18 @@ export default function App() {
 
   // Custom Navigation setter to sync subtabs
   const handleSetTab = (tab: string) => {
-    const permittedTab = teacher?.role === 'Subject Teacher' && !['dashboard', 'marks', 'attendance'].includes(tab)
-      ? 'marks'
-      : tab;
-    setActiveTab(permittedTab);
-    if (permittedTab === 'classes') setStudentsSubTab('list');
-    if (permittedTab === 'marks') setAcademicsSubTab('marks');
-    if (permittedTab === 'reports') setExamsSubTab('reports');
+    setActiveTab(tab);
+    if (tab === 'classes') setStudentsSubTab('list');
+    if (tab === 'marks') setAcademicsSubTab('marks');
+    if (tab === 'reports') setExamsSubTab('reports');
   };
 
   // If not logged in, force Login screen
   if (!teacher) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
-  if (teacher.mustChangePassword) {
-    return (
-      <ForcePasswordChange
-        teacher={teacher}
-        onLogout={handleLogout}
-        onComplete={updatedTeacher => {
-          setTeacher(updatedTeacher);
-          localStorage.setItem('school_sms_teacher', JSON.stringify(updatedTeacher));
-        }}
-      />
-    );
-  }
 
-  const isAdmin = teacher.role === 'Headteacher' || teacher.role === 'DOS';
-  const primaryTabs = isAdmin
-    ? [
-      { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
-      { id: 'classes', name: 'Students', icon: Users },
-      { id: 'marks', name: 'Academics', icon: GraduationCap },
-      { id: 'reports', name: 'Reports', icon: FileSpreadsheet },
-      { id: 'operations', name: 'Controls', icon: Settings },
-    ]
-    : [
-      { id: 'dashboard', name: 'My Desk', icon: LayoutDashboard },
-      { id: 'marks', name: 'My Mark Sheet', icon: GraduationCap },
-      { id: 'attendance', name: 'Attendance', icon: Calendar },
-    ];
+  const isAdmin = currentRole === 'administrator';
 
   const activeTeacherClasses = currentRole === 'administrator' || currentRole === 'head_teacher' || currentRole === 'bursar'
     ? ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'] as ClassName[]
@@ -733,7 +638,12 @@ export default function App() {
 
         {/* Center Section: Main Navigation Tabs */}
         <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-          {primaryTabs.map((tab) => {
+          {[
+            { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
+            { id: 'classes', name: 'Students', icon: Users },
+            { id: 'marks', name: 'Academics', icon: GraduationCap },
+            { id: 'reports', name: 'Reports', icon: FileSpreadsheet },
+          ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id || 
               (tab.id === 'classes' && activeTab === 'upload') ||
@@ -822,23 +732,28 @@ export default function App() {
             )}
           </div>
 
-          {/* Server-assigned role (display only) */}
+          {/* System Role Selector */}
           <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-slate-800">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Signed in as</span>
-            <span className="text-xs font-black text-slate-900">{teacher.role}</span>
+            <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">Active Role:</span>
+            <select
+              value={currentRole}
+              onChange={(e) => {
+                const newRole = e.target.value;
+                setCurrentRole(newRole);
+                addAuditLog(`Switched active system role to: ${newRole.toUpperCase()}`);
+              }}
+              className="bg-transparent text-xs font-black text-slate-900 focus:outline-none cursor-pointer border-none"
+            >
+              <option value="administrator">Administrator</option>
+              <option value="head_teacher">Head Teacher</option>
+              <option value="subject_teacher">Subject Teacher</option>
+              <option value="class_teacher">Class Teacher</option>
+              <option value="community_worker">Community Worker</option>
+              <option value="bursar">Bursar</option>
+              <option value="parent_guardian">Parent/Guardian</option>
+              <option value="data_entry">Data Entry Officer</option>
+            </select>
           </div>
-
-          {/* Email Notification Gateway Button */}
-          {isAdmin && <button
-            onClick={() => setIsEmailGatewayOpen(true)}
-            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            title="Company Email Gateway & 2FA Dispatch Log"
-          >
-            <Mail className="h-4 w-4 text-indigo-600" />
-            <span className="hidden lg:inline text-[11px] uppercase tracking-wider font-extrabold">Email Gateway</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          </button>}
 
           {/* User Profile Card */}
           <div className="flex items-center gap-2.5">
@@ -912,7 +827,7 @@ export default function App() {
               
               {/* 1. Dashboard Tab */}
               {activeTab === 'dashboard' && (
-                isAdmin ? <Dashboard
+                <Dashboard 
                   students={students} 
                   marks={marks} 
                   teacher={teacher || undefined}
@@ -926,11 +841,6 @@ export default function App() {
                     if (tab === 'marks') setAcademicsSubTab('marks');
                     if (tab === 'reports') setExamsSubTab('reports');
                   }} 
-                /> : <TeacherDashboard
-                  teacher={teacher}
-                  students={students}
-                  marks={marks}
-                  setActiveTab={handleSetTab}
                 />
               )}
 
@@ -1004,15 +914,12 @@ export default function App() {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${teacher?.authToken || ''}`,
                         'x-teacher-username': teacher?.username || 'admin'
                       },
                       body: JSON.stringify({ marks: updatedMarksList })
                     });
                     if (res.ok) {
-                      const freshMarksRes = await fetch('/api/marks', {
-                        headers: { Authorization: `Bearer ${teacher?.authToken || ''}` }
-                      });
+                      const freshMarksRes = await fetch('/api/marks');
                       if (freshMarksRes.ok) {
                         const freshMarks = await freshMarksRes.json();
                         setMarks(freshMarks);
@@ -1029,7 +936,7 @@ export default function App() {
               {activeTab === 'marks' && (
                 <div className="p-8 space-y-6">
                   {/* Secondary Inner Toggles */}
-                  <div className={`${isAdmin ? 'flex' : 'hidden'} flex-wrap bg-white/80 p-1 rounded-xl gap-1 self-start w-fit border border-slate-200 no-print`}>
+                  <div className="flex flex-wrap bg-white/80 p-1 rounded-xl gap-1 self-start w-fit border border-slate-200 no-print">
                     <button
                       onClick={() => setAcademicsSubTab('marks')}
                       className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1087,7 +994,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {!isAdmin || academicsSubTab === 'marks' ? (
+                  {academicsSubTab === 'marks' ? (
                     <MarkEntry 
                       students={students}
                       marks={marks}
@@ -1224,20 +1131,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* 5. Support & Attendance Module */}
-              {activeTab === 'attendance' && (
-                <AttendanceSupport 
-                  students={students}
-                  teacherClasses={teacher.classes}
-                  isAdmin={isAdmin}
-                  teacher={teacher}
-                  marks={marks}
-                />
-              )}
-
-              {activeTab === 'operations' && isAdmin && (
-                <SchoolOperationsCenter teacher={teacher} />
-              )}
+              {/* 5. Support Module (Removed) */}
 
               {/* AI Assistant Tab */}
               {activeTab === 'ai-chat' && (
@@ -1370,12 +1264,6 @@ export default function App() {
 
       </div>
 
-      {/* Email Gateway Audit & Dispatch Modal */}
-      <EmailGatewayModal
-        isOpen={isEmailGatewayOpen}
-        onClose={() => setIsEmailGatewayOpen(false)}
-        currentTeacher={teacher!}
-      />
       {isProfileModalOpen && selectedProfileStudent && (
         <StudentProfileModal 
           student={selectedProfileStudent}
@@ -1390,17 +1278,20 @@ export default function App() {
       )}
 
       {/* Global Floating Quick Actions Button (FAB) */}
-      {isAdmin && (
-        <QuickActionFAB 
-          onAddStudent={handleQuickAddStudent}
-          onRegisterMark={handleQuickRegisterMark}
-          onGenerateIdCard={handleQuickGenerateIdCard}
-        />
-      )}
+      <QuickActionFAB 
+        onAddStudent={handleQuickAddStudent}
+        onRegisterMark={handleQuickRegisterMark}
+        onGenerateIdCard={handleQuickGenerateIdCard}
+      />
 
       {/* Ergonomic Mobile Bottom Tab Navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#06182c] border-t border-[#0f243c] h-16 flex justify-around items-center px-2 shadow-[0_-5px_20px_rgba(0,0,0,0.3)] no-print">
-        {primaryTabs.map((item) => ({ ...item, action: () => handleSetTab(item.id) })).map((tab) => {
+        {[
+          { id: 'dashboard', name: 'Dashboard', icon: Home, action: () => handleSetTab('dashboard') },
+          { id: 'classes', name: 'Students', icon: Users, action: () => handleSetTab('classes') },
+          { id: 'marks', name: 'Academics', icon: GraduationCap, action: () => handleSetTab('marks') },
+          { id: 'reports', name: 'Reports', icon: FileSpreadsheet, action: () => handleSetTab('reports') },
+        ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id || 
             (tab.id === 'classes' && activeTab === 'upload') ||

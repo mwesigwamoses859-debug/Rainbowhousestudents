@@ -27,7 +27,6 @@ export default function Sidebar({ activeTab, setActiveTab, teacher, onLogout }: 
     { id: 'classes', name: 'Students', icon: Users },
     { id: 'subjects', name: 'Subject Portals', icon: BookOpen },
     { id: 'marks', name: 'Academics', icon: GraduationCap },
-    { id: 'attendance', name: 'Attendance', icon: Calendar },
     { id: 'reports', name: 'Examinations', icon: FileSpreadsheet },
     { id: 'ai-chat', name: 'AI Assistant', icon: Sparkles },
     { id: 'operations', name: 'School Controls', icon: Settings },
