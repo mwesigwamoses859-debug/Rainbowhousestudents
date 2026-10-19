@@ -1,6 +1,7 @@
 UPDATE staff 
-SET password_hash = NULL, 
-    password_salt = NULL, 
+SET password_hash = '49fe940585d0594651158fe2d2f8335bfa56fa61d315aa2ae0d431e5ce79cba4', 
+    password_salt = '10fb29ddff6c2007ac5dc7050a93e1845eb41b0d2139ee98', 
+    password_iterations = 100000,
     failed_attempts = 0, 
     locked_until = 0 
 WHERE username = 'admin';
@@ -17,12 +18,12 @@ INSERT INTO staff (
   '["P.1","P.2","P.3","P.4","P.5","P.6","P.7"]',
   '[1,2,3]',
   1,
-  '1e6aac477f90ae8e0af5ea9d1a85015d0247364e8b300f35694471d228551d9f',
-  '017061b64f169f672553f890cc6f5cbf3076f2f69dcdd5c2',
+  '49fe940585d0594651158fe2d2f8335bfa56fa61d315aa2ae0d431e5ce79cba4',
+  '10fb29ddff6c2007ac5dc7050a93e1845eb41b0d2139ee98',
   100000,
   0,
   0,
-  1,
+  0,
   CAST(strftime('%s', 'now') AS INTEGER) * 1000
 ) ON CONFLICT(username) DO UPDATE SET
   name = excluded.name,
