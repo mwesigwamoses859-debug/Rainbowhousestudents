@@ -240,6 +240,222 @@ function validateStudent(candidate: Record<string, any>) {
   return null;
 }
 
+function calculateUgandanGrade(score: number): { grade: string; aggregate: number; remark: string } {
+  if (score >= 80) return { grade: 'D1', aggregate: 1, remark: 'Excellent' };
+  if (score >= 75) return { grade: 'D2', aggregate: 2, remark: 'Very Good' };
+  if (score >= 70) return { grade: 'C3', aggregate: 3, remark: 'Good' };
+  if (score >= 65) return { grade: 'C4', aggregate: 4, remark: 'Credit' };
+  if (score >= 60) return { grade: 'C5', aggregate: 5, remark: 'Credit' };
+  if (score >= 50) return { grade: 'C6', aggregate: 6, remark: 'Pass' };
+  if (score >= 45) return { grade: 'P7', aggregate: 7, remark: 'Pass' };
+  if (score >= 35) return { grade: 'P8', aggregate: 8, remark: 'Aim Higher' };
+  return { grade: 'F9', aggregate: 9, remark: 'Improve' };
+}
+
+function calculateDivision(aggregate: number): string {
+  if (aggregate <= 12) return 'Division 1';
+  if (aggregate <= 24) return 'Division 2';
+  if (aggregate <= 29) return 'Division 3';
+  if (aggregate <= 34) return 'Division 4';
+  return 'Division U';
+}
+
+async function performAcademicYearRollover(env: Env, yearToClose: number, newYear: number, actor: string) {
+  const studentRows = await env.DB.prepare('SELECT id, payload FROM students').all();
+  const students = (studentRows.results as any[]).map(row => JSON.parse(row.payload));
+
+  const markRows = await env.DB.prepare('SELECT payload FROM marks WHERE year = ?').bind(yearToClose).all();
+  const marks = (markRows.results as any[]).map(row => JSON.parse(row.payload));
+
+  for (const student of students) {
+    const updatedHistory = { ...(student.classHistory || {}), [yearToClose]: student.className };
+    const updatedStudent = { ...student, classHistory: updatedHistory };
+    await env.DB.prepare('UPDATE students SET payload = ?, updated_at = ? WHERE id = ?')
+      .bind(JSON.stringify(updatedStudent), Date.now(), student.id).run();
+  }
+
+  let totalReportCardsGenerated = 0;
+  for (const term of [1, 2, 3]) {
+    const termMarks = marks.filter((m: any) => Number(m.term) === term);
+    if (termMarks.length === 0) continue;
+
+    const studentMarkMap = new Map<string, any[]>();
+    for (const m of termMarks) {
+      const list = studentMarkMap.get(m.studentId) || [];
+      list.push(m);
+      studentMarkMap.set(m.studentId, list);
+    }
+
+    const classStudentAverages = new Map<string, { studentId: string; avg: number }[]>();
+    for (const [studentId, sMarks] of studentMarkMap.entries()) {
+      const s = students.find(st => st.id === studentId);
+      const studentClass = s ? s.className : 'P.1';
+      const avg = sMarks.reduce((sum, m) => sum + Number(m.score || 0), 0) / (sMarks.length || 1);
+      const list = classStudentAverages.get(studentClass) || [];
+      list.push({ studentId, avg });
+      classStudentAverages.set(studentClass, list);
+    }
+
+    for (const list of classStudentAverages.values()) {
+      list.sort((a, b) => b.avg - a.avg);
+    }
+
+    for (const [studentId, sMarks] of studentMarkMap.entries()) {
+      const s = students.find(st => st.id === studentId);
+      const studentClass = s ? s.className : 'P.1';
+      const classRankings = classStudentAverages.get(studentClass) || [];
+      const rankIdx = classRankings.findIndex(r => r.studentId === studentId);
+      const rankPosition = rankIdx !== -1 ? rankIdx + 1 : 1;
+      const totalPupils = classRankings.length || 1;
+
+      const marksSummary = sMarks.map(m => {
+        const score = Number(m.score || 0);
+        const { grade, remark } = calculateUgandanGrade(score);
+        return {
+          subject: m.subject,
+          botScore: m.botScore,
+          motScore: m.motScore,
+          eotScore: m.eotScore,
+          finalScore: score,
+          gradeCode: grade,
+          remark,
+          teacherName: m.teacherName || ''
+        };
+      });
+
+      const totalScore = sMarks.reduce((sum, m) => sum + Number(m.score || 0), 0);
+      const averageScore = Math.round((totalScore / (sMarks.length || 1)) * 10) / 10;
+      const aggregates = sMarks.slice(0, 4).reduce((sum, m) => sum + calculateUgandanGrade(Number(m.score || 0)).aggregate, 0);
+      const division = calculateDivision(aggregates);
+
+      const headTeacherComment = averageScore >= 80 
+        ? `Excellent performance in Term ${term}. Keep up the high standard!`
+        : averageScore >= 60 
+          ? `Good progress shown in Term ${term}. Double efforts next year.`
+          : `Needs to focus more on core weak areas. Regular attendance advised.`;
+
+      const classTeacherComment = averageScore >= 75
+        ? 'A very hardworking and disciplined pupil. Commendable results.'
+        : averageScore >= 50
+          ? 'Fair performance. Encourage reading and practice regularly.'
+          : 'Requires intensive remedial support in literacy and numeracy.';
+
+      const reportId = `rep-${studentId}-${yearToClose}-${term}`;
+      await env.DB.prepare(`
+        INSERT INTO historical_report_cards (
+          id, student_id, academic_year, term, class_name,
+          total_score, average_score, division, aggregates,
+          rank_position, total_pupils, head_teacher_comment, class_teacher_comment,
+          marks_summary, finalized_at, finalized_by, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(student_id, academic_year, term) DO UPDATE SET
+          total_score = excluded.total_score,
+          average_score = excluded.average_score,
+          division = excluded.division,
+          aggregates = excluded.aggregates,
+          rank_position = excluded.rank_position,
+          total_pupils = excluded.total_pupils,
+          marks_summary = excluded.marks_summary,
+          finalized_at = excluded.finalized_at
+      `).bind(
+        reportId, studentId, yearToClose, term, studentClass,
+        totalScore, averageScore, division, aggregates,
+        rankPosition, totalPupils, headTeacherComment, classTeacherComment,
+        JSON.stringify(marksSummary), Date.now(), actor, Date.now()
+      ).run();
+
+      totalReportCardsGenerated += 1;
+    }
+  }
+
+  const classCounts: Record<string, number> = {};
+  const genderCounts = { Male: 0, Female: 0 };
+  let scholarshipCount = 0;
+  for (const s of students) {
+    classCounts[s.className] = (classCounts[s.className] || 0) + 1;
+    if (s.gender === 'Female') genderCounts.Female += 1;
+    else genderCounts.Male += 1;
+    if (s.hasScholarship) scholarshipCount += 1;
+  }
+
+  const snapshotPayload = {
+    year: yearToClose,
+    savedAt: new Date().toISOString(),
+    totalStudents: students.length,
+    totalReportCards: totalReportCardsGenerated,
+    classCounts,
+    genderCounts,
+    scholarshipCount,
+    students: students.map(s => ({
+      id: s.id,
+      name: `${s.surname} ${s.otherNames}`,
+      surname: s.surname,
+      otherNames: s.otherNames,
+      gender: s.gender,
+      className: s.className,
+      dateOfBirth: s.dateOfBirth,
+      yearOfEntry: s.yearOfEntry,
+      guardianName: s.guardianName,
+      guardianContact: s.guardianContact,
+      zone: s.zoneInNansana,
+      hasScholarship: s.hasScholarship,
+      communityWorker: s.communityWorker
+    }))
+  };
+
+  const archiveId = `archive-${yearToClose}`;
+  await env.DB.prepare(`
+    INSERT INTO academic_year_archives (
+      id, year, status, closed_at, closed_by, total_students, total_report_cards, snapshot_payload, created_at
+    ) VALUES (?, ?, 'closed', ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(year) DO UPDATE SET
+      closed_at = excluded.closed_at,
+      closed_by = excluded.closed_by,
+      total_students = excluded.total_students,
+      total_report_cards = excluded.total_report_cards,
+      snapshot_payload = excluded.snapshot_payload
+  `).bind(
+    archiveId, yearToClose, Date.now(), actor, students.length, totalReportCardsGenerated,
+    JSON.stringify(snapshotPayload), Date.now()
+  ).run();
+
+  await env.DB.prepare(
+    "UPDATE academic_years SET status='closed', closed_at=?, closed_by=? WHERE year=?"
+  ).bind(Date.now(), actor, yearToClose).run();
+
+  await env.DB.prepare("UPDATE academic_years SET status='planned' WHERE status='active'").run();
+  await env.DB.prepare(`
+    INSERT INTO academic_years (year, status, starts_on, ends_on, created_at)
+    VALUES (?, 'active', ?, ?, ?)
+    ON CONFLICT(year) DO UPDATE SET status='active'
+  `).bind(newYear, `${newYear}-02-01`, `${newYear}-12-15`, Date.now()).run();
+
+  return {
+    success: true,
+    closedYear: yearToClose,
+    activeYear: newYear,
+    totalStudentsArchived: students.length,
+    totalReportCardsGenerated
+  };
+}
+
+async function checkAndApplyAutomaticDecemberRollover(env: Env) {
+  try {
+    const activeRow = await env.DB.prepare("SELECT year, status FROM academic_years WHERE status='active' LIMIT 1").first() as any;
+    if (!activeRow) return;
+    const activeYear = Number(activeRow.year);
+    const currentYear = new Date().getFullYear();
+    // In Uganda, school calendar finishes in December.
+    // If the calendar year has turned over past the active academic year,
+    // automatically close the concluded year and activate the new year.
+    if (currentYear > activeYear) {
+      await performAcademicYearRollover(env, activeYear, currentYear, 'system:december_rollover');
+    }
+  } catch (err) {
+    console.error('Automatic rollover check error:', err);
+  }
+}
+
 async function sendCode(request: Request, env: Env) {
   const body = await readBody(request);
   const email = normalizeEmail(body.email);
@@ -436,6 +652,7 @@ async function api(request: Request, env: Env): Promise<Response> {
   }
 
   if (request.method === 'GET' && url.pathname === '/api/academic-years') {
+    await checkAndApplyAutomaticDecemberRollover(env);
     const result = await env.DB.prepare('SELECT * FROM academic_years ORDER BY year DESC').all();
     return json(result.results);
   }
@@ -453,6 +670,16 @@ async function api(request: Request, env: Env): Promise<Response> {
     await writeAudit(env, request, session, 'ACADEMIC_YEAR_SAVED', 'academic_year', String(year), undefined, { status });
     return json({ success: true, year, status }, 201);
   }
+  if (request.method === 'POST' && url.pathname === '/api/academic-years/rollover') {
+    if (!isAdministrator(session.role)) return json({ success: false, message: 'Administrator access required.' }, 403);
+    const body = await readBody(request);
+    const activeRow = await env.DB.prepare("SELECT year FROM academic_years WHERE status='active' LIMIT 1").first() as any;
+    const yearToClose = Number(body.yearToClose || activeRow?.year || 2026);
+    const newYear = Number(body.newYear || (yearToClose + 1));
+    const result = await performAcademicYearRollover(env, yearToClose, newYear, session.sub);
+    await writeAudit(env, request, session, 'ACADEMIC_YEAR_ROLLOVER', 'academic_year', String(yearToClose), undefined, result);
+    return json(result);
+  }
   const closeYearMatch = url.pathname.match(/^\/api\/academic-years\/(\d{4})\/close$/);
   if (request.method === 'POST' && closeYearMatch) {
     if (!isAdministrator(session.role)) return json({ success: false, message: 'Administrator access required.' }, 403);
@@ -463,11 +690,102 @@ async function api(request: Request, env: Env): Promise<Response> {
     if (Number(pending?.count || 0) > 0) {
       return json({ success: false, message: `${pending.count} mark sheets still require approval before this year can close.` }, 409);
     }
-    await env.DB.prepare(
-      "UPDATE academic_years SET status='closed', closed_at=?, closed_by=? WHERE year=?"
-    ).bind(Date.now(), session.sub, year).run();
-    await writeAudit(env, request, session, 'ACADEMIC_YEAR_CLOSED', 'academic_year', String(year));
-    return json({ success: true, year, status: 'closed' });
+    const result = await performAcademicYearRollover(env, year, year + 1, session.sub);
+    await writeAudit(env, request, session, 'ACADEMIC_YEAR_CLOSED', 'academic_year', String(year), undefined, result);
+    return json({ ...result, year, status: 'closed' });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/historical-reports') {
+    const studentId = url.searchParams.get('studentId');
+    const year = url.searchParams.get('year');
+    const term = url.searchParams.get('term');
+    let query = 'SELECT * FROM historical_report_cards WHERE 1=1';
+    const bindings: any[] = [];
+    if (studentId) {
+      query += ' AND student_id = ?';
+      bindings.push(studentId);
+    }
+    if (year) {
+      query += ' AND academic_year = ?';
+      bindings.push(Number(year));
+    }
+    if (term) {
+      query += ' AND term = ?';
+      bindings.push(Number(term));
+    }
+    query += ' ORDER BY academic_year DESC, term DESC';
+    const stmt = bindings.length > 0 ? env.DB.prepare(query).bind(...bindings) : env.DB.prepare(query);
+    const result = await stmt.all();
+    return json(result.results);
+  }
+  if (request.method === 'POST' && url.pathname === '/api/historical-reports') {
+    if (!isAdministrator(session.role)) return json({ success: false, message: 'Administrator access required.' }, 403);
+    const body = await readBody(request);
+    const id = body.id || `rep-${body.studentId}-${body.academicYear}-${body.term}`;
+    await env.DB.prepare(`
+      INSERT INTO historical_report_cards (
+        id, student_id, academic_year, term, class_name,
+        total_score, average_score, division, aggregates,
+        rank_position, total_pupils, head_teacher_comment, class_teacher_comment,
+        marks_summary, finalized_at, finalized_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(student_id, academic_year, term) DO UPDATE SET
+        total_score = excluded.total_score,
+        average_score = excluded.average_score,
+        division = excluded.division,
+        aggregates = excluded.aggregates,
+        rank_position = excluded.rank_position,
+        total_pupils = excluded.total_pupils,
+        head_teacher_comment = excluded.head_teacher_comment,
+        class_teacher_comment = excluded.class_teacher_comment,
+        marks_summary = excluded.marks_summary,
+        finalized_at = excluded.finalized_at
+    `).bind(
+      id, body.studentId, Number(body.academicYear), Number(body.term), body.className,
+      Number(body.totalScore), Number(body.averageScore), body.division || 'Division 1',
+      Number(body.aggregates || 4), Number(body.rankPosition || 1), Number(body.totalPupils || 1),
+      body.headTeacherComment || '', body.classTeacherComment || '',
+      typeof body.marksSummary === 'string' ? body.marksSummary : JSON.stringify(body.marksSummary || []),
+      Date.now(), session.sub, Date.now()
+    ).run();
+    await writeAudit(env, request, session, 'HISTORICAL_REPORT_SAVED', 'historical_report', id);
+    return json({ success: true, id }, 201);
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/census-archives') {
+    const result = await env.DB.prepare('SELECT * FROM academic_year_archives ORDER BY year DESC').all();
+    return json(result.results);
+  }
+  if (request.method === 'POST' && url.pathname === '/api/census-archives') {
+    if (!isAdministrator(session.role)) return json({ success: false, message: 'Administrator access required.' }, 403);
+    const body = await readBody(request);
+    const year = Number(body.year);
+    const id = body.id || `archive-${year}`;
+    const payload = typeof body.snapshotPayload === 'string' ? body.snapshotPayload : JSON.stringify(body.snapshotPayload || body);
+    await env.DB.prepare(`
+      INSERT INTO academic_year_archives (
+        id, year, status, closed_at, closed_by, total_students, total_report_cards, snapshot_payload, created_at
+      ) VALUES (?, ?, 'closed', ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(year) DO UPDATE SET
+        closed_at = excluded.closed_at,
+        closed_by = excluded.closed_by,
+        total_students = excluded.total_students,
+        total_report_cards = excluded.total_report_cards,
+        snapshot_payload = excluded.snapshot_payload
+    `).bind(
+      id, year, Date.now(), session.sub, Number(body.totalStudents || 0),
+      Number(body.totalReportCards || 0), payload, Date.now()
+    ).run();
+    await writeAudit(env, request, session, 'CENSUS_ARCHIVE_SAVED', 'academic_year_archive', String(year));
+    return json({ success: true, year }, 201);
+  }
+  const deleteArchiveMatch = url.pathname.match(/^\/api\/census-archives\/(\d{4})$/);
+  if (request.method === 'DELETE' && deleteArchiveMatch) {
+    if (!isAdministrator(session.role)) return json({ success: false, message: 'Administrator access required.' }, 403);
+    const year = Number(deleteArchiveMatch[1]);
+    await env.DB.prepare('DELETE FROM academic_year_archives WHERE year = ?').bind(year).run();
+    await writeAudit(env, request, session, 'CENSUS_ARCHIVE_DELETED', 'academic_year_archive', String(year));
+    return json({ success: true, year });
   }
 
   if (request.method === 'GET' && url.pathname === '/api/audit-logs') {

@@ -621,5 +621,23 @@
     "privateKey": "RrSr7yBxtmc1QB-w9VhoTAXAtOZtXE2LjgzPkS4z9As"
   },
   "pushSubscriptions": [],
-  "pushAlerts": []
+  "pushAlerts": [],
+  "academicYears": [
+    {
+      "year": 2026,
+      "status": "active",
+      "startsOn": "2026-02-01",
+      "endsOn": "2026-12-15",
+      "createdAt": 1792390941783
+    },
+    {
+      "year": 2027,
+      "status": "planned",
+      "startsOn": "2027-02-01",
+      "endsOn": "2027-12-15",
+      "createdAt": 1792390941783
+    }
+  ],
+  "historicalReportCards": [],
+  "academicYearArchives": []
 }

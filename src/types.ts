@@ -34,6 +34,64 @@ export interface Student {
   // Computed fields (optional to send/receive, can be calculated on fly)
   currentAge?: number;
   ageAtEntry?: number;
+
+  // Historical class attendance tracker across academic years
+  classHistory?: Record<number, ClassName>;
+}
+
+export interface AcademicYear {
+  year: number;
+  status: 'planned' | 'active' | 'closed';
+  starts_on?: string | null;
+  ends_on?: string | null;
+  closed_at?: number | null;
+  closed_by?: string | null;
+  created_at?: number;
+  startsOn?: string | null;
+  endsOn?: string | null;
+}
+
+export interface HistoricalSubjectMark {
+  subject: string;
+  botScore?: number;
+  motScore?: number;
+  eotScore?: number;
+  finalScore: number;
+  gradeCode: string;
+  remark: string;
+  teacherName?: string;
+}
+
+export interface HistoricalReportCard {
+  id: string;
+  studentId: string;
+  academicYear: number;
+  term: 1 | 2 | 3;
+  className: ClassName;
+  totalScore: number;
+  averageScore: number;
+  division: string;
+  aggregates: number;
+  rankPosition: number;
+  totalPupils: number;
+  headTeacherComment?: string;
+  classTeacherComment?: string;
+  marksSummary: string; // Serialized HistoricalSubjectMark[] JSON string
+  finalizedAt: number;
+  finalizedBy: string;
+  createdAt?: number;
+}
+
+export interface AcademicYearArchive {
+  id: string;
+  year: number;
+  status: 'closed';
+  closedAt: number;
+  closedBy: string;
+  totalStudents: number;
+  totalReportCards: number;
+  snapshotPayload: string; // JSON snapshot
+  createdAt: number;
 }
 
 export interface Mark {

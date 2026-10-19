@@ -72,6 +72,9 @@ interface DatabaseSchema {
   vapidKeys?: { publicKey: string; privateKey: string };
   pushSubscriptions?: any[];
   pushAlerts?: any[];
+  academicYears?: any[];
+  historicalReportCards?: any[];
+  academicYearArchives?: any[];
 }
 
 function getDatabase(): DatabaseSchema {
@@ -318,6 +321,14 @@ function getDatabase(): DatabaseSchema {
   if (!parsed.timetable) parsed.timetable = [];
   if (!parsed.pushSubscriptions) parsed.pushSubscriptions = [];
   if (!parsed.pushAlerts) parsed.pushAlerts = [];
+  if (!parsed.academicYears) {
+    parsed.academicYears = [
+      { year: 2026, status: 'active', startsOn: '2026-02-01', endsOn: '2026-12-15', createdAt: Date.now() },
+      { year: 2027, status: 'planned', startsOn: '2027-02-01', endsOn: '2027-12-15', createdAt: Date.now() }
+    ];
+  }
+  if (!parsed.historicalReportCards) parsed.historicalReportCards = [];
+  if (!parsed.academicYearArchives) parsed.academicYearArchives = [];
   if (!parsed.vapidKeys) {
     parsed.vapidKeys = webpush.generateVAPIDKeys();
     fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2));
@@ -590,6 +601,401 @@ function requireSubjectAndClassAccess(req: any, res: any, next: any) {
 }
 
 const isAdministrator = (role?: string) => role === 'Headteacher' || role === 'DOS';
+
+function calculateUgandanGradeLocal(score: number): { grade: string; aggregate: number; remark: string } {
+  if (score >= 80) return { grade: 'D1', aggregate: 1, remark: 'Excellent' };
+  if (score >= 75) return { grade: 'D2', aggregate: 2, remark: 'Very Good' };
+  if (score >= 70) return { grade: 'C3', aggregate: 3, remark: 'Good' };
+  if (score >= 65) return { grade: 'C4', aggregate: 4, remark: 'Credit' };
+  if (score >= 60) return { grade: 'C5', aggregate: 5, remark: 'Credit' };
+  if (score >= 50) return { grade: 'C6', aggregate: 6, remark: 'Pass' };
+  if (score >= 45) return { grade: 'P7', aggregate: 7, remark: 'Pass' };
+  if (score >= 35) return { grade: 'P8', aggregate: 8, remark: 'Aim Higher' };
+  return { grade: 'F9', aggregate: 9, remark: 'Improve' };
+}
+
+function calculateDivisionLocal(aggregate: number): string {
+  if (aggregate <= 12) return 'Division 1';
+  if (aggregate <= 24) return 'Division 2';
+  if (aggregate <= 29) return 'Division 3';
+  if (aggregate <= 34) return 'Division 4';
+  return 'Division U';
+}
+
+function performAcademicYearRolloverLocal(db: DatabaseSchema, yearToClose: number, newYear: number, actor: string) {
+  const students = db.students || [];
+  const marks = db.marks || [];
+
+  for (const student of students) {
+    student.classHistory = { ...(student.classHistory || {}), [yearToClose]: student.className };
+  }
+
+  if (!db.historicalReportCards) db.historicalReportCards = [];
+  let totalReportCardsGenerated = 0;
+  for (const term of [1, 2, 3]) {
+    const termMarks = marks.filter((m: any) => Number(m.term) === term && Number(m.year) === yearToClose);
+    if (termMarks.length === 0) continue;
+
+    const studentMarkMap = new Map<string, any[]>();
+    for (const m of termMarks) {
+      const list = studentMarkMap.get(m.studentId) || [];
+      list.push(m);
+      studentMarkMap.set(m.studentId, list);
+    }
+
+    const classStudentAverages = new Map<string, { studentId: string; avg: number }[]>();
+    for (const [studentId, sMarks] of studentMarkMap.entries()) {
+      const s = students.find((st: any) => st.id === studentId);
+      const studentClass = s ? s.className : 'P.1';
+      const avg = sMarks.reduce((sum, m) => sum + Number(m.score || 0), 0) / (sMarks.length || 1);
+      const list = classStudentAverages.get(studentClass) || [];
+      list.push({ studentId, avg });
+      classStudentAverages.set(studentClass, list);
+    }
+
+    for (const list of classStudentAverages.values()) {
+      list.sort((a, b) => b.avg - a.avg);
+    }
+
+    for (const [studentId, sMarks] of studentMarkMap.entries()) {
+      const s = students.find((st: any) => st.id === studentId);
+      const studentClass = s ? s.className : 'P.1';
+      const classRankings = classStudentAverages.get(studentClass) || [];
+      const rankIdx = classRankings.findIndex(r => r.studentId === studentId);
+      const rankPosition = rankIdx !== -1 ? rankIdx + 1 : 1;
+      const totalPupils = classRankings.length || 1;
+
+      const marksSummary = sMarks.map(m => {
+        const score = Number(m.score || 0);
+        const { grade, remark } = calculateUgandanGradeLocal(score);
+        return {
+          subject: m.subject,
+          botScore: m.botScore,
+          motScore: m.motScore,
+          eotScore: m.eotScore,
+          finalScore: score,
+          gradeCode: grade,
+          remark,
+          teacherName: m.teacherName || ''
+        };
+      });
+
+      const totalScore = sMarks.reduce((sum, m) => sum + Number(m.score || 0), 0);
+      const averageScore = Math.round((totalScore / (sMarks.length || 1)) * 10) / 10;
+      const aggregates = sMarks.slice(0, 4).reduce((sum, m) => sum + calculateUgandanGradeLocal(Number(m.score || 0)).aggregate, 0);
+      const division = calculateDivisionLocal(aggregates);
+
+      const headTeacherComment = averageScore >= 80 
+        ? `Excellent performance in Term ${term}. Keep up the high standard!`
+        : averageScore >= 60 
+          ? `Good progress shown in Term ${term}. Double efforts next year.`
+          : `Needs to focus more on core weak areas. Regular attendance advised.`;
+
+      const classTeacherComment = averageScore >= 75
+        ? 'A very hardworking and disciplined pupil. Commendable results.'
+        : averageScore >= 50
+          ? 'Fair performance. Encourage reading and practice regularly.'
+          : 'Requires intensive remedial support in literacy and numeracy.';
+
+      const reportId = `rep-${studentId}-${yearToClose}-${term}`;
+      const existingIdx = db.historicalReportCards.findIndex((r: any) => r.studentId === studentId && r.academicYear === yearToClose && r.term === term);
+      const card = {
+        id: reportId,
+        studentId,
+        academicYear: yearToClose,
+        term,
+        className: studentClass,
+        totalScore,
+        averageScore,
+        division,
+        aggregates,
+        rankPosition,
+        totalPupils,
+        headTeacherComment,
+        classTeacherComment,
+        marksSummary: JSON.stringify(marksSummary),
+        finalizedAt: Date.now(),
+        finalizedBy: actor,
+        createdAt: Date.now()
+      };
+
+      if (existingIdx !== -1) {
+        db.historicalReportCards[existingIdx] = card;
+      } else {
+        db.historicalReportCards.push(card);
+      }
+      totalReportCardsGenerated += 1;
+    }
+  }
+
+  if (!db.academicYearArchives) db.academicYearArchives = [];
+  const classCounts: Record<string, number> = {};
+  const genderCounts = { Male: 0, Female: 0 };
+  let scholarshipCount = 0;
+  for (const s of students) {
+    classCounts[s.className] = (classCounts[s.className] || 0) + 1;
+    if (s.gender === 'Female') genderCounts.Female += 1;
+    else genderCounts.Male += 1;
+    if (s.hasScholarship) scholarshipCount += 1;
+  }
+
+  const snapshotPayload = {
+    year: yearToClose,
+    savedAt: new Date().toISOString(),
+    totalStudents: students.length,
+    totalReportCards: totalReportCardsGenerated,
+    classCounts,
+    genderCounts,
+    scholarshipCount,
+    students: students.map((s: any) => ({
+      id: s.id,
+      name: `${s.surname} ${s.otherNames}`,
+      surname: s.surname,
+      otherNames: s.otherNames,
+      gender: s.gender,
+      className: s.className,
+      dateOfBirth: s.dateOfBirth,
+      yearOfEntry: s.yearOfEntry,
+      guardianName: s.guardianName,
+      guardianContact: s.guardianContact,
+      zone: s.zoneInNansana,
+      hasScholarship: s.hasScholarship,
+      communityWorker: s.communityWorker
+    }))
+  };
+
+  const existingArchiveIdx = db.academicYearArchives.findIndex((a: any) => a.year === yearToClose);
+  const archiveRecord = {
+    id: `archive-${yearToClose}`,
+    year: yearToClose,
+    status: 'closed',
+    closedAt: Date.now(),
+    closedBy: actor,
+    totalStudents: students.length,
+    totalReportCards: totalReportCardsGenerated,
+    snapshotPayload: JSON.stringify(snapshotPayload),
+    createdAt: Date.now()
+  };
+  if (existingArchiveIdx !== -1) {
+    db.academicYearArchives[existingArchiveIdx] = archiveRecord;
+  } else {
+    db.academicYearArchives.push(archiveRecord);
+  }
+
+  if (!db.academicYears) db.academicYears = [];
+  for (const y of db.academicYears) {
+    if (y.year === yearToClose) {
+      y.status = 'closed';
+      y.closedAt = Date.now();
+      y.closedBy = actor;
+    } else if (y.status === 'active') {
+      y.status = 'planned';
+    }
+  }
+
+  const newYearRecord = db.academicYears.find((y: any) => y.year === newYear);
+  if (newYearRecord) {
+    newYearRecord.status = 'active';
+  } else {
+    db.academicYears.push({
+      year: newYear,
+      status: 'active',
+      startsOn: `${newYear}-02-01`,
+      endsOn: `${newYear}-12-15`,
+      createdAt: Date.now()
+    });
+  }
+
+  saveDatabase(db);
+
+  return {
+    success: true,
+    closedYear: yearToClose,
+    activeYear: newYear,
+    totalStudentsArchived: students.length,
+    totalReportCardsGenerated
+  };
+}
+
+function checkAndApplyAutomaticDecemberRolloverLocal(db: DatabaseSchema) {
+  try {
+    if (!db.academicYears) return;
+    const activeYearObj = db.academicYears.find((y: any) => y.status === 'active');
+    if (!activeYearObj) return;
+    const activeYear = Number(activeYearObj.year);
+    const currentYear = new Date().getFullYear();
+    if (currentYear > activeYear) {
+      performAcademicYearRolloverLocal(db, activeYear, currentYear, 'system:december_rollover');
+    }
+  } catch (err) {
+    console.error('Local automatic rollover check error:', err);
+  }
+}
+
+// 1.5 Academic Years & Archives API
+app.get('/api/academic-years', requireSession, (req, res) => {
+  const db = getDatabase();
+  checkAndApplyAutomaticDecemberRolloverLocal(db);
+  const years = (db.academicYears || []).slice().sort((a, b) => b.year - a.year);
+  res.json(years);
+});
+
+app.post('/api/academic-years', requireSession, (req, res) => {
+  const session = (req as any).session;
+  if (!isAdministrator(session?.role)) {
+    return res.status(403).json({ success: false, message: 'Administrator access required.' });
+  }
+  const db = getDatabase();
+  const year = Number(req.body.year);
+  if (!Number.isInteger(year) || year < 2020 || year > 2100) {
+    return res.status(400).json({ success: false, message: 'Enter a valid academic year.' });
+  }
+  if (!db.academicYears) db.academicYears = [];
+  if (req.body.status === 'active') {
+    db.academicYears.forEach(y => { if (y.status === 'active') y.status = 'planned'; });
+  }
+  const status = req.body.status === 'active' ? 'active' : 'planned';
+  const existingIdx = db.academicYears.findIndex(y => y.year === year);
+  const entry = {
+    year,
+    status,
+    startsOn: req.body.startsOn || `${year}-02-01`,
+    endsOn: req.body.endsOn || `${year}-12-15`,
+    createdAt: Date.now()
+  };
+  if (existingIdx !== -1) {
+    db.academicYears[existingIdx] = { ...db.academicYears[existingIdx], ...entry };
+  } else {
+    db.academicYears.push(entry);
+  }
+  saveDatabase(db);
+  res.status(201).json({ success: true, year, status });
+});
+
+app.post('/api/academic-years/rollover', requireSession, (req, res) => {
+  const session = (req as any).session;
+  if (!isAdministrator(session?.role)) {
+    return res.status(403).json({ success: false, message: 'Administrator access required.' });
+  }
+  const db = getDatabase();
+  const activeObj = (db.academicYears || []).find(y => y.status === 'active');
+  const yearToClose = Number(req.body.yearToClose || activeObj?.year || 2026);
+  const newYear = Number(req.body.newYear || (yearToClose + 1));
+  const result = performAcademicYearRolloverLocal(db, yearToClose, newYear, session.username || 'admin');
+  res.json(result);
+});
+
+app.post('/api/academic-years/:year/close', requireSession, (req, res) => {
+  const session = (req as any).session;
+  if (!isAdministrator(session?.role)) {
+    return res.status(403).json({ success: false, message: 'Administrator access required.' });
+  }
+  const db = getDatabase();
+  const year = Number(req.params.year);
+  const result = performAcademicYearRolloverLocal(db, year, year + 1, session.username || 'admin');
+  res.json({ success: true, year, status: 'closed', ...result });
+});
+
+app.get('/api/historical-reports', requireSession, (req, res) => {
+  const db = getDatabase();
+  const { studentId, year, term } = req.query;
+  let reports = db.historicalReportCards || [];
+  if (studentId) reports = reports.filter(r => r.studentId === String(studentId));
+  if (year) reports = reports.filter(r => r.academicYear === Number(year));
+  if (term) reports = reports.filter(r => r.term === Number(term));
+  reports.sort((a, b) => b.academicYear - a.academicYear || b.term - a.term);
+  res.json(reports);
+});
+
+app.post('/api/historical-reports', requireSession, (req, res) => {
+  const session = (req as any).session;
+  if (!isAdministrator(session?.role)) {
+    return res.status(403).json({ success: false, message: 'Administrator access required.' });
+  }
+  const db = getDatabase();
+  if (!db.historicalReportCards) db.historicalReportCards = [];
+  const body = req.body;
+  const id = body.id || `rep-${body.studentId}-${body.academicYear}-${body.term}`;
+  const card = {
+    id,
+    studentId: body.studentId,
+    academicYear: Number(body.academicYear),
+    term: Number(body.term),
+    className: body.className,
+    totalScore: Number(body.totalScore),
+    averageScore: Number(body.averageScore),
+    division: body.division || 'Division 1',
+    aggregates: Number(body.aggregates || 4),
+    rankPosition: Number(body.rankPosition || 1),
+    totalPupils: Number(body.totalPupils || 1),
+    headTeacherComment: body.headTeacherComment || '',
+    classTeacherComment: body.classTeacherComment || '',
+    marksSummary: typeof body.marksSummary === 'string' ? body.marksSummary : JSON.stringify(body.marksSummary || []),
+    finalizedAt: Date.now(),
+    finalizedBy: session.username || 'admin',
+    createdAt: Date.now()
+  };
+  const existingIdx = db.historicalReportCards.findIndex(r => r.studentId === body.studentId && r.academicYear === Number(body.academicYear) && r.term === Number(body.term));
+  if (existingIdx !== -1) {
+    db.historicalReportCards[existingIdx] = card;
+  } else {
+    db.historicalReportCards.push(card);
+  }
+  saveDatabase(db);
+  res.status(201).json({ success: true, id });
+});
+
+app.get('/api/census-archives', requireSession, (req, res) => {
+  const db = getDatabase();
+  const archives = (db.academicYearArchives || []).slice().sort((a, b) => b.year - a.year);
+  res.json(archives);
+});
+
+app.post('/api/census-archives', requireSession, (req, res) => {
+  const session = (req as any).session;
+  if (!isAdministrator(session?.role)) {
+    return res.status(403).json({ success: false, message: 'Administrator access required.' });
+  }
+  const db = getDatabase();
+  if (!db.academicYearArchives) db.academicYearArchives = [];
+  const body = req.body;
+  const year = Number(body.year);
+  const id = body.id || `archive-${year}`;
+  const payload = typeof body.snapshotPayload === 'string' ? body.snapshotPayload : JSON.stringify(body.snapshotPayload || body);
+  const record = {
+    id,
+    year,
+    status: 'closed',
+    closedAt: Date.now(),
+    closedBy: session.username || 'admin',
+    totalStudents: Number(body.totalStudents || 0),
+    totalReportCards: Number(body.totalReportCards || 0),
+    snapshotPayload: payload,
+    createdAt: Date.now()
+  };
+  const existingIdx = db.academicYearArchives.findIndex(a => a.year === year);
+  if (existingIdx !== -1) {
+    db.academicYearArchives[existingIdx] = record;
+  } else {
+    db.academicYearArchives.push(record);
+  }
+  saveDatabase(db);
+  res.status(201).json({ success: true, year });
+});
+
+app.delete('/api/census-archives/:year', requireSession, (req, res) => {
+  const session = (req as any).session;
+  if (!isAdministrator(session?.role)) {
+    return res.status(403).json({ success: false, message: 'Administrator access required.' });
+  }
+  const db = getDatabase();
+  const year = Number(req.params.year);
+  if (db.academicYearArchives) {
+    db.academicYearArchives = db.academicYearArchives.filter(a => a.year !== year);
+    saveDatabase(db);
+  }
+  res.json({ success: true, year });
+});
 
 // 2. Students API
 app.get('/api/students', requireSession, (req, res) => {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Users, 
   FileSpreadsheet, 
@@ -65,7 +65,7 @@ const ALL_CLASSES: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7
 const CURRENT_YEAR = new Date().getFullYear();
 
 export default function HistoricalCensusArchive({ students, marks, isAdmin }: HistoricalCensusArchiveProps) {
-  // Load custom saved snapshots strictly from localStorage - starts 100% empty if not saved
+  // Load custom saved snapshots from localStorage and remote database
   const [savedSnapshots, setSavedSnapshots] = useState<Record<number, CensusSnapshot>>(() => {
     try {
       const stored = localStorage.getItem('ashinaga_census_snapshots');
@@ -74,6 +74,35 @@ export default function HistoricalCensusArchive({ students, marks, isAdmin }: Hi
       return {};
     }
   });
+
+  // Fetch archives from server database / Cloudflare D1
+  useEffect(() => {
+    fetch('/api/census-archives')
+      .then(res => res.ok ? res.json() : [])
+      .then(archives => {
+        if (Array.isArray(archives) && archives.length > 0) {
+          const loaded: Record<number, CensusSnapshot> = {};
+          archives.forEach((a: any) => {
+            try {
+              const payload = typeof a.snapshot_payload === 'string'
+                ? JSON.parse(a.snapshot_payload)
+                : (a.snapshot_payload || a.snapshotPayload);
+              if (payload && payload.year) {
+                loaded[payload.year] = payload;
+              }
+            } catch {}
+          });
+          setSavedSnapshots(prev => {
+            const merged = { ...prev, ...loaded };
+            try {
+              localStorage.setItem('ashinaga_census_snapshots', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
+      })
+      .catch(err => console.error('Failed to load remote census archives', err));
+  }, []);
 
   const availableYears = useMemo(() => {
     return Object.keys(savedSnapshots)
@@ -119,12 +148,35 @@ export default function HistoricalCensusArchive({ students, marks, isAdmin }: Hi
     setTimeout(() => setNotification(null), 4500);
   };
 
-  const persistSnapshots = (updated: Record<number, CensusSnapshot>) => {
+  const persistSnapshots = async (updated: Record<number, CensusSnapshot>) => {
     setSavedSnapshots(updated);
     try {
       localStorage.setItem('ashinaga_census_snapshots', JSON.stringify(updated));
     } catch (err) {
       console.error('Failed to save snapshots to localStorage', err);
+    }
+
+    try {
+      let token = '';
+      const stored = localStorage.getItem('school_sms_teacher');
+      if (stored) token = JSON.parse(stored).authToken || '';
+
+      for (const [yr, snap] of Object.entries(updated)) {
+        await fetch('/api/census-archives', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            year: Number(yr),
+            totalStudents: snap.totalStudents,
+            snapshotPayload: snap
+          })
+        });
+      }
+    } catch (e) {
+      console.error('Failed to sync census archives to database', e);
     }
   };
 

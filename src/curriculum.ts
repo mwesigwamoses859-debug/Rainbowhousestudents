@@ -38,3 +38,26 @@ export const getSubjectsForClass = (className: ClassName): readonly string[] => 
 
 export const isSubjectForClass = (className: ClassName, subject: string) =>
   getSubjectsForClass(className).includes(subject as never);
+
+export const PRIMARY_CLASSES: readonly ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'] as const;
+
+export const getStudentClassForYear = (
+  student: { className: ClassName; classHistory?: Record<number, ClassName>; yearOfEntry?: number },
+  targetYear: number,
+  activeYear: number = new Date().getFullYear()
+): ClassName => {
+  if (student.classHistory && student.classHistory[targetYear]) {
+    return student.classHistory[targetYear];
+  }
+  if (targetYear >= activeYear) {
+    return student.className;
+  }
+  const currentIdx = PRIMARY_CLASSES.indexOf(student.className);
+  if (currentIdx !== -1) {
+    const diff = activeYear - targetYear;
+    const pastIdx = Math.max(0, currentIdx - diff);
+    return PRIMARY_CLASSES[pastIdx];
+  }
+  return student.className;
+};
+

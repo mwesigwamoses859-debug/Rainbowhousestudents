@@ -126,6 +126,8 @@ export default function App() {
 
   // Report Card selection carrier
   const [selectedReportCardStudent, setSelectedReportCardStudent] = useState<Student | null>(null);
+  const [reportCardInitialYear, setReportCardInitialYear] = useState<number | undefined>();
+  const [reportCardInitialTerm, setReportCardInitialTerm] = useState<1 | 2 | 3 | undefined>();
 
   // Report verification from URL query params
   const [verificationFromUrl, setVerificationFromUrl] = useState<{
@@ -1228,6 +1230,9 @@ export default function App() {
                       students={students}
                       marks={marks}
                       selectedStudent={selectedReportCardStudent}
+                      teacher={teacher}
+                      initialYear={reportCardInitialYear}
+                      initialTerm={reportCardInitialTerm}
                     />
                   )}
 
@@ -1429,6 +1434,14 @@ export default function App() {
           onClose={() => {
             setIsProfileModalOpen(false);
             setSelectedProfileStudent(null);
+          }}
+          onOpenReportCard={(student, year, term) => {
+            setSelectedReportCardStudent(student);
+            setReportCardInitialYear(year);
+            setReportCardInitialTerm(term);
+            setActiveTab('exams');
+            setExamsSubTab('reports');
+            setIsProfileModalOpen(false);
           }}
         />
       )}

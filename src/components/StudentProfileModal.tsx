@@ -27,9 +27,13 @@ import {
   TrendingDown,
   Info,
   QrCode,
-  Printer
+  Printer,
+  Archive,
+  FileSpreadsheet,
+  Lock
 } from 'lucide-react';
 import { Student, Mark, ClassName } from '../types';
+import { getStudentClassForYear } from '../curriculum';
 import StudentQrCodeModal from './StudentQrCodeModal';
 import AshinagaLogo from './AshinagaLogo';
 import { evaluateScholarshipEligibility } from '../utils/scholarshipEligibility';
@@ -50,6 +54,7 @@ interface StudentProfileModalProps {
   onClose: () => void;
   marks: Mark[];
   onUpdateStudent: (id: string, data: Partial<Student>) => Promise<void>;
+  onOpenReportCard?: (student: Student, year?: number, term?: 1 | 2 | 3) => void;
 }
 
 // Global alert thresholds interface
@@ -66,10 +71,23 @@ export default function StudentProfileModal({
   isOpen, 
   onClose, 
   marks,
-  onUpdateStudent
+  onUpdateStudent,
+  onOpenReportCard
 }: StudentProfileModalProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'academics' | 'attendance' | 'support' | 'community' | 'guardians' | 'health' | 'documents' | 'history'>('overview');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('all');
+  const [historicalReports, setHistoricalReports] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (student?.id) {
+      fetch(`/api/historical-reports?studentId=${student.id}`)
+        .then(res => res.ok ? res.json() : [])
+        .then(data => {
+          if (Array.isArray(data)) setHistoricalReports(data);
+        })
+        .catch(() => {});
+    }
+  }, [student?.id]);
   
   // Local editable alert thresholds
   const [thresholds, setThresholds] = useState<AlertThresholds>({
@@ -855,6 +873,114 @@ export default function StudentProfileModal({
                       </div>
                     </div>
 
+                    {/* Past Years Report Cards & Permanent Records Registry */}
+                    <div className="space-y-4 pt-5 border-t border-slate-150">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                            <Archive className="h-4 w-4 text-indigo-600" />
+                            Past Years Report Cards & Academic Records
+                          </h4>
+                          <p className="text-[10px] text-slate-400">
+                            Permanent terminal progress records preserved across academic years for historical reference.
+                          </p>
+                        </div>
+                      </div>
+
+                      {(() => {
+                        type PeriodEntry = { year: number; term: 1 | 2 | 3; sMarks: Mark[]; archive?: any };
+                        const periodMap = new Map<string, PeriodEntry>();
+
+                        studentMarks.forEach(m => {
+                          const key = `${m.year}-T${m.term}`;
+                          const existing: PeriodEntry = periodMap.get(key) || { year: m.year, term: m.term as 1 | 2 | 3, sMarks: [] };
+                          existing.sMarks.push(m);
+                          periodMap.set(key, existing);
+                        });
+
+                        historicalReports.forEach(r => {
+                          const key = `${r.academicYear}-T${r.term}`;
+                          const existing: PeriodEntry = periodMap.get(key) || { year: r.academicYear, term: r.term as 1 | 2 | 3, sMarks: [] };
+                          existing.archive = r;
+                          periodMap.set(key, existing);
+                        });
+
+                        const periods = Array.from(periodMap.values()).sort((a, b) => b.year - a.year || b.term - a.term);
+
+                        if (periods.length === 0) {
+                          return (
+                            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-center text-slate-400 text-xs">
+                              No archived terminal report cards yet recorded for this pupil.
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                            {periods.map(period => {
+                              const classForYear = getStudentClassForYear(student, period.year);
+                              const avgScore = period.archive
+                                ? Number(period.archive.averageScore)
+                                : Math.round(period.sMarks.reduce((sum, m) => sum + m.score, 0) / (period.sMarks.length || 1));
+                              const isArchived = Boolean(period.archive);
+
+                              return (
+                                <div 
+                                  key={`${period.year}-${period.term}`}
+                                  className="bg-slate-50/80 hover:bg-slate-100/80 border border-slate-200 rounded-2xl p-4 transition-all flex flex-col justify-between space-y-3"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="px-2 py-0.5 bg-indigo-700 text-white rounded-md text-[10px] font-black uppercase">
+                                          {period.year} • Term {period.term}
+                                        </span>
+                                        <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded-md text-[10px] font-bold">
+                                          Class: {classForYear}
+                                        </span>
+                                        {isArchived ? (
+                                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md text-[9px] font-bold flex items-center gap-1">
+                                            <Lock className="h-2.5 w-2.5" /> Frozen Record
+                                          </span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 rounded-md text-[9px] font-bold">
+                                            Ledger Active
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-xs font-black text-slate-800 mt-2">
+                                        Terminal Average: <span className="text-indigo-700 font-black">{avgScore}%</span>
+                                        {period.archive?.division ? ` • ${period.archive.division}` : ''}
+                                      </p>
+                                      <p className="text-[10px] text-slate-500 mt-0.5">
+                                        {period.sMarks.length > 0 ? `${period.sMarks.length} subjects recorded` : 'Archived terminal card'}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      REF: ASH-{student.id.slice(0, 6).toUpperCase()}-{period.year}-T{period.term}
+                                    </span>
+                                    {onOpenReportCard && (
+                                      <button
+                                        type="button"
+                                        onClick={() => onOpenReportCard(student, period.year, period.term)}
+                                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                                      >
+                                        <Printer className="h-3.5 w-3.5" />
+                                        <span>Open Report Card</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
                     {/* Detailed Marks Registry Table */}
                     <div className="space-y-3 pt-4 border-t border-slate-150">
                       <div>
@@ -1208,7 +1334,46 @@ export default function StudentProfileModal({
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-6">
               <div className="border-b border-slate-100 pb-4">
                 <h3 className="text-sm font-black text-[#032b5e] uppercase">Student Audit History & Milestones Timeline</h3>
-                <p className="text-xs text-slate-400 mt-1">Timeline logs recording transitions, Promotions, home visits, and support modifications.</p>
+                <p className="text-xs text-slate-400 mt-1">Timeline logs recording transitions, promotions, home visits, and academic rollover history.</p>
+              </div>
+
+              {/* Academic Class Progression History */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 space-y-3">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                  <GraduationCap className="h-4 w-4 text-indigo-600" />
+                  Academic Class Progression & Annual Rollover History
+                </h4>
+                <div className="flex flex-wrap items-center gap-3">
+                  {(() => {
+                    const currentYear = new Date().getFullYear();
+                    const entryYear = student.yearOfEntry || (currentYear - 2);
+                    const years: number[] = [];
+                    for (let y = entryYear; y <= currentYear; y++) {
+                      years.push(y);
+                    }
+                    return years.map(y => {
+                      const classForY = getStudentClassForYear(student, y);
+                      const isCurrent = y === currentYear;
+                      return (
+                        <div key={y} className={`px-4 py-3 rounded-xl border flex items-center gap-3 ${
+                          isCurrent 
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-950 font-black' 
+                            : 'bg-white border-slate-200 text-slate-700 font-bold'
+                        }`}>
+                          <div className="text-center">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">{y}</span>
+                            <span className="text-sm font-black">{classForY}</span>
+                          </div>
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                            isCurrent ? 'bg-indigo-200/60 text-indigo-800' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {isCurrent ? 'Active Year' : 'Concluded & Archived'}
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
 
               <div className="relative border-l-2 border-slate-150 pl-6 space-y-6 py-2 ml-4">

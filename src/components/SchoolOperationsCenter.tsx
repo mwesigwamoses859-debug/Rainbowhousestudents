@@ -10,6 +10,10 @@ import {
   Settings2,
   ShieldCheck,
   XCircle,
+  Sparkles,
+  Archive,
+  RefreshCw,
+  Lock,
 } from 'lucide-react';
 import { Student, Mark, Teacher } from '../types';
 import HistoricalCensusArchive from './HistoricalCensusArchive';
@@ -115,6 +119,21 @@ export default function SchoolOperationsCenter({ teacher, students = [], marks =
     });
     const data = await response.json();
     setMessage(response.ok ? `${year} is now the active academic year.` : data.message);
+    if (response.ok) await load();
+  };
+
+  const triggerRollover = async () => {
+    const activeObj = years.find(y => y.status === 'active');
+    const activeYear = activeObj?.year || 2026;
+    const nextYear = activeYear + 1;
+    if (!window.confirm(`Execute academic year rollover now? This will archive ${activeYear} and activate ${nextYear}. All terminal report cards and census snapshots will be permanently frozen.`)) return;
+    const response = await fetch('/api/academic-years/rollover', {
+      method: 'POST',
+      headers: authHeaders(teacher, true),
+      body: JSON.stringify({ yearToClose: activeYear, newYear: nextYear }),
+    });
+    const data = await response.json();
+    setMessage(response.ok ? `Academic year rollover completed: ${activeYear} archived, ${nextYear} active.` : data.message);
     if (response.ok) await load();
   };
 
@@ -225,31 +244,86 @@ export default function SchoolOperationsCenter({ teacher, students = [], marks =
       )}
 
       {section === 'years' && (
-        <section className="grid gap-5 lg:grid-cols-[320px_1fr]">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6">
-            <h2 className="font-black text-slate-900">Prepare another year</h2>
-            <input
-              type="number"
-              value={newYear}
-              onChange={event => setNewYear(Number(event.target.value))}
-              className="mt-4 w-full rounded-xl border-2 border-slate-200 px-4 py-3 font-black"
-            />
-            <button onClick={createYear} className="mt-3 w-full rounded-xl bg-indigo-700 px-4 py-3 text-xs font-black text-white">Create planned year</button>
+        <section className="space-y-6">
+          {/* Automatic December Rollover Engine Card */}
+          <div className="bg-gradient-to-r from-[#032b5e] to-indigo-950 text-white p-6 rounded-3xl shadow-sm border border-indigo-900/50 flex flex-col md:flex-row md:items-center justify-between gap-5">
+            <div className="space-y-1.5 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950 flex items-center gap-1">
+                  <Sparkles className="h-3 w-3" /> Automatic December Rollover Engine
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                  Active & Scheduled
+                </span>
+              </div>
+              <h3 className="text-base font-bold text-white">
+                Automatic Academic Year Transition & Permanent Records Archiving
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+                Every year immediately after December concludes (Terms 1, 2, and 3), the system automatically closes the active academic year, transitions to the new year, updates student class progressions, and permanently freezes all terminal report cards into historical records for continuous future reference.
+              </p>
+            </div>
+            <div className="shrink-0">
+              <button
+                onClick={triggerRollover}
+                className="px-5 py-3 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-black shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span>Execute Year Rollover Now</span>
+              </button>
+            </div>
           </div>
-          <div className="rounded-3xl border border-slate-200 bg-white p-6">
-            <h2 className="font-black text-slate-900">Academic-year register</h2>
-            <div className="mt-4 space-y-3">
-              {years.map(item => (
-                <div key={item.year} className="flex items-center justify-between rounded-xl border border-slate-100 p-4">
-                  <div><p className="font-black text-slate-900">{item.year}</p><p className="text-xs uppercase text-slate-500">{item.status}</p></div>
-                  {item.status === 'planned' && (
-                    <button onClick={() => activateYear(item.year)} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">Activate year</button>
-                  )}
-                  {item.status === 'active' && (
-                    <button onClick={() => closeYear(item.year)} className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-black text-rose-700">Close year</button>
-                  )}
-                </div>
-              ))}
+
+          <div className="grid gap-5 lg:grid-cols-[340px_1fr]">
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 space-y-4">
+              <div>
+                <h2 className="font-black text-slate-900">Prepare another year</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Plan future academic cohorts in advance</p>
+              </div>
+              <input
+                type="number"
+                value={newYear}
+                onChange={event => setNewYear(Number(event.target.value))}
+                className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 font-black text-slate-900 focus:outline-none focus:border-indigo-500"
+              />
+              <button onClick={createYear} className="w-full rounded-xl bg-indigo-700 hover:bg-indigo-800 px-4 py-3 text-xs font-black text-white transition-all shadow-sm">
+                Create planned year
+              </button>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-6">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h2 className="font-black text-slate-900">Academic-year register & Archives</h2>
+                <span className="text-xs text-slate-400 font-bold">{years.length} years tracked</span>
+              </div>
+              <div className="mt-4 space-y-3">
+                {years.map(item => (
+                  <div key={item.year} className="flex items-center justify-between rounded-xl border border-slate-100 p-4 hover:border-slate-200 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${item.status === 'active' ? 'bg-emerald-500 ring-4 ring-emerald-100' : item.status === 'closed' ? 'bg-slate-400' : 'bg-amber-400'}`} />
+                      <div>
+                        <p className="font-black text-slate-900 text-sm">{item.year} Academic Year</p>
+                        <p className="text-[10px] uppercase font-bold tracking-wider text-slate-500">
+                          {item.status === 'active' ? '🟢 Currently Active Year' : item.status === 'closed' ? '🔒 Closed & Permanently Archived' : '🟡 Planned Year'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {item.status === 'planned' && (
+                        <button onClick={() => activateYear(item.year)} className="rounded-lg bg-emerald-50 hover:bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-700 transition-all">Activate year</button>
+                      )}
+                      {item.status === 'active' && (
+                        <button onClick={() => closeYear(item.year)} className="rounded-lg bg-rose-50 hover:bg-rose-100 px-3 py-2 text-xs font-black text-rose-700 transition-all">Close & Archive year</button>
+                      )}
+                      {item.status === 'closed' && (
+                        <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                          <Lock className="h-3 w-3" /> Historical Record
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
