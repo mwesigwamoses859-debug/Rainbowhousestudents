@@ -5,8 +5,10 @@
     {
       "username": "admin",
       "name": "Headteacher / Administrator",
-      "email": "mwesigwa.m@ashinaga.org",
+      "email": "headteacher@ashinaga.or.ug",
       "role": "Headteacher",
+      "responsibility": "Administrator",
+      "password": "admin123",
       "subjects": [
         "All"
       ],
@@ -18,38 +20,563 @@
         "P.5",
         "P.6",
         "P.7"
-      ]
-    },
-    {
-      "username": "teacher1",
-      "name": "Mr. John Mukasa",
-      "email": "john.mukasa@ashinaga.org",
-      "role": "Subject Teacher",
-      "subjects": [
-        "Mathematics",
-        "Science"
       ],
-      "classes": [
-        "P.5",
-        "P.6",
-        "P.7"
-      ]
+      "activeTerms": [
+        1,
+        2,
+        3
+      ],
+      "assignments": []
     },
     {
-      "username": "teacher2",
-      "name": "Mrs. Sarah Babirye",
-      "email": "sarah.babirye@ashinaga.org",
-      "role": "Subject Teacher",
+      "username": "mwesigwa",
+      "name": "Moses Mwesigwa",
+      "email": "mwesigwa.m@ashinaga.org",
+      "role": "Headteacher",
+      "responsibility": "Headteacher",
+      "password": "admin123",
       "subjects": [
-        "English",
-        "Social Studies",
-        "Religious Education"
+        "All"
       ],
       "classes": [
         "P.1",
         "P.2",
         "P.3",
+        "P.4",
+        "P.5",
+        "P.6",
+        "P.7"
+      ],
+      "activeTerms": [
+        1,
+        2,
+        3
+      ],
+      "assignments": []
+    },
+    {
+      "username": "teddy.nansubuga",
+      "name": "Nansubuga Teddy",
+      "email": "teddy.nansubuga@ashinaga.or.ug",
+      "role": "Headteacher",
+      "responsibility": "Headteacher",
+      "password": "admin123",
+      "subjects": [
+        "Literacy 1",
+        "Luganda",
+        "Mathematics"
+      ],
+      "classes": [
+        "P.2",
+        "P.3"
+      ],
+      "activeTerms": [
+        1,
+        2,
+        3
+      ],
+      "assignments": [
+        {
+          "className": "P.3",
+          "subject": "Literacy 1",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.3",
+          "subject": "Luganda",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.2",
+          "subject": "Mathematics",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "username": "emmanuel.mutabarura",
+      "name": "Mutabarura Emmanuel",
+      "email": "emmanuel.mutabarura@ashinaga.or.ug",
+      "role": "DOS",
+      "responsibility": "Director of studies",
+      "password": "teacher123",
+      "subjects": [
+        "Social Studies",
+        "English",
+        "Religious Education"
+      ],
+      "classes": [
         "P.4"
+      ],
+      "activeTerms": [
+        1,
+        2,
+        3
+      ],
+      "assignments": [
+        {
+          "className": "P.4",
+          "subject": "Social Studies",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.4",
+          "subject": "English",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.4",
+          "subject": "Religious Education",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "username": "carol.ayesiga",
+      "name": "Ayesiga Carol",
+      "email": "carol.ayesiga@ashinaga.or.ug",
+      "role": "Subject Teacher",
+      "responsibility": "Senior woman teacher/ Kumon teacher",
+      "password": "teacher123",
+      "subjects": [
+        "English",
+        "Literacy 2 (Reading and Writing)",
+        "KUMON"
+      ],
+      "classes": [
+        "P.3",
+        "P.4",
+        "P.5"
+      ],
+      "activeTerms": [
+        1,
+        2,
+        3
+      ],
+      "assignments": [
+        {
+          "className": "P.5",
+          "subject": "English",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.3",
+          "subject": "Literacy 2 (Reading and Writing)",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.4",
+          "subject": "KUMON",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.5",
+          "subject": "KUMON",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "username": "philbert.bwambale",
+      "name": "Bwambale Philbert",
+      "email": "philbert.bwambale@ashinaga.or.ug",
+      "role": "Class Teacher",
+      "responsibility": "Cultural Club/ class teacher P.3",
+      "password": "teacher123",
+      "subjects": [
+        "Mathematics",
+        "Science"
+      ],
+      "classes": [
+        "P.3",
+        "P.4",
+        "P.5"
+      ],
+      "activeTerms": [
+        1,
+        2,
+        3
+      ],
+      "assignments": [
+        {
+          "className": "P.3",
+          "subject": "Mathematics",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.4",
+          "subject": "Science",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.5",
+          "subject": "Science",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "username": "john.kirabira",
+      "name": "Kirabira John",
+      "email": "john.kirabira@ashinaga.or.ug",
+      "role": "Class Teacher",
+      "responsibility": "Senior male Teacher / Class teacher P.5",
+      "password": "teacher123",
+      "subjects": [
+        "Social Studies",
+        "English",
+        "Religious Education"
+      ],
+      "classes": [
+        "P.3",
+        "P.5"
+      ],
+      "activeTerms": [
+        1,
+        2,
+        3
+      ],
+      "assignments": [
+        {
+          "className": "P.5",
+          "subject": "Social Studies",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.3",
+          "subject": "English",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.5",
+          "subject": "Religious Education",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "username": "peter.taimwa",
+      "name": "Taimwa Peter",
+      "email": "peter.taimwa@ashinaga.or.ug",
+      "role": "Class Teacher",
+      "responsibility": "Gardening/ Ass. Kumon/ Class teacher P.4",
+      "password": "teacher123",
+      "subjects": [
+        "Mathematics",
+        "Religious Education"
+      ],
+      "classes": [
+        "P.3",
+        "P.4",
+        "P.5"
+      ],
+      "activeTerms": [
+        1,
+        2,
+        3
+      ],
+      "assignments": [
+        {
+          "className": "P.4",
+          "subject": "Mathematics",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.5",
+          "subject": "Mathematics",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.3",
+          "subject": "Religious Education",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "username": "isaac.sali",
+      "name": "Sali Isaac",
+      "email": "isaac.sali@ashinaga.or.ug",
+      "role": "Subject Teacher",
+      "responsibility": "ICT teacher",
+      "password": "teacher123",
+      "subjects": [
+        "Computer/ ICT"
+      ],
+      "classes": [
+        "P.1",
+        "P.2",
+        "P.3",
+        "P.4",
+        "P.5",
+        "P.6",
+        "P.7"
+      ],
+      "activeTerms": [
+        1,
+        2,
+        3
+      ],
+      "assignments": [
+        {
+          "className": "P.1",
+          "subject": "Computer/ ICT",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.2",
+          "subject": "Computer/ ICT",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.3",
+          "subject": "Computer/ ICT",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.4",
+          "subject": "Computer/ ICT",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.5",
+          "subject": "Computer/ ICT",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.6",
+          "subject": "Computer/ ICT",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.7",
+          "subject": "Computer/ ICT",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "username": "lilian.nakyeyune",
+      "name": "Nakyeyune Lilian",
+      "email": "lilian.nakyeyune@ashinaga.or.ug",
+      "role": "Class Teacher",
+      "responsibility": "games and sports / Class teacher P.1",
+      "password": "teacher123",
+      "subjects": [
+        "Mathematics",
+        "Literacy 1",
+        "Literacy 2 (Reading and Writing)"
+      ],
+      "classes": [
+        "P.1",
+        "P.2"
+      ],
+      "activeTerms": [
+        1,
+        2,
+        3
+      ],
+      "assignments": [
+        {
+          "className": "P.1",
+          "subject": "Mathematics",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.1",
+          "subject": "Literacy 1",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.1",
+          "subject": "Literacy 2 (Reading and Writing)",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.2",
+          "subject": "Literacy 2 (Reading and Writing)",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "username": "sarah.batengu",
+      "name": "Batengu Sarah",
+      "email": "sarah.batengu@ashinaga.or.ug",
+      "role": "Class Teacher",
+      "responsibility": "Volunteer teacher / Ass. Class teacher P.2",
+      "password": "teacher123",
+      "subjects": [
+        "English",
+        "Literacy 1",
+        "Luganda"
+      ],
+      "classes": [
+        "P.1",
+        "P.2"
+      ],
+      "activeTerms": [
+        1,
+        2,
+        3
+      ],
+      "assignments": [
+        {
+          "className": "P.1",
+          "subject": "English",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.2",
+          "subject": "English",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.2",
+          "subject": "Literacy 1",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "className": "P.2",
+          "subject": "Luganda",
+          "activeTerms": [
+            1,
+            2,
+            3
+          ]
+        }
       ]
     }
   ],
@@ -84,8 +611,8 @@
       "className": "P.1",
       "day": "Tuesday",
       "timeSlot": "09:30 - 10:30",
-      "subject": "English Language",
-      "teacherName": "Mrs. Sarah Babirye",
+      "subject": "English",
+      "teacherName": "Batengu Sarah",
       "roomName": "P.1 Main Classroom"
     }
   ],

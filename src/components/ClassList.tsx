@@ -24,6 +24,7 @@ import { Student, ClassName, Gender, Mark } from '../types';
 import { googleSignIn, initAuth } from '../lib/firebase';
 import { createAndExportStudentsSheet } from '../lib/googleSheets';
 import { checkNameSimilarity } from '../utils/nameSimilarity';
+import { evaluateScholarshipEligibility } from '../utils/scholarshipEligibility';
 import AshinagaLogo from './AshinagaLogo';
 import StudentQrCodeModal from './StudentQrCodeModal';
 
@@ -33,6 +34,7 @@ interface ClassListProps {
   onAddStudent: (student: Omit<Student, 'id'>) => Promise<void>;
   onUpdateStudent: (id: string, student: Partial<Student>) => Promise<void>;
   onDeleteStudent: (id: string) => Promise<void>;
+  onDeleteMultipleStudents?: (ids: string[]) => Promise<void>;
   onGenerateReportCard: (student: Student) => void;
   onOpenProfile: (student: Student) => void;
   teacherClasses: ClassName[];
@@ -47,6 +49,7 @@ export default function ClassList({
   onAddStudent, 
   onUpdateStudent, 
   onDeleteStudent, 
+  onDeleteMultipleStudents,
   onGenerateReportCard,
   onOpenProfile,
   teacherClasses,
@@ -54,13 +57,28 @@ export default function ClassList({
   autoOpenAddModal,
   onCloseAutoOpenAddModal
 }: ClassListProps) {
-  const classesList: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
+  const classesList: ClassName[] = isAdmin || !teacherClasses || teacherClasses.length === 0
+    ? ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7']
+    : teacherClasses;
   
   // States
-  const [selectedClass, setSelectedClass] = useState<ClassName>('P.1');
+  const [selectedClass, setSelectedClass] = useState<ClassName>(
+    teacherClasses && teacherClasses.length > 0 && !isAdmin ? teacherClasses[0] : 'P.1'
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [genderFilter, setGenderFilter] = useState<'All' | 'Male' | 'Female'>('All');
-  const [scholarshipFilter, setScholarshipFilter] = useState<'All' | 'Yes' | 'No'>('All');
+  const [scholarshipFilter, setScholarshipFilter] = useState<'All' | 'Yes' | 'No' | 'Eligible'>('All');
+  const [photoFilter, setPhotoFilter] = useState<'All' | 'WithPhoto' | 'MissingPhoto'>('All');
+  const [viewMode, setViewMode] = useState<'card' | 'photo_gallery'>('card');
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+
+  useEffect(() => {
+    if (classesList.length > 0 && !classesList.includes(selectedClass)) {
+      setSelectedClass(classesList[0]);
+    }
+  }, [classesList, selectedClass]);
   
   // Form State
   const [showFormModal, setShowFormModal] = useState(false);
@@ -402,16 +420,53 @@ export default function ClassList({
                           student.guardianName.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesGender = genderFilter === 'All' || student.gender === genderFilter;
+    const evalRes = evaluateScholarshipEligibility(student, marks);
     const matchesScholarship = scholarshipFilter === 'All' || 
                               (scholarshipFilter === 'Yes' && student.hasScholarship) || 
-                              (scholarshipFilter === 'No' && !student.hasScholarship);
+                              (scholarshipFilter === 'No' && !student.hasScholarship) ||
+                              (scholarshipFilter === 'Eligible' && !student.hasScholarship && evalRes.isEligible);
+    const matchesPhoto = photoFilter === 'All' ||
+                         (photoFilter === 'WithPhoto' && Boolean(student.photo)) ||
+                         (photoFilter === 'MissingPhoto' && !student.photo);
 
-    return matchesSearch && matchesGender && matchesScholarship;
+    return matchesSearch && matchesGender && matchesScholarship && matchesPhoto;
   });
 
   const hasAccessToClass = (c: ClassName) => {
     if (isAdmin) return true;
     return teacherClasses.includes(c);
+  };
+
+  const handleToggleSelectStudent = (id: string) => {
+    setSelectedStudentIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedStudentIds.length === filteredStudents.length && filteredStudents.length > 0) {
+      setSelectedStudentIds([]);
+    } else {
+      setSelectedStudentIds(filteredStudents.map(s => s.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedStudentIds.length === 0) return;
+    setIsDeletingBulk(true);
+    try {
+      if (onDeleteMultipleStudents) {
+        await onDeleteMultipleStudents(selectedStudentIds);
+      } else {
+        for (const id of selectedStudentIds) {
+          await onDeleteStudent(id);
+        }
+      }
+      setSelectedStudentIds([]);
+      setShowBulkDeleteConfirm(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete selected students.');
+    } finally {
+      setIsDeletingBulk(false);
+    }
   };
 
   return (
@@ -464,7 +519,6 @@ export default function ClassList({
       <div className="flex flex-wrap bg-slate-100 p-1 rounded-2xl gap-1">
         {classesList.map((c) => {
           const isSelected = selectedClass === c;
-          const hasAccess = hasAccessToClass(c);
           return (
             <button
               key={c}
@@ -473,9 +527,9 @@ export default function ClassList({
                 isSelected
                   ? 'bg-white text-indigo-600 shadow-sm font-black'
                   : 'text-slate-500 hover:text-slate-800'
-              } ${!hasAccess ? 'opacity-50' : ''}`}
+              }`}
             >
-              Class {c} {!hasAccess && '🔒'}
+              Class {c}
             </button>
           );
         })}
@@ -518,41 +572,209 @@ export default function ClassList({
             className="w-full appearance-none px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
           >
             <option value="All">All Scholarship Statuses</option>
-            <option value="Yes">On Scholarship</option>
+            <option value="Yes">✓ On Scholarship</option>
             <option value="No">Self-Sponsored</option>
+            <option value="Eligible">🎓 Marks-Eligible (Action Required)</option>
           </select>
         </div>
       </div>
 
-      {/* Class Level Restrictions Banner if teacher cannot access */}
-      {!hasAccessToClass(selectedClass) && (
-        <div className="bg-amber-50 text-amber-800 border border-amber-100 rounded-xl p-4 text-xs font-medium">
-          ⚠️ You are logged in as a teacher with class restrictions. Mr. John Mukasa manages P.5 - P.7, while Mrs. Sarah Babirye manages P.1 - P.4. 
-          You can view the student list for Class {selectedClass}, but you are restricted from adding, editing, or deleting students in this class.
+      {/* Photo Filter & View Mode Switcher Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Photo Status:</span>
+          <select
+            value={photoFilter}
+            onChange={(e) => setPhotoFilter(e.target.value as any)}
+            className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 bg-slate-50 focus:outline-none"
+          >
+            <option value="All">All Pupils</option>
+            <option value="WithPhoto">✓ Registered Photo</option>
+            <option value="MissingPhoto">⚠️ Photo Missing (Action Required)</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <button
+            onClick={() => setViewMode('card')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              viewMode === 'card' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Standard Roster
+          </button>
+          <button
+            onClick={() => setViewMode('photo_gallery')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              viewMode === 'photo_gallery' ? 'bg-indigo-900 text-white shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Camera className="h-3.5 w-3.5 text-amber-400" />
+            <span>📷 Face Verification Gallery</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Bulk Selection and Action Toolbar */}
+      {filteredStudents.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-700">
+              <input
+                type="checkbox"
+                checked={selectedStudentIds.length === filteredStudents.length && filteredStudents.length > 0}
+                onChange={handleSelectAll}
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              />
+              <span>Select All in {selectedClass} ({filteredStudents.length})</span>
+            </label>
+
+            {selectedStudentIds.length > 0 && (
+              <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-[11px] font-extrabold rounded-full border border-indigo-200">
+                {selectedStudentIds.length} Selected
+              </span>
+            )}
+          </div>
+
+          {selectedStudentIds.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedStudentIds([])}
+                className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-800 font-bold cursor-pointer"
+              >
+                Clear Selection
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteConfirm(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete Selected ({selectedStudentIds.length})</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Student Cards Grid */}
+      {/* Student Cards Grid / Photo Gallery */}
       {filteredStudents.length === 0 ? (
         <div className="bg-slate-50 text-center py-16 rounded-2xl border border-dashed border-slate-200">
           <User className="h-10 w-10 text-slate-300 mx-auto mb-3" />
           <h3 className="text-slate-600 font-bold text-sm">No Pupils Found</h3>
           <p className="text-slate-400 text-xs mt-1">Try adjusting your filters or add a new student above.</p>
         </div>
+      ) : viewMode === 'photo_gallery' ? (
+        /* Photo ID Verification Gallery Mode */
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {filteredStudents.map((student) => {
+            const isChecked = selectedStudentIds.includes(student.id);
+
+            return (
+              <div 
+                key={student.id}
+                className={`bg-white rounded-3xl border-2 p-4 shadow-sm transition-all flex flex-col justify-between group ${
+                  isChecked ? 'border-indigo-500 ring-2 ring-indigo-200/50 bg-indigo-50/10' : 'border-slate-100 hover:border-indigo-400'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => handleToggleSelectStudent(student.id)}
+                      className="h-4.5 w-4.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span className="px-2.5 py-0.5 bg-slate-900 text-white text-[10px] font-black rounded-lg font-mono">
+                      Class {student.className}
+                    </span>
+                  </div>
+
+                  {/* Large Photo Display */}
+                  <div className="h-48 w-full rounded-2xl overflow-hidden bg-slate-100 border border-slate-100 relative shadow-inner">
+                    {student.photo ? (
+                      <img 
+                        src={student.photo} 
+                        alt={student.surname}
+                        referrerPolicy="no-referrer"
+                        className="h-full w-full object-cover" 
+                      />
+                    ) : (
+                      <div 
+                        onClick={() => handleOpenEditModal(student)}
+                        className="h-full w-full flex flex-col items-center justify-center bg-amber-50 hover:bg-amber-100 border-2 border-dashed border-amber-300 p-4 text-center cursor-pointer transition-colors"
+                        title="Click to snap or upload child photograph"
+                      >
+                        <Camera className="h-10 w-10 text-amber-500 mb-2" />
+                        <span className="text-xs font-black text-amber-800 uppercase">⚠️ Photo Missing</span>
+                        <span className="text-[10px] text-amber-700 mt-1 font-medium">Click to upload photo & prevent impersonation</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 space-y-1">
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight truncate">
+                      {student.surname} {student.otherNames}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 font-mono flex items-center justify-between">
+                      <span>ID: {student.id}</span>
+                      <span className="font-bold text-slate-700">{student.gender}</span>
+                    </p>
+                    <p className="text-[11px] text-slate-600 font-medium truncate">
+                      📍 Zone: <strong>{student.zoneInNansana || 'Nansana'}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => onOpenProfile(student)}
+                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Profile
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenEditModal(student)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <Camera className="h-3.5 w-3.5 text-indigo-600" />
+                    <span>{student.photo ? 'Edit Photo' : 'Upload Photo'}</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        /* Standard Roster Card View */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredStudents.map((student) => {
             const { currentAge, ageAtEntry } = calculateAges(student.dateOfBirth, student.yearOfEntry);
-            const canModify = hasAccessToClass(selectedClass);
+            const isChecked = selectedStudentIds.includes(student.id);
 
             return (
               <div 
                 key={student.id} 
-                className="bg-white rounded-3xl border-2 border-transparent hover:border-indigo-400 p-5 shadow-sm transition-all flex flex-col justify-between group"
+                className={`bg-white rounded-3xl border-2 p-5 shadow-sm transition-all flex flex-col justify-between group ${
+                  isChecked ? 'border-indigo-500 ring-2 ring-indigo-200/50 bg-indigo-50/10' : 'border-transparent hover:border-indigo-400'
+                }`}
               >
                 {/* Upper profile content */}
                 <div>
-                  <div className="flex gap-4">
+                  <div className="flex gap-4 items-start">
+                    {/* Checkbox for multi-select */}
+                    <div className="pt-1">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggleSelectStudent(student.id)}
+                        className="h-4.5 w-4.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        title="Select pupil for bulk actions"
+                      />
+                    </div>
+
                     {/* Student photo */}
                     <div className="h-20 w-20 bg-slate-100 rounded-2xl shrink-0 overflow-hidden border border-slate-100 relative shadow-sm">
                       {student.photo ? (
@@ -563,9 +785,15 @@ export default function ClassList({
                           className="h-full w-full object-cover"
                         />
                       ) : (
-                        <div className="h-full w-full flex items-center justify-center bg-indigo-50 text-indigo-600 text-xl font-bold uppercase">
-                          {student.surname[0]}{student.otherNames[0]}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(student)}
+                          className="h-full w-full flex flex-col items-center justify-center bg-amber-50 hover:bg-amber-100 text-amber-800 p-1 text-center cursor-pointer transition-colors border border-amber-200"
+                          title="Photo missing - Click to upload child photograph"
+                        >
+                          <Camera className="h-5 w-5 text-amber-600 mb-0.5" />
+                          <span className="text-[8px] font-black uppercase leading-tight">No Photo</span>
+                        </button>
                       )}
                     </div>
 
@@ -580,11 +808,18 @@ export default function ClassList({
                           {student.className === 'P.7' ? 'P.7 Candidate' : `${student.className} Pupil`}
                         </span>
                         
-                        {student.hasScholarship && (
+                        {student.hasScholarship ? (
                           <span className="px-1.5 py-0.5 bg-yellow-400 text-white rounded text-[9px] font-bold uppercase tracking-tighter">
                             Scholarship
                           </span>
-                        )}
+                        ) : (() => {
+                          const evalRes = evaluateScholarshipEligibility(student, marks);
+                          return evalRes.isEligible ? (
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border ${evalRes.badgeColor}`} title={evalRes.reason}>
+                              {evalRes.badgeLabel} ({evalRes.averageScore}%)
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
 
                       <h3 className="text-lg font-extrabold text-slate-900 mt-2 leading-tight uppercase truncate">
@@ -635,29 +870,65 @@ export default function ClassList({
                   </div>
 
                   <div className="flex gap-2 items-center">
-                    {canModify && (
-                      <>
-                        <button
-                          onClick={() => handleOpenEditModal(student)}
-                          className="p-1 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-md transition-colors cursor-pointer"
-                          title="Edit Pupil Details"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => onDeleteStudent(student.id)}
-                          className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-md transition-colors cursor-pointer"
-                          title="Delete Pupil"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </>
-                    )}
+                    <button
+                      onClick={() => handleOpenEditModal(student)}
+                      className="p-1 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-md transition-colors cursor-pointer"
+                      title="Edit Pupil Details"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => onDeleteStudent(student.id)}
+                      className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-md transition-colors cursor-pointer"
+                      title="Delete Pupil"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Multi-Student Bulk Deletion Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-lg shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="p-3 bg-red-50 rounded-2xl">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Delete {selectedStudentIds.length} Selected Pupils</h3>
+                <p className="text-xs text-slate-500">Permanent action from Ashinaga Uganda EMIS</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to permanently delete these <strong className="text-slate-900">{selectedStudentIds.length}</strong> pupils from <strong>Class {selectedClass}</strong>? All their recorded marks, attendance, and profile records will be permanently removed.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                disabled={isDeletingBulk}
+                className="px-4 py-2.5 border border-slate-200 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={isDeletingBulk}
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl text-xs shadow-md shadow-red-100 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingBulk ? 'Deleting...' : `Confirm Delete (${selectedStudentIds.length})`}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

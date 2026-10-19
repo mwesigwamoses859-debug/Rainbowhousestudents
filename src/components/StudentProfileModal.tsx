@@ -32,6 +32,7 @@ import {
 import { Student, Mark, ClassName } from '../types';
 import StudentQrCodeModal from './StudentQrCodeModal';
 import AshinagaLogo from './AshinagaLogo';
+import { evaluateScholarshipEligibility } from '../utils/scholarshipEligibility';
 import {
   ResponsiveContainer,
   LineChart,
@@ -595,6 +596,58 @@ export default function StudentProfileModal({
                     </div>
                   </div>
                 </div>
+
+                {/* Academic Scholarship Assessment Card */}
+                {(() => {
+                  const evalRes = evaluateScholarshipEligibility(student, marks);
+                  return (
+                    <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-3xl p-5 shadow-md border border-indigo-900/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950">
+                            🎓 Academic Scholarship Evaluation
+                          </span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${evalRes.badgeColor}`}>
+                            {evalRes.badgeLabel}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-100 mt-1">
+                          Calculated Standard: <span className="text-amber-300 font-extrabold">{evalRes.averageScore}% Avg</span> {evalRes.aggregate ? `| UNEB PLE Aggregate: ${evalRes.aggregate} (${evalRes.division})` : ''}
+                        </h4>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          {evalRes.reason}
+                        </p>
+                      </div>
+
+                      <div className="shrink-0 flex flex-col items-end gap-2">
+                        {student.hasScholarship ? (
+                          <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 px-3 py-1.5 rounded-xl text-xs font-bold">
+                            <CheckCircle className="h-4 w-4 text-emerald-400" />
+                            <span>Currently Active Scholarship</span>
+                          </div>
+                        ) : evalRes.isEligible ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await onUpdateStudent(student.id, {
+                                hasScholarship: true,
+                                scholarshipDetails: evalRes.recommendedScholarshipDetails
+                              });
+                            }}
+                            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5"
+                          >
+                            <Sparkles className="h-4 w-4" />
+                            <span>Grant {evalRes.tier}</span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-medium bg-slate-800/80 px-3 py-1.5 rounded-xl">
+                            Self-Sponsored (&lt;60% standard)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {studentMarks.length === 0 ? (
                   <div className="text-center py-10">

@@ -5,12 +5,36 @@ import { GoogleGenAI } from '@google/genai';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import webpush from 'web-push';
+import {
+  createSessionToken,
+  verifySessionToken,
+  canAccessSubjectAndClass,
+  TeacherSessionUser
+} from './src/lib/auth.js';
 
 const app = express();
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'db.json');
 
 app.use(express.json({ limit: '10mb' }));
+
+// Session middleware: extract and verify token from Authorization header
+app.use((req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const session = verifySessionToken(token);
+      (req as any).session = session;
+      (req as any).teacher = session;
+    } catch (err: any) {
+      // Token is invalid or expired, continue without session
+      (req as any).session = null;
+    }
+  }
+  next();
+});
+
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const allowedOrigins = (process.env.CORS_ORIGIN || process.env.APP_URL || '')
@@ -61,33 +85,176 @@ function getDatabase(): DatabaseSchema {
         username: 'admin',
         name: 'Headteacher / Administrator',
         role: 'Headteacher',
+        responsibility: 'Administrator',
+        email: 'headteacher@ashinaga.or.ug',
+        password: 'admin123',
+        subjects: ['All'],
+        classes: ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'],
+        activeTerms: [1, 2, 3],
+        assignments: []
+      },
+      {
+        username: 'mwesigwa',
+        name: 'Moses Mwesigwa',
+        role: 'Headteacher',
+        responsibility: 'Headteacher',
         email: 'mwesigwa.m@ashinaga.org',
+        password: 'admin123',
         subjects: ['All'],
-        classes: ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7']
+        classes: ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'],
+        activeTerms: [1, 2, 3],
+        assignments: []
       },
       {
-        username: 'dos',
-        name: 'Mr. David Ochieng (DOS)',
+        username: 'teddy.nansubuga',
+        name: 'Nansubuga Teddy',
+        role: 'Headteacher',
+        responsibility: 'Headteacher',
+        email: 'teddy.nansubuga@ashinaga.or.ug',
+        password: 'admin123',
+        subjects: ['Literacy 1', 'Luganda', 'Mathematics'],
+        classes: ['P.2', 'P.3'],
+        activeTerms: [1, 2, 3],
+        assignments: [
+          { className: 'P.3', subject: 'Literacy 1', activeTerms: [1, 2, 3] },
+          { className: 'P.3', subject: 'Luganda', activeTerms: [1, 2, 3] },
+          { className: 'P.2', subject: 'Mathematics', activeTerms: [1, 2, 3] }
+        ]
+      },
+      {
+        username: 'emmanuel.mutabarura',
+        name: 'Mutabarura Emmanuel',
         role: 'DOS',
-        email: 'dos@ashinaga.org',
-        subjects: ['All'],
-        classes: ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7']
+        responsibility: 'Director of studies',
+        email: 'emmanuel.mutabarura@ashinaga.or.ug',
+        password: 'teacher123',
+        subjects: ['Social Studies', 'English', 'Religious Education'],
+        classes: ['P.4'],
+        activeTerms: [1, 2, 3],
+        assignments: [
+          { className: 'P.4', subject: 'Social Studies', activeTerms: [1, 2, 3] },
+          { className: 'P.4', subject: 'English', activeTerms: [1, 2, 3] },
+          { className: 'P.4', subject: 'Religious Education', activeTerms: [1, 2, 3] }
+        ]
       },
       {
-        username: 'teacher1',
-        name: 'Mr. John Mukasa',
+        username: 'carol.ayesiga',
+        name: 'Ayesiga Carol',
         role: 'Subject Teacher',
-        email: 'john.mukasa@ashinaga.org',
+        responsibility: 'Senior woman teacher/ Kumon teacher',
+        email: 'carol.ayesiga@ashinaga.or.ug',
+        password: 'teacher123',
+        subjects: ['English', 'Literacy 2 (Reading and Writing)', 'KUMON'],
+        classes: ['P.3', 'P.4', 'P.5'],
+        activeTerms: [1, 2, 3],
+        assignments: [
+          { className: 'P.5', subject: 'English', activeTerms: [1, 2, 3] },
+          { className: 'P.3', subject: 'Literacy 2 (Reading and Writing)', activeTerms: [1, 2, 3] },
+          { className: 'P.4', subject: 'KUMON', activeTerms: [1, 2, 3] },
+          { className: 'P.5', subject: 'KUMON', activeTerms: [1, 2, 3] }
+        ]
+      },
+      {
+        username: 'philbert.bwambale',
+        name: 'Bwambale Philbert',
+        role: 'Class Teacher',
+        responsibility: 'Cultural Club/ class teacher P.3',
+        email: 'philbert.bwambale@ashinaga.or.ug',
+        password: 'teacher123',
         subjects: ['Mathematics', 'Science'],
-        classes: ['P.5', 'P.6', 'P.7']
+        classes: ['P.3', 'P.4', 'P.5'],
+        activeTerms: [1, 2, 3],
+        assignments: [
+          { className: 'P.3', subject: 'Mathematics', activeTerms: [1, 2, 3] },
+          { className: 'P.4', subject: 'Science', activeTerms: [1, 2, 3] },
+          { className: 'P.5', subject: 'Science', activeTerms: [1, 2, 3] }
+        ]
       },
       {
-        username: 'teacher2',
-        name: 'Mrs. Sarah Babirye',
+        username: 'john.kirabira',
+        name: 'Kirabira John',
+        role: 'Class Teacher',
+        responsibility: 'Senior male Teacher / Class teacher P.5',
+        email: 'john.kirabira@ashinaga.or.ug',
+        password: 'teacher123',
+        subjects: ['Social Studies', 'English', 'Religious Education'],
+        classes: ['P.3', 'P.5'],
+        activeTerms: [1, 2, 3],
+        assignments: [
+          { className: 'P.5', subject: 'Social Studies', activeTerms: [1, 2, 3] },
+          { className: 'P.3', subject: 'English', activeTerms: [1, 2, 3] },
+          { className: 'P.5', subject: 'Religious Education', activeTerms: [1, 2, 3] }
+        ]
+      },
+      {
+        username: 'peter.taimwa',
+        name: 'Taimwa Peter',
+        role: 'Class Teacher',
+        responsibility: 'Gardening/ Ass. Kumon/ Class teacher P.4',
+        email: 'peter.taimwa@ashinaga.or.ug',
+        password: 'teacher123',
+        subjects: ['Mathematics', 'Religious Education'],
+        classes: ['P.3', 'P.4', 'P.5'],
+        activeTerms: [1, 2, 3],
+        assignments: [
+          { className: 'P.4', subject: 'Mathematics', activeTerms: [1, 2, 3] },
+          { className: 'P.5', subject: 'Mathematics', activeTerms: [1, 2, 3] },
+          { className: 'P.3', subject: 'Religious Education', activeTerms: [1, 2, 3] }
+        ]
+      },
+      {
+        username: 'isaac.sali',
+        name: 'Sali Isaac',
         role: 'Subject Teacher',
-        email: 'sarah.babirye@ashinaga.org',
-        subjects: ['English', 'Social Studies', 'Religious Education'],
-        classes: ['P.1', 'P.2', 'P.3', 'P.4']
+        responsibility: 'ICT teacher',
+        email: 'isaac.sali@ashinaga.or.ug',
+        password: 'teacher123',
+        subjects: ['Computer/ ICT'],
+        classes: ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'],
+        activeTerms: [1, 2, 3],
+        assignments: [
+          { className: 'P.1', subject: 'Computer/ ICT', activeTerms: [1, 2, 3] },
+          { className: 'P.2', subject: 'Computer/ ICT', activeTerms: [1, 2, 3] },
+          { className: 'P.3', subject: 'Computer/ ICT', activeTerms: [1, 2, 3] },
+          { className: 'P.4', subject: 'Computer/ ICT', activeTerms: [1, 2, 3] },
+          { className: 'P.5', subject: 'Computer/ ICT', activeTerms: [1, 2, 3] },
+          { className: 'P.6', subject: 'Computer/ ICT', activeTerms: [1, 2, 3] },
+          { className: 'P.7', subject: 'Computer/ ICT', activeTerms: [1, 2, 3] }
+        ]
+      },
+      {
+        username: 'lilian.nakyeyune',
+        name: 'Nakyeyune Lilian',
+        role: 'Class Teacher',
+        responsibility: 'games and sports / Class teacher P.1',
+        email: 'lilian.nakyeyune@ashinaga.or.ug',
+        password: 'teacher123',
+        subjects: ['Mathematics', 'Literacy 1', 'Literacy 2 (Reading and Writing)'],
+        classes: ['P.1', 'P.2'],
+        activeTerms: [1, 2, 3],
+        assignments: [
+          { className: 'P.1', subject: 'Mathematics', activeTerms: [1, 2, 3] },
+          { className: 'P.1', subject: 'Literacy 1', activeTerms: [1, 2, 3] },
+          { className: 'P.1', subject: 'Literacy 2 (Reading and Writing)', activeTerms: [1, 2, 3] },
+          { className: 'P.2', subject: 'Literacy 2 (Reading and Writing)', activeTerms: [1, 2, 3] }
+        ]
+      },
+      {
+        username: 'sarah.batengu',
+        name: 'Batengu Sarah',
+        role: 'Class Teacher',
+        responsibility: 'Volunteer teacher / Ass. Class teacher P.2',
+        email: 'sarah.batengu@ashinaga.or.ug',
+        password: 'teacher123',
+        subjects: ['English', 'Literacy 1', 'Luganda'],
+        classes: ['P.1', 'P.2'],
+        activeTerms: [1, 2, 3],
+        assignments: [
+          { className: 'P.1', subject: 'English', activeTerms: [1, 2, 3] },
+          { className: 'P.2', subject: 'English', activeTerms: [1, 2, 3] },
+          { className: 'P.2', subject: 'Literacy 1', activeTerms: [1, 2, 3] },
+          { className: 'P.2', subject: 'Luganda', activeTerms: [1, 2, 3] }
+        ]
       }
     ];
 
@@ -376,21 +543,84 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
+// Middleware: require valid session
+function requireSession(req: any, res: any, next: any) {
+  if (!req.session) {
+    return res.status(401).json({ success: false, message: 'Unauthorized. Please sign in.' });
+  }
+  next();
+}
+
+// Middleware: require specific role(s)
+function requireRole(...allowedRoles: string[]) {
+  return (req: any, res: any, next: any) => {
+    if (!req.session) {
+      return res.status(401).json({ success: false, message: 'Unauthorized. Please sign in.' });
+    }
+    if (!allowedRoles.includes(req.session.role)) {
+      return res.status(403).json({ success: false, message: `Access Denied. Required role: ${allowedRoles.join(' or ')}` });
+    }
+    next();
+  };
+}
+
+// Middleware: require subject and class access
+function requireSubjectAndClassAccess(req: any, res: any, next: any) {
+  if (!req.session) {
+    return res.status(401).json({ success: false, message: 'Unauthorized. Please sign in.' });
+  }
+  
+  // Headteacher and DOS have all access
+  if (req.session.role === 'Headteacher' || req.session.role === 'DOS') {
+    return next();
+  }
+
+  const { subject, className } = req.body;
+  if (!subject || !className) {
+    return next(); // Let the endpoint handler deal with missing fields
+  }
+
+  if (!canAccessSubjectAndClass(req.session, className, subject)) {
+    return res.status(403).json({ 
+      success: false, 
+      message: `Access Denied: You are not assigned to Grade ${className} ${subject}.` 
+    });
+  }
+  next();
+}
+
+const isAdministrator = (role?: string) => role === 'Headteacher' || role === 'DOS';
+
 // 2. Students API
-app.get('/api/students', (req, res) => {
+app.get('/api/students', requireSession, (req, res) => {
   const db = getDatabase();
-  res.json(db.students);
+  const session = (req as any).session;
+  if (isAdministrator(session?.role)) {
+    return res.json(db.students);
+  }
+  const allowedClasses = new Set<string>(session?.classes || []);
+  const scopedStudents = db.students.filter((s: any) => allowedClasses.has(s.className));
+  res.json(scopedStudents);
 });
 
 const normalizeName = (val: string) => {
   return (val || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
 };
 
-app.post('/api/students', (req, res) => {
+app.post('/api/students', requireSession, (req, res) => {
   const db = getDatabase();
-  const surname = req.body.surname || '';
-  const otherNames = req.body.otherNames || '';
+  const session = (req as any).session;
   const className = req.body.className || '';
+
+  if (!isAdministrator(session?.role)) {
+    const allowedClasses = new Set<string>(session?.classes || []);
+    if (!allowedClasses.has(className)) {
+      return res.status(403).json({
+        success: false,
+        message: `Access denied. You can only add students to your assigned class(es): ${[...allowedClasses].join(', ')}.`
+      });
+    }
+  }
 
   const newStudent = {
     ...req.body,
@@ -402,8 +632,12 @@ app.post('/api/students', (req, res) => {
 });
 
 // Bulk Import Students from Excel/CSV (sent as JSON array from frontend client)
-app.post('/api/students/bulk', (req, res) => {
+app.post('/api/students/bulk', requireSession, (req, res) => {
   const db = getDatabase();
+  const session = (req as any).session;
+  if (!isAdministrator(session?.role)) {
+    return res.status(403).json({ success: false, message: 'Administrator access required.' });
+  }
   const importedStudents = req.body;
   
   if (!Array.isArray(importedStudents)) {
@@ -450,13 +684,54 @@ app.post('/api/students/bulk', (req, res) => {
   });
 });
 
-app.put('/api/students/:id', (req, res) => {
+app.post('/api/students/bulk-delete', requireSession, (req, res) => {
   const db = getDatabase();
+  const session = (req as any).session;
+  const ids: string[] = Array.isArray(req.body.ids) ? req.body.ids : Array.isArray(req.body.studentIds) ? req.body.studentIds : [];
+  if (ids.length === 0) {
+    return res.status(400).json({ success: false, message: 'No student IDs provided.' });
+  }
+
+  const allowedClasses = isAdministrator(session?.role) ? null : new Set<string>(session?.classes || []);
+  const deletedIds: string[] = [];
+
+  for (const id of ids) {
+    const student = db.students.find((s: any) => s.id === id);
+    if (!student) continue;
+    if (allowedClasses && !allowedClasses.has(student.className)) {
+      continue;
+    }
+    deletedIds.push(id);
+  }
+
+  const deletedSet = new Set(deletedIds);
+  db.students = db.students.filter((s: any) => !deletedSet.has(s.id));
+  db.marks = db.marks.filter((m: any) => !deletedSet.has(m.studentId));
+  if (db.attendance) db.attendance = db.attendance.filter((a: any) => !deletedSet.has(a.studentId));
+  saveDatabase(db);
+
+  res.json({ success: true, count: deletedIds.length, deletedIds });
+});
+
+app.put('/api/students/:id', requireSession, (req, res) => {
+  const db = getDatabase();
+  const session = (req as any).session;
   const { id } = req.params;
   const index = db.students.findIndex(s => s.id === id);
   
   if (index === -1) {
     return res.status(404).json({ success: false, message: 'Student not found' });
+  }
+
+  const existingStudent = db.students[index];
+  if (!isAdministrator(session?.role)) {
+    const allowedClasses = new Set<string>(session?.classes || []);
+    if (!allowedClasses.has(existingStudent.className)) {
+      return res.status(403).json({ success: false, message: 'Access denied. You can only edit pupils in your assigned class(es).' });
+    }
+    if (req.body.className && !allowedClasses.has(req.body.className)) {
+      return res.status(403).json({ success: false, message: `Access denied. You cannot move a student to ${req.body.className}.` });
+    }
   }
   
   db.students[index] = { ...db.students[index], ...req.body, id }; // retain id
@@ -464,16 +739,30 @@ app.put('/api/students/:id', (req, res) => {
   res.json(db.students[index]);
 });
 
-app.delete('/api/students/:id', (req, res) => {
+app.delete('/api/students/:id', requireSession, (req, res) => {
   const db = getDatabase();
+  const session = (req as any).session;
   const { id } = req.params;
+  const student = db.students.find(s => s.id === id);
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Student not found' });
+  }
+
+  if (!isAdministrator(session?.role)) {
+    const allowedClasses = new Set<string>(session?.classes || []);
+    if (!allowedClasses.has(student.className)) {
+      return res.status(403).json({ success: false, message: 'Access denied. You can only delete pupils in your assigned class(es).' });
+    }
+  }
+
   db.students = db.students.filter(s => s.id !== id);
   db.marks = db.marks.filter(m => m.studentId !== id); // Cascade delete marks
+  if (db.attendance) db.attendance = db.attendance.filter(a => a.studentId !== id);
   saveDatabase(db);
   res.json({ success: true, message: 'Student and associated marks deleted successfully' });
 });
 
-app.post('/api/students/purge', (req, res) => {
+app.post('/api/students/purge', requireSession, requireRole('Headteacher'), (req, res) => {
   const db = getDatabase();
   
   db.students = [];
@@ -490,12 +779,26 @@ app.post('/api/students/purge', (req, res) => {
 });
 
 // 3. Marks API
-app.get('/api/marks', (req, res) => {
+app.get('/api/marks', requireSession, (req, res) => {
   const db = getDatabase();
-  res.json(db.marks);
+  const session = (req as any).session;
+  if (isAdministrator(session?.role)) {
+    return res.json(db.marks);
+  }
+  const allowedClasses = new Set<string>(session?.classes || []);
+  const teacherSubjects: string[] = session?.subjects || [];
+  const studentClassMap = new Map<string, string>(db.students.map((s: any) => [s.id, s.className]));
+
+  const scopedMarks = db.marks.filter((m: any) => {
+    const studentClass = studentClassMap.get(m.studentId);
+    if (!studentClass || !allowedClasses.has(studentClass)) return false;
+    if (session.role === 'Class Teacher') return true;
+    return teacherSubjects.includes('All') || teacherSubjects.includes(m.subject);
+  });
+  res.json(scopedMarks);
 });
 
-app.post('/api/marks', (req, res) => {
+app.post('/api/marks', requireSession, requireSubjectAndClassAccess, (req, res) => {
   const db = getDatabase();
   const { studentId, subject, score, term, year, teacherName } = req.body;
   
@@ -503,26 +806,20 @@ app.post('/api/marks', (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing required mark fields' });
   }
 
-  // Server-side lock check
-  const requesterUsername = req.headers['x-teacher-username'] as string;
-  if (requesterUsername && requesterUsername !== 'admin') {
-    const teacher = db.teachers?.find(t => t.username === requesterUsername);
-    if (teacher) {
-      const student = db.students?.find(s => s.id === studentId);
-      const studentClass = student?.className;
-      if (!studentClass) {
-        return res.status(400).json({ success: false, message: 'Pupil not found in register' });
-      }
-      if (!teacher.classes.includes(studentClass)) {
-        return res.status(403).json({ success: false, message: `Access Denied: Grade ${studentClass} is not assigned to you.` });
-      }
-      if (!teacher.subjects.includes(subject)) {
-        return res.status(403).json({ success: false, message: `Access Denied: Subject ${subject} is not assigned to you.` });
-      }
-      const activeTerms = teacher.activeTerms || [1, 2, 3];
-      if (!activeTerms.includes(Number(term))) {
-        return res.status(403).json({ success: false, message: `Access Denied: Term ${term} is not currently active for you.` });
-      }
+  // Additional validation: check student exists and term is active
+  const session: TeacherSessionUser = (req as any).session;
+  const student = db.students?.find(s => s.id === studentId);
+  const studentClass = student?.className;
+  
+  if (!studentClass) {
+    return res.status(400).json({ success: false, message: 'Pupil not found in register' });
+  }
+
+  // Check term is active (if not admin)
+  if (session.role !== 'Headteacher' && session.role !== 'DOS') {
+    const activeTerms = session.activeTerms || [1, 2, 3];
+    if (!activeTerms.includes(Number(term))) {
+      return res.status(403).json({ success: false, message: `Access Denied: Term ${term} is not currently active for you.` });
     }
   }
 
@@ -558,7 +855,7 @@ app.post('/api/marks', (req, res) => {
 });
 
 // Bulk update marks for a class & subject
-app.post('/api/marks/bulk', (req, res) => {
+app.post('/api/marks/bulk', requireSession, (req, res) => {
   const db = getDatabase();
   const { marks } = req.body; // Array of { studentId, subject, score, term, year, teacherName }
   
@@ -566,27 +863,21 @@ app.post('/api/marks/bulk', (req, res) => {
     return res.status(400).json({ success: false, message: 'Expected marks array' });
   }
 
-  // Server-side lock check
-  const requesterUsername = req.headers['x-teacher-username'] as string;
-  if (requesterUsername && requesterUsername !== 'admin') {
-    const teacher = db.teachers?.find(t => t.username === requesterUsername);
-    if (teacher) {
-      for (const item of marks) {
-        const student = db.students?.find(s => s.id === item.studentId);
-        const studentClass = student?.className;
-        if (!studentClass) {
-          return res.status(400).json({ success: false, message: `Pupil with ID ${item.studentId} not found in register` });
-        }
-        if (!teacher.classes.includes(studentClass)) {
-          return res.status(403).json({ success: false, message: `Access Denied: Grade ${studentClass} is not assigned to you.` });
-        }
-        if (!teacher.subjects.includes(item.subject)) {
-          return res.status(403).json({ success: false, message: `Access Denied: Subject ${item.subject} is not assigned to you.` });
-        }
-        const activeTerms = teacher.activeTerms || [1, 2, 3];
-        if (!activeTerms.includes(Number(item.term))) {
-          return res.status(403).json({ success: false, message: `Access Denied: Term ${item.term} is not currently active for you.` });
-        }
+  // Session-based RBAC check
+  const session: TeacherSessionUser = (req as any).session;
+  if (session.role !== 'Headteacher' && session.role !== 'DOS') {
+    for (const item of marks) {
+      const student = db.students?.find(s => s.id === item.studentId);
+      const studentClass = student?.className;
+      if (!studentClass) {
+        return res.status(400).json({ success: false, message: `Pupil with ID ${item.studentId} not found in register` });
+      }
+      if (!canAccessSubjectAndClass(session, studentClass, item.subject)) {
+        return res.status(403).json({ success: false, message: `Access Denied: Grade ${studentClass} ${item.subject} is not assigned to you.` });
+      }
+      const activeTerms = session.activeTerms || [1, 2, 3];
+      if (!activeTerms.includes(Number(item.term))) {
+        return res.status(403).json({ success: false, message: `Access Denied: Term ${item.term} is not currently active for you.` });
       }
     }
   }
@@ -645,11 +936,11 @@ app.post('/api/marks/bulk', (req, res) => {
 });
 
 // --- EMAIL NOTIFICATION GATEWAY ENDPOINTS ---
-app.get('/api/notifications/email-logs', (req, res) => {
+app.get('/api/notifications/email-logs', requireSession, requireRole('Headteacher', 'DOS'), (req, res) => {
   res.json({ success: true, logs: emailGatewayLogs });
 });
 
-app.post('/api/notifications/send-email', (req, res) => {
+app.post('/api/notifications/send-email', requireSession, requireRole('Headteacher', 'DOS'), (req, res) => {
   const { recipientEmail, recipientName, recipientRole, subject, category, code, body } = req.body;
 
   if (!recipientEmail || !subject || !body) {
@@ -672,12 +963,12 @@ app.post('/api/notifications/send-email', (req, res) => {
 // --- NEW SOCIAL WELFARE, ATTENDANCE & SAFEGUARDING ROUTES ---
 
 // 4. Attendance
-app.get('/api/attendance', (req, res) => {
+app.get('/api/attendance', requireSession, (req, res) => {
   const db = getDatabase();
   res.json(db.attendance || []);
 });
 
-app.post('/api/attendance/bulk', (req, res) => {
+app.post('/api/attendance/bulk', requireSession, (req, res) => {
   const db = getDatabase();
   const { records } = req.body; // Array of { studentId, date, status }
   
@@ -711,12 +1002,12 @@ app.post('/api/attendance/bulk', (req, res) => {
 });
 
 // 5. Support / Welfare Log
-app.get('/api/support', (req, res) => {
+app.get('/api/support', requireSession, (req, res) => {
   const db = getDatabase();
   res.json(db.support || []);
 });
 
-app.post('/api/support', (req, res) => {
+app.post('/api/support', requireSession, (req, res) => {
   const db = getDatabase();
   if (!db.support) db.support = [];
 
@@ -731,12 +1022,12 @@ app.post('/api/support', (req, res) => {
 });
 
 // 6. Home Visits Log
-app.get('/api/visits', (req, res) => {
+app.get('/api/visits', requireSession, (req, res) => {
   const db = getDatabase();
   res.json(db.visits || []);
 });
 
-app.post('/api/visits', (req, res) => {
+app.post('/api/visits', requireSession, (req, res) => {
   const db = getDatabase();
   if (!db.visits) db.visits = [];
 
@@ -751,12 +1042,12 @@ app.post('/api/visits', (req, res) => {
 });
 
 // 7. Safeguarding Cases Ledger
-app.get('/api/safeguarding', (req, res) => {
+app.get('/api/safeguarding', requireSession, (req, res) => {
   const db = getDatabase();
   res.json(db.safeguarding || []);
 });
 
-app.post('/api/safeguarding', (req, res) => {
+app.post('/api/safeguarding', requireSession, (req, res) => {
   const db = getDatabase();
   if (!db.safeguarding) db.safeguarding = [];
 
@@ -771,12 +1062,12 @@ app.post('/api/safeguarding', (req, res) => {
 });
 
 // 8. Guardian Interactions
-app.get('/api/interactions', (req, res) => {
+app.get('/api/interactions', requireSession, (req, res) => {
   const db = getDatabase();
   res.json(db.interactions || []);
 });
 
-app.post('/api/interactions', (req, res) => {
+app.post('/api/interactions', requireSession, (req, res) => {
   const db = getDatabase();
   if (!db.interactions) db.interactions = [];
 
@@ -800,7 +1091,7 @@ async function sendRealSMS(to: string, message: string): Promise<{ success: bool
   };
 }
 
-app.get('/api/sms/gateway-status', (req, res) => {
+app.get('/api/sms/gateway-status', requireSession, (req, res) => {
   res.json({
     activeGateway: 'Sandbox Simulator (Local Simulation)',
     hasAT: false,
@@ -810,12 +1101,12 @@ app.get('/api/sms/gateway-status', (req, res) => {
   });
 });
 
-app.get('/api/sms', (req, res) => {
+app.get('/api/sms', requireSession, (req, res) => {
   const db = getDatabase();
   res.json(db.sms || []);
 });
 
-app.post('/api/sms', async (req, res) => {
+app.post('/api/sms', requireSession, async (req, res) => {
   const db = getDatabase();
   if (!db.sms) db.sms = [];
 
@@ -846,12 +1137,12 @@ app.post('/api/sms', async (req, res) => {
 });
 
 // 10. Documents Vault
-app.get('/api/documents', (req, res) => {
+app.get('/api/documents', requireSession, (req, res) => {
   const db = getDatabase();
   res.json(db.documents || []);
 });
 
-app.post('/api/documents', (req, res) => {
+app.post('/api/documents', requireSession, (req, res) => {
   const db = getDatabase();
   if (!db.documents) db.documents = [];
 
@@ -865,7 +1156,7 @@ app.post('/api/documents', (req, res) => {
   res.status(201).json(newDoc);
 });
 
-app.delete('/api/documents/:id', (req, res) => {
+app.delete('/api/documents/:id', requireSession, (req, res) => {
   const db = getDatabase();
   if (!db.documents) db.documents = [];
 
@@ -875,12 +1166,12 @@ app.delete('/api/documents/:id', (req, res) => {
 });
 
 // 11. School Timetable
-app.get('/api/timetable', (req, res) => {
+app.get('/api/timetable', requireSession, (req, res) => {
   const db = getDatabase();
   res.json(db.timetable || []);
 });
 
-app.post('/api/timetable', (req, res) => {
+app.post('/api/timetable', requireSession, requireRole('Headteacher', 'DOS'), (req, res) => {
   const db = getDatabase();
   if (!db.timetable) db.timetable = [];
 
@@ -894,7 +1185,7 @@ app.post('/api/timetable', (req, res) => {
   res.status(201).json(newSlot);
 });
 
-app.delete('/api/timetable/:id', (req, res) => {
+app.delete('/api/timetable/:id', requireSession, requireRole('Headteacher', 'DOS'), (req, res) => {
   const db = getDatabase();
   if (!db.timetable) db.timetable = [];
 
@@ -918,13 +1209,7 @@ app.post('/api/auth/send-code', (req, res) => {
   let teacher = (db.teachers || []).find(t => t.username.toLowerCase() === username.toLowerCase());
 
   if (!teacher) {
-    const defaultAccounts: Record<string, any> = {
-      admin: { username: 'admin', name: 'Headteacher / Administrator', role: 'Headteacher', email: 'headteacher@ashinaga.or.ug', password: 'admin123', subjects: ['All'], classes: ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'] },
-      dos: { username: 'dos', name: 'Mr. David Ochieng (DOS)', role: 'DOS', email: 'dos@ashinaga.or.ug', password: 'teacher123', subjects: ['Mathematics', 'English', 'Science'], classes: ['P.5', 'P.6', 'P.7'] },
-      teacher1: { username: 'teacher1', name: 'Mr. John Mukasa', role: 'Subject Teacher', email: 'john.mukasa@ashinaga.or.ug', password: 'teacher123', subjects: ['Mathematics', 'Science'], classes: ['P.4', 'P.5', 'P.6'] },
-      teacher2: { username: 'teacher2', name: 'Mrs. Sarah Babirye', role: 'Subject Teacher', email: 'sarah.babirye@ashinaga.or.ug', password: 'teacher123', subjects: ['English', 'Social Studies'], classes: ['P.1', 'P.2', 'P.3'] }
-    };
-    teacher = defaultAccounts[username.toLowerCase()];
+    teacher = (db.teachers || []).find(t => t.username.toLowerCase() === username.toLowerCase());
   }
 
   if (!teacher) {
@@ -981,25 +1266,39 @@ app.post('/api/auth/verify-code', (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid verification code. Please check your email and try again.' });
   }
 
-  // Code verified!
+  // Code verified! Create secure session token
   pendingAuthCodes.delete(username.toLowerCase());
+  
+  const sessionUser: TeacherSessionUser = {
+    username: record.teacher.username,
+    name: record.teacher.name,
+    role: record.teacher.role || (record.teacher.username === 'admin' ? 'Headteacher' : 'Subject Teacher'),
+    email: record.teacher.email,
+    subjects: record.teacher.subjects || [],
+    classes: record.teacher.classes || [],
+    activeTerms: record.teacher.activeTerms || [1, 2, 3]
+  };
+
+  const token = createSessionToken(sessionUser);
+
   return res.json({
     success: true,
-    message: 'Authentication code verified successfully.',
-    teacher: record.teacher
+    message: 'Authentication verified successfully.',
+    token,
+    teacher: sessionUser
   });
 });
 
-app.get('/api/teachers', (req, res) => {
+app.get('/api/teachers', requireSession, (req, res) => {
   const db = getDatabase();
   res.json(db.teachers || []);
 });
 
-app.post('/api/teachers', (req, res) => {
+app.post('/api/teachers', requireSession, requireRole('Headteacher'), (req, res) => {
   const db = getDatabase();
   if (!db.teachers) db.teachers = [];
 
-  const { username, name, password, email, subjects, classes, activeTerms } = req.body;
+  const { username, name, password, email, role, responsibility, subjects, classes, activeTerms, assignments } = req.body;
   if (!username || !name) {
     return res.status(400).json({ success: false, message: 'Username and Name are required' });
   }
@@ -1008,11 +1307,14 @@ app.post('/api/teachers', (req, res) => {
   const teacherData = {
     username,
     name,
-    password: password || 'teacher123',
+    password: password || (existingIndex !== -1 ? db.teachers[existingIndex].password : 'teacher123'),
     email: email || `${username}@ashinaga.or.ug`,
+    role: role || (existingIndex !== -1 ? db.teachers[existingIndex].role : 'Subject Teacher'),
+    responsibility: responsibility || (existingIndex !== -1 ? db.teachers[existingIndex].responsibility : ''),
     subjects: subjects || [],
     classes: classes || [],
-    activeTerms: activeTerms || [1, 2, 3]
+    activeTerms: activeTerms || [1, 2, 3],
+    assignments: assignments || (existingIndex !== -1 ? (db.teachers[existingIndex].assignments || []) : [])
   };
 
   if (existingIndex !== -1) {
@@ -1025,7 +1327,7 @@ app.post('/api/teachers', (req, res) => {
   res.status(201).json({ success: true, teacher: teacherData });
 });
 
-app.delete('/api/teachers/:username', (req, res) => {
+app.delete('/api/teachers/:username', requireSession, requireRole('Headteacher'), (req, res) => {
   const db = getDatabase();
   const { username } = req.params;
   if (username === 'admin') {
@@ -1037,7 +1339,7 @@ app.delete('/api/teachers/:username', (req, res) => {
 });
 
 // 13. Automatic and Bulk Student Promotion Engine
-app.post('/api/students/promote-bulk', (req, res) => {
+app.post('/api/students/promote-bulk', requireSession, requireRole('Headteacher', 'DOS'), (req, res) => {
   const db = getDatabase();
   const { promotions } = req.body; // Array of { studentId, nextClassName, hasScholarship }
   
@@ -1062,7 +1364,7 @@ app.post('/api/students/promote-bulk', (req, res) => {
 });
 
 // 15. Push Notifications Subsystem
-app.get('/api/push/vapid-public-key', (req, res) => {
+app.get('/api/push/vapid-public-key', requireSession, (req, res) => {
   const db = getDatabase();
   if (db.vapidKeys) {
     res.json({ publicKey: db.vapidKeys.publicKey });
@@ -1071,7 +1373,7 @@ app.get('/api/push/vapid-public-key', (req, res) => {
   }
 });
 
-app.post('/api/push/subscribe', (req, res) => {
+app.post('/api/push/subscribe', requireSession, (req, res) => {
   const db = getDatabase();
   const { subscription, username } = req.body;
 
@@ -1103,17 +1405,17 @@ app.post('/api/push/subscribe', (req, res) => {
   res.json({ success: true, message: 'Subscription successfully registered.' });
 });
 
-app.get('/api/push/subscriptions', (req, res) => {
+app.get('/api/push/subscriptions', requireSession, requireRole('Headteacher'), (req, res) => {
   const db = getDatabase();
   res.json({ success: true, subscriptions: db.pushSubscriptions || [] });
 });
 
-app.get('/api/push/history', (req, res) => {
+app.get('/api/push/history', requireSession, (req, res) => {
   const db = getDatabase();
   res.json({ success: true, alerts: db.pushAlerts || [] });
 });
 
-app.post('/api/push/send', async (req, res) => {
+app.post('/api/push/send', requireSession, requireRole('Headteacher', 'DOS'), async (req, res) => {
   const db = getDatabase();
   const { title, body, tag, clickAction } = req.body;
 

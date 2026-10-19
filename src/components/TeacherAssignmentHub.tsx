@@ -41,9 +41,10 @@ export default function TeacherAssignmentHub({
   // Input states
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
+  const [responsibility, setResponsibility] = useState('');
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
-  const [selectedRole, setSelectedRole] = useState<'Headteacher' | 'DOS' | 'Subject Teacher'>('Subject Teacher');
+  const [selectedRole, setSelectedRole] = useState<'Headteacher' | 'DOS' | 'Class Teacher' | 'Subject Teacher'>('Class Teacher');
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedClasses, setSelectedClasses] = useState<ClassName[]>([]);
   const [selectedTerms, setSelectedTerms] = useState<(1 | 2 | 3)[]>([1, 2, 3]);
@@ -57,6 +58,7 @@ export default function TeacherAssignmentHub({
     setEditingTeacher(null);
     setUsername('');
     setName('');
+    setResponsibility('');
     setPassword('');
     setEmail('');
     setSelectedRole('Subject Teacher');
@@ -73,6 +75,7 @@ export default function TeacherAssignmentHub({
     setEditingTeacher(teacher);
     setUsername(teacher.username);
     setName(teacher.name);
+    setResponsibility(teacher.responsibility || '');
     setPassword('');
     setEmail(teacher.email || `${teacher.username}@ashinaga.or.ug`);
     setSelectedRole(teacher.role || 'Subject Teacher');
@@ -148,7 +151,11 @@ export default function TeacherAssignmentHub({
       setStatus({ type: 'error', text: 'New staff accounts require a password of at least 8 characters.' });
       return;
     }
-    if (selectedRole === 'Subject Teacher' && selectedAssignmentKeys.length === 0) {
+    if ((selectedRole === 'Subject Teacher' || selectedRole === 'Class Teacher') && selectedClasses.length === 0) {
+      setStatus({ type: 'error', text: 'Select at least one class that this teacher leads/teaches.' });
+      return;
+    }
+    if (selectedRole === 'Subject Teacher' && selectedAssignmentKeys.length === 0 && selectedSubjects.length > 0) {
       setStatus({ type: 'error', text: 'Select at least one exact class and subject assignment.' });
       return;
     }
@@ -164,13 +171,13 @@ export default function TeacherAssignmentHub({
       await onAddOrUpdateTeacher({
         username: username.trim(),
         name: name.trim(),
+        responsibility: responsibility.trim(),
         password: password.trim(),
         email: email.trim() || `${username.trim()}@ashinaga.or.ug`,
         role: selectedRole,
         subjects: selectedSubjects,
         classes: selectedClasses,
-        activeTerms: selectedTerms
-        ,
+        activeTerms: selectedTerms,
         assignments: selectedAssignmentKeys.map(key => {
           const [className, subject] = key.split('|');
           return { className, subject, activeTerms: selectedTerms };
@@ -356,10 +363,23 @@ export default function TeacherAssignmentHub({
                   onChange={(e) => setSelectedRole(e.target.value as typeof selectedRole)}
                   className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-xs font-semibold bg-white text-slate-800"
                 >
+                  <option value="Class Teacher">Class Teacher (Lead Teacher of Assigned Class)</option>
                   <option value="Subject Teacher">Subject Teacher</option>
                   <option value="DOS">Director of Studies (Admin)</option>
                   <option value="Headteacher">Headteacher (Admin)</option>
                 </select>
+              </div>
+
+              {/* Responsibility / Role Title */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 mb-1.5 uppercase tracking-wider">Responsibility / Role Title</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Senior woman teacher/ Kumon teacher"
+                  value={responsibility}
+                  onChange={(e) => setResponsibility(e.target.value)}
+                  className="w-full px-4 py-2.5 border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800"
+                />
               </div>
             </div>
 
@@ -396,10 +416,13 @@ export default function TeacherAssignmentHub({
 
             {/* Class Multi-Select (Grid Checkbox blocks) */}
             <div>
-              <label className="block text-xs font-black text-slate-500 mb-2 uppercase tracking-wider flex items-center gap-1.5">
+              <label className="block text-xs font-black text-slate-500 mb-1 uppercase tracking-wider flex items-center gap-1.5">
                 <Users className="h-3.5 w-3.5 text-emerald-500" />
-                <span>Assigned Class Levels</span>
+                <span>Assigned / Lead Class Levels</span>
               </label>
+              <p className="mb-3 text-[11px] font-medium text-slate-500">
+                ⭐ Strict Scoping: When assigned, this teacher will <strong>ONLY see and manage the selected class(es)</strong>. All other classes (P.1–P.7) are completely hidden from their view.
+              </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
                 {CLASSES_LIST.map(className => {
                   const isChecked = selectedClasses.includes(className);
@@ -410,11 +433,11 @@ export default function TeacherAssignmentHub({
                       onClick={() => handleToggleClass(className)}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all text-xs font-bold cursor-pointer h-16 ${
                         isChecked 
-                          ? 'bg-emerald-50/50 border-emerald-400 text-emerald-900 shadow-sm' 
+                          ? 'bg-emerald-50/50 border-emerald-400 text-emerald-900 shadow-sm ring-2 ring-emerald-300' 
                           : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-500'
                       }`}
                     >
-                      <span className="text-[10px] opacity-60">Grade</span>
+                      <span className="text-[10px] opacity-60">{isChecked ? 'Lead' : 'Grade'}</span>
                       <span className="text-sm font-extrabold mt-0.5">{className}</span>
                     </button>
                   );
@@ -422,7 +445,7 @@ export default function TeacherAssignmentHub({
               </div>
             </div>
 
-            {selectedRole === 'Subject Teacher' && selectedClasses.length > 0 && (
+            {(selectedRole === 'Subject Teacher' || selectedRole === 'Class Teacher') && selectedClasses.length > 0 && selectedSubjects.length > 0 && (
               <div className="rounded-2xl border-2 border-indigo-100 bg-indigo-50/30 p-4">
                 <div className="mb-4">
                   <h3 className="text-xs font-black uppercase tracking-wider text-indigo-900">Exact class–subject permissions</h3>
@@ -546,11 +569,20 @@ export default function TeacherAssignmentHub({
                       <td className="px-6 py-4">
                         <div>
                           <strong className="text-slate-800 text-sm block">{teacher.name}</strong>
-                          {teacher.username === 'admin' && (
+                          {teacher.responsibility && (
+                            <span className="text-[11px] text-slate-500 font-medium block">
+                              {teacher.responsibility}
+                            </span>
+                          )}
+                          {teacher.username === 'admin' ? (
                             <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full font-bold text-[9px] uppercase border border-indigo-500/20 mt-1 inline-block">
                               Super Admin
                             </span>
-                          )}
+                          ) : teacher.role ? (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-full font-bold text-[9px] uppercase border border-slate-200 mt-1 inline-block">
+                              {teacher.role}
+                            </span>
+                          ) : null}
                         </div>
                       </td>
                       <td className="px-6 py-4 font-mono text-slate-500 font-semibold">{teacher.username}</td>

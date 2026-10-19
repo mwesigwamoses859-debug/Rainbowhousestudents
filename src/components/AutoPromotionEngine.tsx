@@ -175,6 +175,61 @@ export default function AutoPromotionEngine({
     }
   };
 
+  const handlePromoteWholeSchool = async () => {
+    const allPromotions: { studentId: string; nextClassName: any; hasScholarship?: boolean; reason?: string }[] = [];
+
+    CLASSES_LIST.forEach(cls => {
+      const clsStudents = students.filter(s => s.className === cls);
+      clsStudents.forEach(student => {
+        const studentMarks = marks.filter(m => m.studentId === student.id && m.year === selectedYear);
+        const totalScore = studentMarks.reduce((sum, m) => sum + m.score, 0);
+        const averageScore = studentMarks.length > 0 ? Math.round(totalScore / studentMarks.length) : 0;
+        const assessedSubjects = studentMarks.map(m => m.subject);
+        const requiredSubjects = getSubjectsForClass(cls);
+        const missingSubjects = requiredSubjects.filter(s => !assessedSubjects.includes(s));
+        const isFullyAssessed = missingSubjects.length === 0;
+
+        let isEligible = false;
+        if (studentMarks.length > 0) {
+          if (!requireAllSubjects || isFullyAssessed) {
+            if (averageScore >= passThreshold) {
+              isEligible = true;
+            }
+          }
+        }
+
+        if (isEligible) {
+          allPromotions.push({
+            studentId: student.id,
+            nextClassName: getNextClass(cls),
+            hasScholarship: scholarshipAwards[student.id] !== undefined ? scholarshipAwards[student.id] : student.hasScholarship,
+            reason: `Automated annual promotion from ${cls} to ${getNextClass(cls)} (${averageScore}% avg)`
+          });
+        }
+      });
+    });
+
+    if (allPromotions.length === 0) {
+      alert(`No eligible pupils found across Primary 1–7 for Academic Year ${selectedYear} under pass threshold ${passThreshold}%.`);
+      return;
+    }
+
+    const confirmMsg = `🚀 WHOLE SCHOOL ANNUAL AUTO-PROMOTION\n\nAre you sure you want to promote ALL ${allPromotions.length} eligible pupils across Primary 1 to Primary 7 to their next grade levels for Academic Year ${selectedYear + 1}?\n\nThis will update all class records automatically in one click.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setExecuting(true);
+    setSuccessMessage('');
+    try {
+      await onPromoteStudents(allPromotions, selectedYear);
+      setSuccessMessage(`🎉 Whole-School Promotion Complete! Successfully promoted ${allPromotions.length} pupils across P.1 to P.7 to their next classes.`);
+      setTimeout(() => setSuccessMessage(''), 7000);
+    } catch (err) {
+      alert('Whole-school promotion failed. Check connection and try again.');
+    } finally {
+      setExecuting(false);
+    }
+  };
+
   return (
     <div id="promotion_engine_container" className="p-8 space-y-6 font-sans max-w-7xl mx-auto">
       {/* Header */}
@@ -188,6 +243,18 @@ export default function AutoPromotionEngine({
             <p className="text-xs text-slate-400 mt-1">Audit class-wide academic grades and transition qualifying pupils to higher grade levels</p>
           </div>
         </div>
+
+        {/* Whole School Auto-Promotion Button */}
+        {isAdmin && (
+          <button
+            onClick={handlePromoteWholeSchool}
+            disabled={executing}
+            className="px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center gap-2 active:scale-95 disabled:opacity-50"
+          >
+            <TrendingUp className="h-4 w-4" />
+            <span>🚀 Promote Whole School (P.1 - P.7)</span>
+          </button>
+        )}
       </div>
 
       {/* Grid control panels */}

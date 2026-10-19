@@ -35,10 +35,13 @@ export default function Sidebar({ activeTab, setActiveTab, teacher, onLogout }: 
   ];
   const teacherItems = [
     { id: 'dashboard', name: 'My Desk', icon: Home },
+    { id: 'classes', name: 'My Students', icon: Users },
     { id: 'marks', name: 'My Mark Sheet', icon: GraduationCap },
     { id: 'attendance', name: 'My Attendance', icon: Calendar },
+    { id: 'reports', name: 'Student Reports', icon: FileSpreadsheet },
   ];
-  const sidebarItems = teacher.role === 'Headteacher' || teacher.role === 'DOS' ? adminItems : teacherItems;
+  const isAdmin = teacher.role === 'Headteacher' || teacher.role === 'DOS' || teacher.username === 'admin';
+  const sidebarItems = isAdmin ? adminItems : teacherItems;
 
   return (
     <aside id="app_sidebar" className="hidden md:flex w-64 bg-[#06182c] text-[#a5b4fc] min-h-[calc(100vh-70px)] flex-col justify-between shrink-0 shadow-xl no-print select-none border-r border-[#0f243c]">

@@ -28,8 +28,13 @@ export const ALL_SUBJECTS = [...new Set([
 export const isLowerPrimary = (className: ClassName) =>
   className === 'P.1' || className === 'P.2' || className === 'P.3';
 
-export const getSubjectsForClass = (className: ClassName): readonly string[] =>
-  isLowerPrimary(className) ? LOWER_PRIMARY_SUBJECTS : UPPER_PRIMARY_SUBJECTS;
+export const getSubjectsForClass = (className: ClassName): readonly string[] => {
+  if (isLowerPrimary(className)) return LOWER_PRIMARY_SUBJECTS;
+  if (className === 'P.4' || className === 'P.5') {
+    return [...UPPER_PRIMARY_SUBJECTS, 'KUMON'];
+  }
+  return UPPER_PRIMARY_SUBJECTS;
+};
 
 export const isSubjectForClass = (className: ClassName, subject: string) =>
   getSubjectsForClass(className).includes(subject as never);

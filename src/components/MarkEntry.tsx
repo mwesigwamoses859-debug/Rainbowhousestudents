@@ -455,19 +455,27 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
                       {/* Pupil Profile */}
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2.5">
-                          <div className="h-8 w-8 bg-slate-100 rounded-lg shrink-0 overflow-hidden border border-slate-100">
+                          <div className="h-10 w-10 bg-slate-100 rounded-lg shrink-0 overflow-hidden border border-slate-200 relative">
                             {student.photo ? (
-                              <img src={student.photo} alt="Student" className="h-full w-full object-cover" />
+                              <img src={student.photo} alt={student.surname} className="h-full w-full object-cover" />
                             ) : (
-                              <div className="h-full w-full flex items-center justify-center bg-indigo-50 text-indigo-600 text-[10px] font-bold">
-                                {student.surname[0]}{student.otherNames[0]}
+                              <div className="h-full w-full flex flex-col items-center justify-center bg-amber-50 text-amber-700 text-[9px] font-bold border border-amber-200">
+                                <span>No</span>
+                                <span>Photo</span>
                               </div>
                             )}
                           </div>
                           <div>
-                            <span className="font-bold text-slate-800 block text-xs">
-                              {student.surname} {student.otherNames}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-slate-800 block text-xs">
+                                {student.surname} {student.otherNames}
+                              </span>
+                              {!student.photo && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-semibold bg-amber-100 text-amber-800 border border-amber-200" title="Photo Missing">
+                                  ⚠️ Photo Missing
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[9px] text-slate-400 font-mono block">
                               {student.id} | {student.gender}
                             </span>

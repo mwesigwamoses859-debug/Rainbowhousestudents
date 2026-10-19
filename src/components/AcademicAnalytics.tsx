@@ -27,11 +27,13 @@ import { Student, Mark, ClassName } from '../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { AnimatePresence, motion } from 'motion/react';
 import AshinagaLogo from './AshinagaLogo';
+import { evaluateScholarshipEligibility } from '../utils/scholarshipEligibility';
 
 interface AcademicAnalyticsProps {
   students: Student[];
   marks: Mark[];
   isAdmin: boolean;
+  onUpdateStudent?: (id: string, data: Partial<Student>) => Promise<void>;
 }
 
 // Ugandan UNEB standard grading converter
@@ -111,7 +113,7 @@ const calculatePleDivision = (subjectGrades: Record<string, number>): { division
   return { division: 'Division U', aggregate, details: 'Ungraded (3+ failures or poor aggregate)' };
 };
 
-export default function AcademicAnalytics({ students, marks, isAdmin }: AcademicAnalyticsProps) {
+export default function AcademicAnalytics({ students, marks, isAdmin, onUpdateStudent }: AcademicAnalyticsProps) {
   const [selectedCohortClass, setSelectedCohortClass] = useState<ClassName>('P.7');
   const [selectedTerm, setSelectedTerm] = useState<1 | 2 | 3>(1);
   const [selectedYear, setSelectedYear] = useState<number>(2026);
@@ -840,6 +842,160 @@ Additionally, there are currently ${stats.atRiskCount} candidate(s) categorized 
         </div>
 
       </div>
+
+      {/* 🎓 Marks-Based Scholarship Audit & Award Center */}
+      {(() => {
+        const auditList = students.map(student => ({
+          student,
+          evalRes: evaluateScholarshipEligibility(student, marks)
+        }));
+
+        const fullEligible = auditList.filter(item => !item.student.hasScholarship && item.evalRes.tier === 'Full Scholarship');
+        const partialEligible = auditList.filter(item => !item.student.hasScholarship && item.evalRes.tier === 'Partial Scholarship');
+        const bursaryEligible = auditList.filter(item => !item.student.hasScholarship && item.evalRes.tier === 'Academic Bursary');
+        const totalUnawardedEligible = fullEligible.length + partialEligible.length + bursaryEligible.length;
+        const currentlySponsored = auditList.filter(item => item.student.hasScholarship).length;
+
+        const handleBulkAwardScholarships = async () => {
+          if (!onUpdateStudent) return;
+          const eligibleUnawarded = auditList.filter(item => !item.student.hasScholarship && item.evalRes.isEligible);
+          if (eligibleUnawarded.length === 0) {
+            alert('No unawarded scholarship-eligible pupils found.');
+            return;
+          }
+
+          if (confirm(`Are you sure you want to award academic scholarships to all ${eligibleUnawarded.length} eligible pupils based on their assessment marks?`)) {
+            for (const item of eligibleUnawarded) {
+              await onUpdateStudent(item.student.id, {
+                hasScholarship: true,
+                scholarshipDetails: item.evalRes.recommendedScholarshipDetails
+              });
+            }
+            alert(`Successfully granted scholarships to ${eligibleUnawarded.length} eligible pupils!`);
+          }
+        };
+
+        return (
+          <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-2 bg-amber-50 text-amber-700 rounded-xl">
+                    <Award className="h-5 w-5 text-amber-600" />
+                  </span>
+                  <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">
+                    🎓 Academic Marks-Based Scholarship Audit & Award Center
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Evaluates pupil assessment averages against UNEB standards (Full ≥80%, Partial 70-79%, Bursary 60-69%).
+                </p>
+              </div>
+
+              {onUpdateStudent && totalUnawardedEligible > 0 && (
+                <button
+                  type="button"
+                  onClick={handleBulkAwardScholarships}
+                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black rounded-2xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-2"
+                >
+                  <Sparkles className="h-4 w-4 text-amber-300 animate-spin" />
+                  <span>⚡ Bulk Award Scholarships ({totalUnawardedEligible} Eligible)</span>
+                </button>
+              )}
+            </div>
+
+            {/* Metric counters */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-emerald-50/60 border border-emerald-100 p-3.5 rounded-2xl">
+                <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider block">Full Scholarship (≥80%)</span>
+                <strong className="text-2xl font-black text-emerald-900 block mt-1">{fullEligible.length}</strong>
+                <span className="text-[10px] text-emerald-700 font-bold block mt-0.5">Unawarded Eligible</span>
+              </div>
+              <div className="bg-blue-50/60 border border-blue-100 p-3.5 rounded-2xl">
+                <span className="text-[10px] font-black text-blue-700 uppercase tracking-wider block">Partial Scholarship (70-79%)</span>
+                <strong className="text-2xl font-black text-blue-900 block mt-1">{partialEligible.length}</strong>
+                <span className="text-[10px] text-blue-700 font-bold block mt-0.5">Unawarded Eligible</span>
+              </div>
+              <div className="bg-amber-50/60 border border-amber-100 p-3.5 rounded-2xl">
+                <span className="text-[10px] font-black text-amber-700 uppercase tracking-wider block">Academic Bursary (60-69%)</span>
+                <strong className="text-2xl font-black text-amber-900 block mt-1">{bursaryEligible.length}</strong>
+                <span className="text-[10px] text-amber-700 font-bold block mt-0.5">Unawarded Eligible</span>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Active Scholarships</span>
+                <strong className="text-2xl font-black text-slate-800 block mt-1">{currentlySponsored}</strong>
+                <span className="text-[10px] text-slate-400 font-bold block mt-0.5">Granted in System</span>
+              </div>
+            </div>
+
+            {/* List of Eligible Unawarded Pupils */}
+            {totalUnawardedEligible > 0 ? (
+              <div className="space-y-3 pt-2">
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wide">
+                  Pupils Qualifying for Scholarship Action ({totalUnawardedEligible})
+                </h4>
+                <div className="overflow-x-auto border border-slate-100 rounded-2xl shadow-xs">
+                  <table className="w-full text-left text-xs font-sans">
+                    <thead className="bg-slate-50 text-slate-500 uppercase font-black text-[10px] border-b border-slate-100">
+                      <tr>
+                        <th className="px-4 py-3">Pupil Name</th>
+                        <th className="px-3 py-3 text-center">Class</th>
+                        <th className="px-3 py-3 text-center">Average Score</th>
+                        <th className="px-3 py-3 text-center">UNEB Aggregate</th>
+                        <th className="px-4 py-3">Recommended Tier</th>
+                        <th className="px-4 py-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                      {auditList
+                        .filter(item => !item.student.hasScholarship && item.evalRes.isEligible)
+                        .map(item => (
+                          <tr key={item.student.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="px-4 py-3 font-bold text-slate-900">
+                              {item.student.surname} {item.student.otherNames}
+                              <span className="text-[9px] text-slate-400 font-mono block">ID: {item.student.id}</span>
+                            </td>
+                            <td className="px-3 py-3 text-center font-bold">{item.student.className}</td>
+                            <td className="px-3 py-3 text-center font-mono font-bold text-indigo-700">{item.evalRes.averageScore}%</td>
+                            <td className="px-3 py-3 text-center font-mono font-bold">
+                              {item.evalRes.aggregate ? `${item.evalRes.aggregate} (${item.evalRes.division})` : '--'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${item.evalRes.badgeColor}`}>
+                                {item.evalRes.badgeLabel}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {onUpdateStudent && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    await onUpdateStudent(item.student.id, {
+                                      hasScholarship: true,
+                                      scholarshipDetails: item.evalRes.recommendedScholarshipDetails
+                                    });
+                                  }}
+                                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-[10px] transition-all cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <Sparkles className="h-3 w-3" />
+                                  <span>Grant {item.evalRes.tier}</span>
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-50 rounded-2xl text-center text-xs font-bold text-slate-500">
+                ✓ All scholarship-eligible pupils according to assessment marks have been awarded active scholarships.
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Candidate Preparedness Ledger */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">

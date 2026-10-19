@@ -26,6 +26,7 @@ import AshinagaLogo from './components/AshinagaLogo';
 import SubjectWorkspaces from './components/SubjectWorkspaces';
 import EmailGatewayModal from './components/EmailGatewayModal';
 import QuickActionFAB from './components/QuickActionFAB';
+import HistoricalCensusArchive from './components/HistoricalCensusArchive';
 import { 
   ShieldAlert, 
   BookOpen, 
@@ -54,7 +55,8 @@ import {
   Shield,
   ShieldCheck,
   FileKey,
-  Settings
+  Settings,
+  BookmarkPlus
 } from 'lucide-react';
 
 export default function App() {
@@ -66,7 +68,7 @@ export default function App() {
   // Secondary sub-tab states for grouped views
   const [studentsSubTab, setStudentsSubTab] = useState<'list' | 'upload'>('list');
   const [academicsSubTab, setAcademicsSubTab] = useState<'marks' | 'timetable' | 'teachers' | 'promotion' | 'analytics'>('marks');
-  const [examsSubTab, setExamsSubTab] = useState<'reports' | 'graduation' | 'idcards' | 'docgen' | 'verification'>('reports');
+  const [examsSubTab, setExamsSubTab] = useState<'reports' | 'graduation' | 'idcards' | 'docgen' | 'verification' | 'census'>('reports');
   const [settingsSubTab, setSettingsSubTab] = useState<'upload' | 'backup' | 'audit'>('upload');
 
   // Data State
@@ -230,6 +232,13 @@ export default function App() {
         fetch('/api/marks', { headers: authHeaders }),
         fetch('/api/teachers', { headers: authHeaders })
       ]);
+
+      if (studentsRes.status === 401 || marksRes.status === 401 || teachersRes.status === 401) {
+        localStorage.removeItem('school_sms_teacher');
+        setTeacher(null);
+        setLoading(false);
+        return;
+      }
 
       if (!studentsRes.ok || !marksRes.ok || !teachersRes.ok) {
         throw new Error('Failed to retrieve student or academic ledger records.');
@@ -433,6 +442,31 @@ export default function App() {
     }
   };
 
+  const handleBulkDeleteStudents = async (studentIds: string[]) => {
+    try {
+      const response = await fetch('/api/students/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher?.authToken || ''}` },
+        body: JSON.stringify({ studentIds }),
+      });
+
+      if (!response.ok) {
+        for (const id of studentIds) {
+          await fetch(`/api/students/${id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${teacher?.authToken || ''}` },
+          });
+        }
+      }
+
+      setStudents(prev => prev.filter(s => !studentIds.includes(s.id)));
+      setMarks(prev => prev.filter(m => !studentIds.includes(m.studentId)));
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete selected students.');
+      throw err;
+    }
+  };
+
   // Bulk student import
   const handleBulkAddStudents = async (importedStudents: any[]) => {
     const batchSize = 200;
@@ -516,7 +550,7 @@ export default function App() {
 
   // Custom Navigation setter to sync subtabs
   const handleSetTab = (tab: string) => {
-    const permittedTab = teacher?.role === 'Subject Teacher' && !['dashboard', 'marks', 'attendance'].includes(tab)
+    const permittedTab = !isAdmin && !['dashboard', 'classes', 'marks', 'attendance', 'reports'].includes(tab)
       ? 'marks'
       : tab;
     setActiveTab(permittedTab);
@@ -542,7 +576,7 @@ export default function App() {
     );
   }
 
-  const isAdmin = teacher.role === 'Headteacher' || teacher.role === 'DOS';
+  const isAdmin = teacher.role === 'Headteacher' || teacher.role === 'DOS' || teacher.username === 'admin';
   const primaryTabs = isAdmin
     ? [
       { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
@@ -553,15 +587,15 @@ export default function App() {
     ]
     : [
       { id: 'dashboard', name: 'My Desk', icon: LayoutDashboard },
+      { id: 'classes', name: 'My Students', icon: Users },
       { id: 'marks', name: 'My Mark Sheet', icon: GraduationCap },
       { id: 'attendance', name: 'Attendance', icon: Calendar },
+      { id: 'reports', name: 'Reports', icon: FileSpreadsheet },
     ];
 
-  const activeTeacherClasses = currentRole === 'administrator' || currentRole === 'head_teacher' || currentRole === 'bursar'
+  const activeTeacherClasses = isAdmin
     ? ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'] as ClassName[]
-    : currentRole === 'subject_teacher' 
-      ? ['P.5', 'P.6', 'P.7'] as ClassName[]
-      : teacher.classes;
+    : (teacher.classes && teacher.classes.length > 0 ? teacher.classes : (['P.1'] as ClassName[]));
 
   // Calculate Alerts Center dynamically to show in notification bell
   const notificationAlerts: { id: string; type: 'danger' | 'warning'; title: string; desc: string; icon: any; action: () => void }[] = [];
@@ -829,17 +863,6 @@ export default function App() {
             <span className="text-xs font-black text-slate-900">{teacher.role}</span>
           </div>
 
-          {/* Email Notification Gateway Button */}
-          {isAdmin && <button
-            onClick={() => setIsEmailGatewayOpen(true)}
-            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            title="Company Email Gateway & 2FA Dispatch Log"
-          >
-            <Mail className="h-4 w-4 text-indigo-600" />
-            <span className="hidden lg:inline text-[11px] uppercase tracking-wider font-extrabold">Email Gateway</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          </button>}
-
           {/* User Profile Card */}
           <div className="flex items-center gap-2.5">
             <div className="text-right hidden sm:block">
@@ -970,6 +993,7 @@ export default function App() {
                       onAddStudent={handleAddStudent}
                       onUpdateStudent={handleUpdateStudent}
                       onDeleteStudent={handleDeleteStudent}
+                      onDeleteMultipleStudents={handleBulkDeleteStudents}
                       onGenerateReportCard={handleGenerateReportCardRedirect}
                       onOpenProfile={(student) => {
                         setSelectedProfileStudent(student);
@@ -1120,6 +1144,7 @@ export default function App() {
                       students={students}
                       marks={marks}
                       isAdmin={isAdmin}
+                      onUpdateStudent={handleUpdateStudent}
                     />
                   )}
                 </div>
@@ -1185,6 +1210,17 @@ export default function App() {
                       <ShieldCheck className="h-4 w-4" />
                       <span>Report Verification</span>
                     </button>
+                    <button
+                      onClick={() => setExamsSubTab('census')}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        examsSubTab === 'census'
+                          ? 'bg-[#0b2d59] text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <BookmarkPlus className="h-4 w-4 text-amber-400" />
+                      <span>Annual Census & Excel Archive</span>
+                    </button>
                   </div>
 
                   {examsSubTab === 'reports' && (
@@ -1221,6 +1257,14 @@ export default function App() {
                       marks={marks}
                     />
                   )}
+
+                  {examsSubTab === 'census' && (
+                    <HistoricalCensusArchive 
+                      students={students}
+                      marks={marks}
+                      isAdmin={isAdmin}
+                    />
+                  )}
                 </div>
               )}
 
@@ -1236,7 +1280,7 @@ export default function App() {
               )}
 
               {activeTab === 'operations' && isAdmin && (
-                <SchoolOperationsCenter teacher={teacher} />
+                <SchoolOperationsCenter teacher={teacher} students={students} marks={marks} />
               )}
 
               {/* AI Assistant Tab */}

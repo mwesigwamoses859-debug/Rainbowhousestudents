@@ -49,13 +49,14 @@ export interface Mark {
   teacherName: string;
 }
 
-export type TeacherRole = 'Headteacher' | 'DOS' | 'Subject Teacher';
+export type TeacherRole = 'Headteacher' | 'DOS' | 'Class Teacher' | 'Subject Teacher';
 
 export interface Teacher {
   username: string;
   name: string;
   email?: string;
   role?: TeacherRole;
+  responsibility?: string;
   subjects: string[];
   classes: ClassName[];
   activeTerms?: (1 | 2 | 3)[];

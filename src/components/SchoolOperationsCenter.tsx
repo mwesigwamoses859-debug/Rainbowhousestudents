@@ -3,6 +3,7 @@ import {
   CalendarRange,
   CheckCircle,
   ClipboardCheck,
+  FileSpreadsheet,
   History,
   RotateCcw,
   Save,
@@ -10,20 +11,23 @@ import {
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
-import { Teacher } from '../types';
+import { Student, Mark, Teacher } from '../types';
+import HistoricalCensusArchive from './HistoricalCensusArchive';
 
 interface SchoolOperationsCenterProps {
   teacher: Teacher;
+  students?: Student[];
+  marks?: Mark[];
 }
 
-type Section = 'assessment' | 'years' | 'approvals' | 'audit';
+type Section = 'assessment' | 'years' | 'approvals' | 'audit' | 'census';
 
 const authHeaders = (teacher: Teacher, json = false) => ({
   ...(json ? { 'Content-Type': 'application/json' } : {}),
   Authorization: `Bearer ${teacher.authToken || ''}`,
 });
 
-export default function SchoolOperationsCenter({ teacher }: SchoolOperationsCenterProps) {
+export default function SchoolOperationsCenter({ teacher, students = [], marks = [] }: SchoolOperationsCenterProps) {
   const [section, setSection] = useState<Section>('assessment');
   const [settings, setSettings] = useState({
     botWeight: 20,
@@ -135,6 +139,7 @@ export default function SchoolOperationsCenter({ teacher }: SchoolOperationsCent
     { id: 'years' as const, label: 'Academic years', icon: CalendarRange },
     { id: 'approvals' as const, label: 'Mark approvals', icon: ClipboardCheck },
     { id: 'audit' as const, label: 'Audit history', icon: History },
+    { id: 'census' as const, label: 'Historical Census & Excel', icon: FileSpreadsheet },
   ];
 
   return (
@@ -297,6 +302,14 @@ export default function SchoolOperationsCenter({ teacher }: SchoolOperationsCent
             </table>
           </div>
         </section>
+      )}
+
+      {section === 'census' && (
+        <HistoricalCensusArchive 
+          students={students || []}
+          marks={marks || []}
+          isAdmin={true}
+        />
       )}
     </div>
   );

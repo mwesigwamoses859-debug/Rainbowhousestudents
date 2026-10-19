@@ -46,26 +46,30 @@ interface AttendanceSupportProps {
   marks: Mark[];
 }
 
-export default function AttendanceSupport({ students, teacherClasses, isAdmin, teacher, marks }: AttendanceSupportProps) {
-  const [selectedClass, setSelectedClass] = useState<ClassName>('P.1');
+export default function AttendanceSupport({ students, teacherClasses = [], isAdmin, teacher, marks }: AttendanceSupportProps) {
+  const classesList: ClassName[] = isAdmin || teacherClasses.length === 0
+    ? ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7']
+    : teacherClasses;
+
+  const [selectedClass, setSelectedClass] = useState<ClassName>(classesList[0] || 'P.1');
   const [currentDate, setCurrentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [subTab, setSubTab] = useState<'attendance' | 'support'>('attendance');
-
-  // Load / Mock records
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [supportRecords, setSupportRecords] = useState<SupportRecord[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-
-  // Form State for new Support log
   const [showSupportModal, setShowSupportModal] = useState(false);
-  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
-  const [supportType, setSupportType] = useState<string>('School Fees');
-  const [supportAmount, setSupportAmount] = useState<number>(50000); // UGX default estimate
-  const [supportSponsor, setSupportSponsor] = useState<string>('Nansana Hope Foundation');
-  const [supportApprovedBy, setSupportApprovedBy] = useState<string>('Headteacher');
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [supportType, setSupportType] = useState('School Fees');
+  const [supportAmount, setSupportAmount] = useState('');
+  const [supportSponsor, setSupportSponsor] = useState('Ashinaga Uganda Foundation');
+  const [supportApprovedBy, setSupportApprovedBy] = useState(teacher.name || 'Headteacher');
 
-  const classesList: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
+  useEffect(() => {
+    if (classesList.length > 0 && !classesList.includes(selectedClass)) {
+      setSelectedClass(classesList[0]);
+    }
+  }, [classesList, selectedClass]);
 
   // Load from server or localStorage
   useEffect(() => {

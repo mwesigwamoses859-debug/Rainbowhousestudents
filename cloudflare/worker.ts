@@ -4,7 +4,8 @@ type StaffRow = {
   username: string;
   name: string;
   email: string;
-  role: 'Headteacher' | 'DOS' | 'Subject Teacher';
+  role: 'Headteacher' | 'DOS' | 'Class Teacher' | 'Subject Teacher';
+  responsibility?: string;
   subjects: string;
   classes: string;
   active_terms: string;
@@ -103,7 +104,8 @@ const toTeacher = (staff: StaffRow, assignments: StaffAssignment[] = []) => ({
   username: staff.username,
   name: staff.name,
   email: staff.email,
-  role: staff.role,
+  role: staff.responsibility?.toLowerCase().includes('class teacher') ? 'Class Teacher' as const : staff.role,
+  responsibility: staff.responsibility || '',
   subjects: JSON.parse(staff.subjects || '[]'),
   classes: JSON.parse(staff.classes || '[]'),
   activeTerms: JSON.parse(staff.active_terms || '[1,2,3]'),
@@ -123,6 +125,14 @@ async function getAssignments(env: Env, username: string): Promise<StaffAssignme
 }
 
 const isAdministrator = (role: string) => role === 'Headteacher' || role === 'DOS';
+
+async function getTeacherAllowedClasses(env: Env, username: string): Promise<Set<string>> {
+  const staff = await env.DB.prepare('SELECT classes FROM staff WHERE username = ?').bind(username).first() as StaffRow | null;
+  const staffClasses: string[] = staff?.classes ? JSON.parse(staff.classes) : [];
+  const assignments = await getAssignments(env, username);
+  const assignmentClasses = assignments.map(a => a.className);
+  return new Set([...staffClasses, ...assignmentClasses]);
+}
 
 async function writeAudit(
   env: Env,
@@ -514,30 +524,32 @@ async function api(request: Request, env: Env): Promise<Response> {
   }
 
   if (request.method === 'GET' && url.pathname === '/api/teachers') {
-    const result = session.role === 'Subject Teacher'
+    const result = isAdministrator(session.role)
       ? await env.DB.prepare(
-        'SELECT username, name, email, role, subjects, classes, active_terms FROM staff WHERE username = ? AND active = 1'
-      ).bind(session.sub).all()
+        'SELECT username, name, email, role, responsibility, subjects, classes, active_terms FROM staff WHERE active = 1 ORDER BY name'
+      ).all()
       : await env.DB.prepare(
-        'SELECT username, name, email, role, subjects, classes, active_terms FROM staff WHERE active = 1 ORDER BY name'
-      ).all();
+        'SELECT username, name, email, role, responsibility, subjects, classes, active_terms FROM staff WHERE username = ? AND active = 1'
+      ).bind(session.sub).all();
     const teachers = await Promise.all((result.results as unknown as StaffRow[]).map(async staff =>
       toTeacher(staff, await getAssignments(env, staff.username))
     ));
     return json(teachers);
   }
   if (request.method === 'POST' && url.pathname === '/api/teachers') {
-    if (session.role !== 'Headteacher' && session.role !== 'DOS') return json({ success: false, message: 'Administrator access required.' }, 403);
+    if (!isAdministrator(session.role)) return json({ success: false, message: 'Administrator access required.' }, 403);
     const body = await readBody(request);
     const username = String(body.username || '').trim().toLowerCase();
     const password = String(body.password || '');
     const existing = await env.DB.prepare(
-      'SELECT username, name, email, role, subjects, classes, active_terms FROM staff WHERE username = ? COLLATE NOCASE'
-    ).bind(username).first();
+      'SELECT username, name, email, role, responsibility, subjects, classes, active_terms FROM staff WHERE username = ? COLLATE NOCASE'
+    ).bind(username).first() as StaffRow | null;
     if (!/^[a-z0-9._-]{3,40}$/.test(username) || !body.name || (!existing && password.length < 8) || (password && password.length < 8)) {
       return json({ success: false, message: 'Username, staff name and a password of at least 8 characters are required for new accounts.' }, 400);
     }
-    const role = body.role === 'DOS' ? 'DOS' : body.role === 'Headteacher' ? 'Headteacher' : 'Subject Teacher';
+    const role = body.role === 'DOS' ? 'DOS' : body.role === 'Headteacher' ? 'Headteacher' : body.role === 'Class Teacher' ? 'Class Teacher' : 'Subject Teacher';
+    const dbRole = role === 'Class Teacher' ? 'Subject Teacher' : role;
+    const responsibility = String(body.responsibility || (role === 'Class Teacher' ? 'Class Teacher' : (existing?.responsibility || '')));
     const requestedAssignments: StaffAssignment[] = Array.isArray(body.assignments)
       ? body.assignments.map((item: any) => ({
         className: String(item.className || ''),
@@ -548,29 +560,30 @@ async function api(request: Request, env: Env): Promise<Response> {
         (body.subjects || []).filter((subject: string) => isSubjectForClass(className as any, subject))
           .map((subject: string) => ({ className, subject, activeTerms: body.activeTerms || [1, 2, 3] }))
       );
-    if (role === 'Subject Teacher') {
+    if (!isAdministrator(role)) {
       const invalidAssignment = requestedAssignments.find(assignment =>
         !isSubjectForClass(assignment.className as any, assignment.subject)
         || assignment.activeTerms.some(term => ![1, 2, 3].includes(term))
       );
-      if (invalidAssignment || requestedAssignments.length === 0) {
+      if (invalidAssignment || (requestedAssignments.length === 0 && (!body.classes || body.classes.length === 0))) {
         return json({
           success: false,
           message: invalidAssignment
             ? `${invalidAssignment.subject} is not offered in ${invalidAssignment.className}.`
-            : 'Assign at least one valid class and subject combination to a subject teacher.'
+            : 'Assign at least one valid class to this teacher.'
         }, 400);
       }
     }
-    const assignedClasses = [...new Set(requestedAssignments.map(item => item.className))];
-    const assignedSubjects = [...new Set(requestedAssignments.map(item => item.subject))];
+    const assignedClasses = [...new Set([...requestedAssignments.map(item => item.className), ...(body.classes || [])])];
+    const assignedSubjects = [...new Set([...requestedAssignments.map(item => item.subject), ...(body.subjects || [])])];
     const assignedTerms = [...new Set(requestedAssignments.flatMap(item => item.activeTerms))].sort();
     await env.DB.prepare(
-      `INSERT INTO staff (username, name, email, role, subjects, classes, active_terms, active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      `INSERT INTO staff (username, name, email, role, responsibility, subjects, classes, active_terms, active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
        ON CONFLICT(username) DO UPDATE SET name=excluded.name, email=excluded.email, role=excluded.role,
+         responsibility=excluded.responsibility,
          subjects=excluded.subjects, classes=excluded.classes, active_terms=excluded.active_terms, active=1`
-    ).bind(username, String(body.name), normalizeEmail(body.email), role, JSON.stringify(assignedSubjects),
+    ).bind(username, String(body.name), normalizeEmail(body.email), dbRole, responsibility, JSON.stringify(assignedSubjects),
       JSON.stringify(assignedClasses), JSON.stringify(assignedTerms.length ? assignedTerms : [1, 2, 3])).run();
     const now = Date.now();
     await env.DB.batch([
@@ -581,9 +594,9 @@ async function api(request: Request, env: Env): Promise<Response> {
          VALUES (?, ?, ?, ?, 1, ?, ?)`
       ).bind(username, assignment.className, assignment.subject, JSON.stringify(assignment.activeTerms), now, now))
     ]);
-    if (password) await setPassword(env, username, password, role === 'Subject Teacher');
+    if (password) await setPassword(env, username, password, !isAdministrator(role));
     const saved = await env.DB.prepare(
-      `SELECT username, name, email, role, subjects, classes, active_terms, must_change_password
+      `SELECT username, name, email, role, responsibility, subjects, classes, active_terms, must_change_password
        FROM staff WHERE username = ?`
     ).bind(username).first() as StaffRow;
     const savedAssignments = await getAssignments(env, username);
@@ -602,28 +615,47 @@ async function api(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/api/students') {
     const result = await env.DB.prepare('SELECT payload FROM students ORDER BY created_at DESC').all();
     const students = result.results.map((row: any) => JSON.parse(row.payload));
-    if (session.role !== 'Subject Teacher') return json(students);
-    const assignments = await getAssignments(env, session.sub);
-    const classes = [...new Set(assignments.map(item => item.className))];
-    return json(students.filter((student: any) => classes.includes(student.className)));
+    if (isAdministrator(session.role)) return json(students);
+    const allowedClasses = await getTeacherAllowedClasses(env, session.sub);
+    return json(students.filter((student: any) => allowedClasses.has(student.className)));
   }
   if (request.method === 'GET' && url.pathname === '/api/marks') {
     const result = await env.DB.prepare('SELECT payload FROM marks ORDER BY updated_at DESC').all();
     const marks = result.results.map((row: any) => JSON.parse(row.payload));
-    if (session.role !== 'Subject Teacher') return json(marks);
+    if (isAdministrator(session.role)) return json(marks);
     const assignments = await getAssignments(env, session.sub);
+    const allowedClasses = await getTeacherAllowedClasses(env, session.sub);
+    const staffRow = await env.DB.prepare('SELECT subjects FROM staff WHERE username = ?').bind(session.sub).first() as any;
+    const staffSubjects: string[] = staffRow?.subjects ? JSON.parse(staffRow.subjects) : [];
     const studentsResult = await env.DB.prepare('SELECT id, payload FROM students').all();
     const studentClasses = new Map(studentsResult.results.map((row: any) => [row.id, JSON.parse(row.payload).className]));
-    return json(marks.filter((mark: any) => assignments.some(assignment =>
-      assignment.className === studentClasses.get(mark.studentId)
-      && assignment.subject === mark.subject
-    )));
+    return json(marks.filter((mark: any) => {
+      const studentClass = studentClasses.get(mark.studentId);
+      if (!studentClass || !allowedClasses.has(studentClass)) return false;
+      if (assignments.length > 0) {
+        return assignments.some(assignment =>
+          assignment.className === studentClass
+          && assignment.subject === mark.subject
+        );
+      }
+      return staffSubjects.includes('All') || staffSubjects.includes(mark.subject);
+    }));
   }
   if (request.method === 'POST' && url.pathname === '/api/students') {
-    if (session.role !== 'Headteacher' && session.role !== 'DOS') return json({ success: false, message: 'Administrator access required.' }, 403);
     const body = await readBody(request);
     const validationError = validateStudent(body);
     if (validationError) return json({ success: false, message: validationError }, 400);
+
+    if (!isAdministrator(session.role)) {
+      const allowedClasses = await getTeacherAllowedClasses(env, session.sub);
+      if (!allowedClasses.has(body.className)) {
+        return json({
+          success: false,
+          message: `Access denied. You can only add students to your assigned class(es): ${[...allowedClasses].join(', ')}.`
+        }, 403);
+      }
+    }
+
     const duplicate = await findSimilarStudent(env, body);
     if (duplicate && !(duplicate.kind === 'similar' && body.confirmSimilar === true)) {
       return json({
@@ -731,15 +763,63 @@ async function api(request: Request, env: Env): Promise<Response> {
       skippedCount: skipped.length
     }, 201);
   }
+  if (request.method === 'POST' && url.pathname === '/api/students/bulk-delete') {
+    const body = await readBody(request);
+    const ids: string[] = Array.isArray(body.ids) ? body.ids : Array.isArray(body.studentIds) ? body.studentIds : [];
+    if (ids.length === 0) return json({ success: false, message: 'No student IDs provided.' }, 400);
+
+    let allowedClasses: Set<string> | null = null;
+    if (!isAdministrator(session.role)) {
+      allowedClasses = await getTeacherAllowedClasses(env, session.sub);
+    }
+
+    const deletedIds: string[] = [];
+    const statements = [];
+    for (const id of ids) {
+      const row = await env.DB.prepare('SELECT payload FROM students WHERE id = ?').bind(id).first() as any;
+      if (!row) continue;
+      const student = JSON.parse(row.payload);
+      if (allowedClasses && !allowedClasses.has(student.className)) {
+        continue;
+      }
+      statements.push(env.DB.prepare('DELETE FROM marks WHERE student_id = ?').bind(id));
+      statements.push(env.DB.prepare('DELETE FROM attendance WHERE student_id = ?').bind(id));
+      statements.push(env.DB.prepare('DELETE FROM students WHERE id = ?').bind(id));
+      deletedIds.push(id);
+    }
+
+    for (let i = 0; i < statements.length; i += 50) {
+      await env.DB.batch(statements.slice(i, i + 50));
+    }
+
+    await writeAudit(env, request, session, 'STUDENTS_BULK_DELETED', 'student', `bulk-${Date.now()}`, undefined, { count: deletedIds.length, ids: deletedIds });
+    return json({ success: true, count: deletedIds.length, deletedIds });
+  }
   const studentIdMatch = url.pathname.match(/^\/api\/students\/([^/]+)$/);
   if (studentIdMatch && request.method === 'PUT') {
-    if (session.role !== 'Headteacher' && session.role !== 'DOS') return json({ success: false, message: 'Administrator access required.' }, 403);
     const current = await env.DB.prepare('SELECT payload FROM students WHERE id = ?').bind(studentIdMatch[1]).first() as any;
     if (!current) return json({ success: false, message: 'Student not found.' }, 404);
+    const existingStudent = JSON.parse(current.payload);
+
+    if (!isAdministrator(session.role)) {
+      const allowedClasses = await getTeacherAllowedClasses(env, session.sub);
+      if (!allowedClasses.has(existingStudent.className)) {
+        return json({ success: false, message: 'Access denied. You can only edit pupils in your assigned class(es).' }, 403);
+      }
+    }
+
     const body = await readBody(request);
-    const updated = { ...JSON.parse(current.payload), ...body, id: studentIdMatch[1] };
+    const updated = { ...existingStudent, ...body, id: studentIdMatch[1] };
     const validationError = validateStudent(updated);
     if (validationError) return json({ success: false, message: validationError }, 400);
+
+    if (!isAdministrator(session.role)) {
+      const allowedClasses = await getTeacherAllowedClasses(env, session.sub);
+      if (!allowedClasses.has(updated.className)) {
+        return json({ success: false, message: `Access denied. You cannot move a student to ${updated.className}.` }, 403);
+      }
+    }
+
     const duplicate = await findSimilarStudent(env, updated, studentIdMatch[1]);
     if (duplicate && !(duplicate.kind === 'similar' && body.confirmSimilar === true)) {
       return json({
@@ -753,19 +833,27 @@ async function api(request: Request, env: Env): Promise<Response> {
     }
     await env.DB.prepare('UPDATE students SET payload = ?, updated_at = ? WHERE id = ?')
       .bind(JSON.stringify(updated), Date.now(), studentIdMatch[1]).run();
-    await writeAudit(env, request, session, 'STUDENT_UPDATED', 'student', studentIdMatch[1], JSON.parse(current.payload), updated);
+    await writeAudit(env, request, session, 'STUDENT_UPDATED', 'student', studentIdMatch[1], existingStudent, updated);
     return json(updated);
   }
   if (studentIdMatch && request.method === 'DELETE') {
-    if (!isAdministrator(session.role)) return json({ success: false, message: 'Administrator access required.' }, 403);
     const current = await env.DB.prepare('SELECT payload FROM students WHERE id = ?').bind(studentIdMatch[1]).first() as any;
     if (!current) return json({ success: false, message: 'Student not found.' }, 404);
+    const existingStudent = JSON.parse(current.payload);
+
+    if (!isAdministrator(session.role)) {
+      const allowedClasses = await getTeacherAllowedClasses(env, session.sub);
+      if (!allowedClasses.has(existingStudent.className)) {
+        return json({ success: false, message: 'Access denied. You can only delete pupils in your assigned class(es).' }, 403);
+      }
+    }
+
     await env.DB.batch([
       env.DB.prepare('DELETE FROM marks WHERE student_id = ?').bind(studentIdMatch[1]),
       env.DB.prepare('DELETE FROM attendance WHERE student_id = ?').bind(studentIdMatch[1]),
       env.DB.prepare('DELETE FROM students WHERE id = ?').bind(studentIdMatch[1])
     ]);
-    await writeAudit(env, request, session, 'STUDENT_DELETED', 'student', studentIdMatch[1], JSON.parse(current.payload));
+    await writeAudit(env, request, session, 'STUDENT_DELETED', 'student', studentIdMatch[1], existingStudent);
     return json({ success: true });
   }
   if (request.method === 'POST' && url.pathname === '/api/students/promote-bulk') {
@@ -934,11 +1022,18 @@ async function api(request: Request, env: Env): Promise<Response> {
     if (![1, 2, 3].includes(term) || !Number.isInteger(year)) {
       return json({ success: false, message: 'Enter a valid school term and academic year.' }, 400);
     }
-    if (session.role === 'Subject Teacher') {
+    if (!isAdministrator(session.role)) {
+      const allowedClasses = await getTeacherAllowedClasses(env, session.sub);
+      if (!allowedClasses.has(student.className)) {
+        return json({ success: false, message: `You are not authorized for Class ${student.className}.` }, 403);
+      }
       const assignments = await getAssignments(env, session.sub);
-      if (!assignments.some(item =>
-        item.className === student.className && item.subject === body.subject && item.activeTerms.includes(term)
-      )) {
+      const staffRow = await env.DB.prepare('SELECT subjects FROM staff WHERE username = ?').bind(session.sub).first() as any;
+      const staffSubjects: string[] = staffRow?.subjects ? JSON.parse(staffRow.subjects) : [];
+      const permitted = assignments.length > 0
+        ? assignments.some(item => item.className === student.className && item.subject === body.subject && item.activeTerms.includes(term))
+        : (staffSubjects.includes('All') || staffSubjects.includes(body.subject));
+      if (!permitted) {
         return json({ success: false, message: 'This exact class, subject or term is not assigned to you.' }, 403);
       }
     }
@@ -948,7 +1043,7 @@ async function api(request: Request, env: Env): Promise<Response> {
       `SELECT id, status FROM mark_submissions
        WHERE class_name=? AND subject=? AND term=? AND year=? AND status IN ('submitted','approved')`
     ).bind(student.className, body.subject, term, year).first() as any;
-    if (lockedSubmission && session.role === 'Subject Teacher') {
+    if (lockedSubmission && !isAdministrator(session.role)) {
       return json({ success: false, message: `This mark sheet is ${lockedSubmission.status} and cannot be edited.` }, 423);
     }
     const settings = await env.DB.prepare('SELECT maximum_score FROM assessment_settings WHERE id=1').first() as any;

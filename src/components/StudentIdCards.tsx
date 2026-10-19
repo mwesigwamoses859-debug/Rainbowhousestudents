@@ -18,17 +18,28 @@ import AshinagaLogo from './AshinagaLogo';
 
 interface StudentIdCardsProps {
   students: Student[];
+  teacherClasses?: ClassName[];
+  isAdmin?: boolean;
 }
 
-export default function StudentIdCards({ students }: StudentIdCardsProps) {
-  const [selectedClass, setSelectedClass] = useState<ClassName>('P.1');
+export default function StudentIdCards({ students, teacherClasses = [], isAdmin = true }: StudentIdCardsProps) {
+  const classesList: ClassName[] = isAdmin || teacherClasses.length === 0
+    ? ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7']
+    : teacherClasses;
+
+  const [selectedClass, setSelectedClass] = useState<ClassName>(classesList[0] || 'P.1');
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [mode, setMode] = useState<'idcard' | 'certificate'>('idcard');
   const [certYear, setCertYear] = useState<string>('2026');
   const [certType, setCertType] = useState<string>('Primary Education Completion');
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
 
-  const classesList: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
+  useEffect(() => {
+    if (classesList.length > 0 && !classesList.includes(selectedClass)) {
+      setSelectedClass(classesList[0]);
+    }
+  }, [classesList, selectedClass]);
+
   const filteredStudents = students.filter(s => s.className === selectedClass);
 
   // Set first student as default when class shifts
