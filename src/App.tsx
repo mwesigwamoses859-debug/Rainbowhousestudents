@@ -26,6 +26,7 @@ const ReportVerification = lazy(() => import('./components/ReportVerification'))
 import AshinagaLogo from './components/AshinagaLogo';
 const SubjectWorkspaces = lazy(() => import('./components/SubjectWorkspaces'));
 const HistoricalCensusArchive = lazy(() => import('./components/HistoricalCensusArchive'));
+const CareProgram = lazy(() => import('./components/CareProgram'));
 import { 
   ShieldAlert, 
   BookOpen, 
@@ -542,7 +543,7 @@ export default function App() {
 
   // Custom Navigation setter to sync subtabs
   const handleSetTab = (tab: string) => {
-    const permittedTab = !isAdmin && !['dashboard', 'classes', 'marks', 'attendance', 'reports'].includes(tab)
+    const permittedTab = !isAdmin && !['dashboard', 'classes', 'careprogram', 'marks', 'attendance', 'reports'].includes(tab)
       ? 'marks'
       : tab;
     if (permittedTab === 'backup') {setActiveTab('upload');setSettingsSubTab('backup');return;}
@@ -952,6 +953,18 @@ export default function App() {
               )}
 
               {/* 2.5 Subject Portals Tab */}
+              
+              {/* Care Program Tab */}
+              {activeTab === 'careprogram' && (
+                <div className="p-8 space-y-6">
+                  <CareProgram 
+                    students={students}
+                    teacher={teacher!}
+                    isAdmin={isAdmin}
+                  />
+                </div>
+              )}
+
               {activeTab === 'subjects' && (
                 <SubjectWorkspaces 
                   students={students}

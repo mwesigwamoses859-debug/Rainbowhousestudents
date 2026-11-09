@@ -1091,6 +1091,145 @@ async function api(request: Request, env: Env): Promise<Response> {
       skippedCount: skipped.length
     }, 201);
   }
+  // Terakoya Care Program API Endpoints
+  if (request.method === 'GET' && url.pathname === '/api/care-sessions') {
+    try {
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS care_sessions (
+          id TEXT PRIMARY KEY,
+          date TEXT NOT NULL,
+          title TEXT NOT NULL,
+          facilitator TEXT NOT NULL,
+          learning_notes TEXT,
+          lunch_menu TEXT,
+          play_activities TEXT,
+          cleaning_duties TEXT,
+          general_notes TEXT,
+          cohort TEXT DEFAULT 'Upper primary',
+          theme TEXT DEFAULT 'Responsibility – I Can Be Counted On!',
+          staff_delegation TEXT DEFAULT '',
+          evaluation_notes TEXT DEFAULT '',
+          attendees TEXT NOT NULL DEFAULT '[]',
+          status TEXT NOT NULL DEFAULT 'completed',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      `).run();
+      const rows = await env.DB.prepare('SELECT * FROM care_sessions ORDER BY date DESC').all();
+      const sessions = (rows.results || []).map((r: any) => ({
+        id: r.id,
+        date: r.date,
+        title: r.title,
+        facilitator: r.facilitator,
+        cohort: r.cohort || 'Upper primary',
+        theme: r.theme || 'Responsibility – I Can Be Counted On!',
+        staffDelegation: r.staff_delegation || '',
+        evaluationNotes: r.evaluation_notes || '',
+        learningNotes: r.learning_notes || '',
+        lunchMenu: r.lunch_menu || '',
+        playActivities: r.play_activities || '',
+        cleaningDuties: r.cleaning_duties || '',
+        generalNotes: r.general_notes || '',
+        attendees: JSON.parse(r.attendees || '[]'),
+        status: r.status,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      }));
+      return json(sessions);
+    } catch (e: any) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/care-sessions') {
+    try {
+      await env.DB.prepare(`
+        CREATE TABLE IF NOT EXISTS care_sessions (
+          id TEXT PRIMARY KEY,
+          date TEXT NOT NULL,
+          title TEXT NOT NULL,
+          facilitator TEXT NOT NULL,
+          learning_notes TEXT,
+          lunch_menu TEXT,
+          play_activities TEXT,
+          cleaning_duties TEXT,
+          general_notes TEXT,
+          cohort TEXT DEFAULT 'Upper primary',
+          theme TEXT DEFAULT 'Responsibility – I Can Be Counted On!',
+          staff_delegation TEXT DEFAULT '',
+          evaluation_notes TEXT DEFAULT '',
+          attendees TEXT NOT NULL DEFAULT '[]',
+          status TEXT NOT NULL DEFAULT 'completed',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      `).run();
+
+      try { await env.DB.prepare("ALTER TABLE care_sessions ADD COLUMN cohort TEXT DEFAULT 'Upper primary'").run(); } catch (_) {}
+      try { await env.DB.prepare("ALTER TABLE care_sessions ADD COLUMN theme TEXT DEFAULT 'Responsibility – I Can Be Counted On!'").run(); } catch (_) {}
+      try { await env.DB.prepare("ALTER TABLE care_sessions ADD COLUMN staff_delegation TEXT DEFAULT ''").run(); } catch (_) {}
+      try { await env.DB.prepare("ALTER TABLE care_sessions ADD COLUMN evaluation_notes TEXT DEFAULT ''").run(); } catch (_) {}
+
+      const body = await readBody(request);
+      const id = body.id || `care-${Date.now()}`;
+      const now = Date.now();
+      await env.DB.prepare(`
+        INSERT INTO care_sessions (
+          id, date, title, facilitator, learning_notes, lunch_menu, play_activities, cleaning_duties, 
+          general_notes, attendees, status, created_at, updated_at, cohort, theme, staff_delegation, evaluation_notes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          date = excluded.date,
+          title = excluded.title,
+          facilitator = excluded.facilitator,
+          learning_notes = excluded.learning_notes,
+          lunch_menu = excluded.lunch_menu,
+          play_activities = excluded.play_activities,
+          cleaning_duties = excluded.cleaning_duties,
+          general_notes = excluded.general_notes,
+          attendees = excluded.attendees,
+          status = excluded.status,
+          updated_at = excluded.updated_at,
+          cohort = excluded.cohort,
+          theme = excluded.theme,
+          staff_delegation = excluded.staff_delegation,
+          evaluation_notes = excluded.evaluation_notes
+      `).bind(
+        id,
+        body.date || new Date().toISOString().split('T')[0],
+        body.title || 'Care Program Session',
+        body.facilitator || session.sub,
+        body.learningNotes || '',
+        body.lunchMenu || '',
+        body.playActivities || '',
+        body.cleaningDuties || '',
+        body.generalNotes || '',
+        JSON.stringify(body.attendees || []),
+        body.status || 'in-progress',
+        body.createdAt || now,
+        now,
+        body.cohort || 'Upper primary',
+        body.theme || 'Responsibility – I Can Be Counted On!',
+        body.staffDelegation || '',
+        body.evaluationNotes || ''
+      ).run();
+      return json({ success: true, id });
+    } catch (e: any) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
+  const careDeleteMatch = url.pathname.match(/^\/api\/care-sessions\/([^/]+)$/);
+  if (request.method === 'DELETE' && careDeleteMatch) {
+    try {
+      await env.DB.prepare('DELETE FROM care_sessions WHERE id = ?').bind(careDeleteMatch[1]).run();
+      return json({ success: true });
+    } catch (e: any) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
   if (request.method === 'POST' && url.pathname === '/api/students/bulk-delete') {
     const body = await readBody(request);
     const ids: string[] = Array.isArray(body.ids) ? body.ids : Array.isArray(body.studentIds) ? body.studentIds : [];

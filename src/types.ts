@@ -39,6 +39,45 @@ export interface Student {
   classHistory?: Record<number, ClassName>;
 }
 
+export type CareRoomGroup = 'Sitting Room' | 'Talking Room' | 'Outside Terakoya' | 'Unassigned';
+export type CareMood = 'joyful' | 'peaceful' | 'neutral' | 'sad' | '';
+
+export interface CareSessionAttendee {
+  studentId: string;
+  studentName?: string;
+  className?: string;
+  attended: boolean;
+  attendedLearning: boolean;
+  receivedLunch: boolean;
+  participatedPlay: boolean;
+  participatedCleaning: boolean;
+  roomGroup?: CareRoomGroup;
+  surveyCompleted?: boolean;
+  checkoutMood?: CareMood;
+  departureTime?: string;
+  notes?: string;
+}
+
+export interface CareSession {
+  id: string;
+  date: string; // YYYY-MM-DD
+  title: string;
+  cohort?: string; // e.g. "Upper primary", "Lower primary", "All primary"
+  theme?: string; // e.g. "Responsibility – I Can Be Counted On!"
+  facilitator: string; // Community Worker / Teacher in charge
+  staffDelegation?: string; // Duty delegation
+  learningNotes: string; // What was taught / studied
+  lunchMenu: string; // What lunch was served
+  playActivities: string; // Games, sports, psychosocial activities
+  cleaningDuties: string; // Chores, tidying, hygiene
+  evaluationNotes?: string; // 3:45-4:00 PM evaluation meeting feedback & survey observations
+  generalNotes?: string;
+  status: 'planned' | 'in-progress' | 'completed';
+  attendees: CareSessionAttendee[];
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export interface AcademicYear {
   year: number;
   status: 'planned' | 'active' | 'closed';
