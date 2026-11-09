@@ -1,390 +1,45 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Calendar, 
-  HandHeart, 
-  Check, 
-  X, 
-  AlertCircle, 
-  Smile, 
-  Plus, 
-  Sparkles, 
-  Coins, 
-  Shirt, 
-  BookOpen, 
-  Utensils, 
-  Activity, 
-  HeartHandshake, 
-  Compass, 
-  UserCheck,
-  Briefcase
-} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { CalendarCheck, MessageCircle, RefreshCw, Save } from 'lucide-react';
 import { Student, ClassName, Teacher, Mark } from '../types';
-import AshinagaLogo from './AshinagaLogo';
-
-interface SupportRecord {
-  id: string;
-  studentId: string;
-  type: string; // 'School Fees' | 'Uniforms & Shoes' | 'Books & Scholastic Materials' | 'Meals' | 'Medical Assistance' | 'Transport' | 'Counselling'
-  amount: number;
-  date: string;
-  sponsor: string;
-  approvedBy: string;
-}
-
-interface AttendanceRecord {
-  id: string;
-  studentId: string;
-  date: string;
-  status: 'present' | 'absent' | 'sick' | 'late';
-}
-
-interface AttendanceSupportProps {
-  students: Student[];
-  teacherClasses: ClassName[];
-  isAdmin: boolean;
-  teacher: Teacher;
-  marks: Mark[];
-}
-
-export default function AttendanceSupport({ students, teacherClasses = [], isAdmin, teacher, marks }: AttendanceSupportProps) {
-  const classesList: ClassName[] = isAdmin || teacherClasses.length === 0
-    ? ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7']
-    : teacherClasses;
-
-  const [selectedClass, setSelectedClass] = useState<ClassName>(classesList[0] || 'P.1');
-  const [currentDate, setCurrentDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [subTab, setSubTab] = useState<'attendance' | 'support'>('attendance');
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
-  const [supportRecords, setSupportRecords] = useState<SupportRecord[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [showSupportModal, setShowSupportModal] = useState(false);
-  const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [supportType, setSupportType] = useState('School Fees');
-  const [supportAmount, setSupportAmount] = useState('');
-  const [supportSponsor, setSupportSponsor] = useState('Ashinaga Uganda Foundation');
-  const [supportApprovedBy, setSupportApprovedBy] = useState(teacher.name || 'Headteacher');
-
-  useEffect(() => {
-    if (classesList.length > 0 && !classesList.includes(selectedClass)) {
-      setSelectedClass(classesList[0]);
-    }
-  }, [classesList, selectedClass]);
-
-  // Load from server or localStorage
-  useEffect(() => {
-    // Fetch records
-    const fetchRecords = async () => {
-      try {
-        const [attRes, supRes] = await Promise.all([
-          fetch('/api/attendance', { headers: { Authorization: `Bearer ${teacher.authToken || ''}` } }),
-          fetch('/api/support', { headers: { Authorization: `Bearer ${teacher.authToken || ''}` } })
-        ]);
-        if (attRes.ok) setAttendance(await attRes.json());
-        if (supRes.ok) setSupportRecords(await supRes.json());
-      } catch (err) {
-        // Fallback mock
-        console.log('Using local fallback for attendance and support');
-      }
-    };
-    fetchRecords();
-  }, []);
-
-  const hasAccessToClass = (c: ClassName) => {
-    if (isAdmin) return true;
-    return teacherClasses.includes(c);
+import { authHeaders, schoolToday, useSchoolScope } from '../lib/schoolScope';
+import { recordedClass } from '../lib/dashboardData';
+import { useDraft } from '../lib/drafts';
+import SaveIndicator from './SaveIndicator';
+import GuardianMessage from './GuardianMessage';
+type Status='present'|'absent'|'sick'|'late';
+interface Props {students:Student[];teacherClasses:ClassName[];isAdmin:boolean;teacher:Teacher;marks:Mark[];}
+export default function AttendanceSupport({students,teacherClasses,isAdmin,teacher,marks}:Props) {
+  const scope=useSchoolScope();
+  const classes:ClassName[]=isAdmin?['P.1','P.2','P.3','P.4','P.5','P.6','P.7']:teacherClasses;
+  const selectedClass=scope.className!=='all'&&classes.includes(scope.className)?scope.className:classes[0]||'P.1';
+  const [date,setDate]=useState(schoolToday()),[records,setRecords]=useState<any[]|null>(null),[statuses,setStatuses]=useState<Record<string,Status>>({}),[error,setError]=useState(''),[messagePupil,setMessagePupil]=useState<Student|null>(null),[refresh,setRefresh]=useState(0);
+  const key=`${teacher.username}:attendance:${selectedClass}:${date}`;
+  const draft=useDraft<Record<string,Status>>(key);
+  const pupils=students.filter(s=>recordedClass(s,Number(date.slice(0,4)),scope.activeYear)===selectedClass);
+  useEffect(()=>{if(Number(date.slice(0,4))!==scope.year)setDate(`${scope.year}-01-01`);},[scope.year]);
+  useEffect(()=>{
+    let cancelled=false;
+    fetch('/api/attendance',{headers:authHeaders(teacher)}).then(async r=>{if(!r.ok)throw new Error('The attendance register could not be loaded. Retry before saving.');return r.json();}).then(rows=>{if(!cancelled){setRecords(rows);setError('');}}).catch(e=>{if(!cancelled)setError(e.message);});
+    return()=>{cancelled=true;};
+  },[teacher.authToken,refresh]);
+  useEffect(()=>{
+    const saved=Object.fromEntries((records||[]).filter(r=>r.date===date).map(r=>[r.studentId,r.status]));
+    const restored=draft.restore();setStatuses({...saved,...restored});
+  },[key,records]);
+  const change=(id:string,status:Status)=>{const next={...statuses,[id]:status};setStatuses(next);draft.store(next);};
+  const save=async()=>{
+    draft.setState('saving');setError('');
+    const entries=pupils.filter(p=>statuses[p.id]).map(p=>({studentId:p.id,date,status:statuses[p.id]}));
+    if(!entries.length){draft.setState('unsaved');setError('Mark at least one pupil before saving.');return;}
+    try{const response=await fetch('/api/attendance/bulk',{method:'POST',headers:{...authHeaders(teacher),'Content-Type':'application/json'},body:JSON.stringify({records:entries})});const result=await response.json().catch(()=>({}));if(!response.ok)throw new Error(result.message||'Attendance could not be saved.');setRecords(previous=>[...(previous||[]).filter(r=>!entries.some(e=>e.studentId===r.studentId&&e.date===r.date)),...entries]);draft.saved();}
+    catch(e:any){draft.setState('failed');setError(`${e.message} Your edits remain in this tab. Retry Save when connected.`);}
   };
-
-  const filteredStudents = students.filter(s => s.className === selectedClass);
-  const attendancePerformanceAlerts = filteredStudents.map(student => {
-    const pupilAttendance = attendance.filter(record => record.studentId === student.id);
-    const attendanceRate = pupilAttendance.length
-      ? Math.round((pupilAttendance.filter(record => record.status === 'present' || record.status === 'late').length / pupilAttendance.length) * 100)
-      : 100;
-    const pupilMarks = marks.filter(mark => mark.studentId === student.id);
-    const averageMark = pupilMarks.length
-      ? Math.round(pupilMarks.reduce((sum, mark) => sum + Number(mark.score || 0), 0) / pupilMarks.length)
-      : null;
-    return { student, attendanceRate, averageMark };
-  }).filter(item => item.attendanceRate < 85 || (item.averageMark !== null && item.averageMark < 50));
-
-  // Manage daily attendance changes locally before saving
-  const handleAttendanceChange = (studentId: string, status: 'present' | 'absent' | 'sick' | 'late') => {
-    setAttendance(prev => {
-      const existingIdx = prev.findIndex(r => r.studentId === studentId && r.date === currentDate);
-      if (existingIdx !== -1) {
-        const updated = [...prev];
-        updated[existingIdx] = { ...updated[existingIdx], status };
-        return updated;
-      } else {
-        return [...prev, { id: `att-${Date.now()}-${studentId}`, studentId, date: currentDate, status }];
-      }
-    });
-  };
-
-  const handleSaveAttendance = async () => {
-    setIsSaving(true);
-    setSaveSuccess(false);
-    try {
-      // Save current date's attendance list
-      const recordsToSave = filteredStudents.map(student => {
-        const rec = attendance.find(r => r.studentId === student.id && r.date === currentDate);
-        return {
-          studentId: student.id,
-          date: currentDate,
-          status: rec ? rec.status : 'present' // default present
-        };
-      });
-
-      const res = await fetch('/api/attendance/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher.authToken || ''}` },
-        body: JSON.stringify({ records: recordsToSave })
-      });
-
-      if (res.ok) {
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
-      }
-    } catch (err) {
-      alert('Error updating attendance logs on server.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleAddSupportRecord = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedStudentId) {
-      alert('Please select a student');
-      return;
-    }
-
-    const newRecord = {
-      studentId: selectedStudentId,
-      type: supportType,
-      amount: Number(supportAmount),
-      date: new Date().toISOString().split('T')[0],
-      sponsor: supportSponsor,
-      approvedBy: supportApprovedBy
-    };
-
-    try {
-      const res = await fetch('/api/support', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${teacher.authToken || ''}` },
-        body: JSON.stringify(newRecord)
-      });
-      if (res.ok) {
-        const saved = await res.json();
-        setSupportRecords(prev => [...prev, saved]);
-        setShowSupportModal(false);
-      }
-    } catch (err) {
-      alert('Error adding support record.');
-    }
-  };
-
-  // Get current record status
-  const getStatus = (studentId: string): 'present' | 'absent' | 'sick' | 'late' => {
-    const rec = attendance.find(r => r.studentId === studentId && r.date === currentDate);
-    return rec ? rec.status : 'present';
-  };
-
-  const getSupportTypeIcon = (type: string) => {
-    switch (type) {
-      case 'School Fees': return <Coins className="h-4 w-4 text-amber-600" />;
-      case 'Uniforms & Shoes': return <Shirt className="h-4 w-4 text-emerald-600" />;
-      case 'Books & Scholastic Materials': return <BookOpen className="h-4 w-4 text-indigo-600" />;
-      case 'Meals': return <Utensils className="h-4 w-4 text-rose-600" />;
-      case 'Medical Assistance': return <Activity className="h-4 w-4 text-sky-600" />;
-      case 'Counselling': return <HeartHandshake className="h-4 w-4 text-purple-600" />;
-      default: return <HandHeart className="h-4 w-4 text-slate-600" />;
-    }
-  };
-
-  return (
-    <div id="attendance_support_view" className="p-8 space-y-6 font-sans max-w-7xl mx-auto">
-      {/* Header section with Android 16/Material Design vibe */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-sky-150 pb-5">
-        <div className="flex items-center gap-3">
-          <AshinagaLogo size={50} className="shrink-0 bg-white p-1 rounded-xl shadow-xs border border-slate-100" />
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-wider mb-2">
-              <Sparkles className="h-3 w-3 text-indigo-500 animate-spin" /> Attendance Engine
-            </div>
-            <h1 className="font-display text-2xl font-black text-slate-800">Attendance</h1>
-            <p className="text-xs text-slate-400 mt-1">Track daily school attendance for registered children.</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Class Selector Row */}
-      <div className="flex flex-wrap bg-slate-50 p-1.5 rounded-2xl gap-1 border border-slate-150">
-        {classesList.map((c) => {
-          const isSelected = selectedClass === c;
-          const hasAccess = hasAccessToClass(c);
-          return (
-            <button
-              key={c}
-              onClick={() => {
-                if (hasAccess) setSelectedClass(c);
-              }}
-              disabled={!hasAccess}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                isSelected
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 font-black'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              } disabled:opacity-30 disabled:cursor-not-allowed`}
-            >
-              Class {c} {!hasAccess && '🔒'}
-            </button>
-          );
-        })}
-      </div>
-
-      <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5">
-        <div className="flex items-center gap-2">
-          <AlertCircle className="h-5 w-5 text-amber-600" />
-          <h2 className="text-sm font-black text-amber-950">Attendance and academic support alerts</h2>
-        </div>
-        <p className="mt-1 text-xs text-amber-800">
-          Pupils appear here when attendance is below 85% or their recorded academic average is below 50%.
-        </p>
-        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {attendancePerformanceAlerts.length ? attendancePerformanceAlerts.map(item => (
-            <div key={item.student.id} className="rounded-xl border border-amber-100 bg-white p-3">
-              <p className="text-xs font-black text-slate-900">{item.student.surname} {item.student.otherNames}</p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Attendance: <strong>{item.attendanceRate}%</strong> · Academic average: <strong>{item.averageMark ?? 'No marks'}{item.averageMark !== null ? '%' : ''}</strong>
-              </p>
-            </div>
-          )) : (
-            <p className="text-xs font-bold text-emerald-700">No attendance or academic-risk alerts for Class {selectedClass}.</p>
-          )}
-        </div>
-      </section>
-
-      <div className="space-y-6">
-        {/* Calendar Picker & Controls Banner */}
-        <div className="bg-white p-6 rounded-3xl border-2 border-transparent hover:border-indigo-400 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4 transition-all duration-300">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-              <Calendar className="h-5 w-5" />
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Attendance Date</span>
-              <input 
-                type="date"
-                value={currentDate}
-                onChange={(e) => setCurrentDate(e.target.value)}
-                className="bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {saveSuccess && (
-              <span className="text-xs font-black text-emerald-600 flex items-center gap-1.5 animate-pulse">
-                <Check className="h-4 w-4" /> Records Saved Successfully!
-              </span>
-            )}
-            <button
-              onClick={handleSaveAttendance}
-              disabled={isSaving || filteredStudents.length === 0}
-              className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-2"
-            >
-              {isSaving ? 'Saving Roster...' : 'Save Roster'}
-            </button>
-          </div>
-        </div>
-
-        {/* Attendance Roster list */}
-        {filteredStudents.length === 0 ? (
-          <div className="bg-white rounded-3xl border-2 border-transparent py-16 text-center text-slate-400 text-xs">
-            <AlertCircle className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-            No pupils registered in {selectedClass} yet.
-          </div>
-        ) : (
-          <div className="bg-white rounded-3xl border-2 border-slate-100 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-400 uppercase font-black tracking-wider border-b border-slate-100">
-                    <th className="px-6 py-4">Pupil Profile</th>
-                    <th className="px-6 py-4">Current Status</th>
-                    <th className="px-6 py-4 text-center">Daily Roll-Call Mark</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredStudents.map(student => {
-                    const status = getStatus(student.id);
-                    return (
-                      <tr key={student.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-3.5">
-                          <div className="flex items-center gap-3">
-                            <div className="h-8 w-8 rounded-lg bg-indigo-50 border overflow-hidden shrink-0">
-                              {student.photo ? (
-                                <img src={student.photo} alt="Student" className="h-full w-full object-cover" />
-                              ) : (
-                                <div className="h-full w-full flex items-center justify-center text-indigo-600 font-bold text-[11px]">
-                                  {student.surname[0]}{student.otherNames[0]}
-                                </div>
-                              )}
-                            </div>
-                            <div>
-                              <strong className="text-slate-800 uppercase block">{student.surname} {student.otherNames}</strong>
-                              <span className="text-[10px] text-slate-400 font-mono">Zone: {student.zoneInNansana}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wide ${
-                            status === 'present' ? 'bg-green-100 text-green-700' :
-                            status === 'absent' ? 'bg-red-100 text-red-700' :
-                            status === 'sick' ? 'bg-amber-100 text-amber-700' :
-                            'bg-sky-100 text-sky-700'
-                          }`}>
-                            {status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <div className="flex justify-center gap-1.5">
-                            {[
-                              { val: 'present', label: 'Present', color: 'hover:bg-green-500 hover:text-white border-green-200 text-green-700' },
-                              { val: 'absent', label: 'Absent', color: 'hover:bg-red-500 hover:text-white border-red-200 text-red-700' },
-                              { val: 'sick', label: 'Sick / Medical', color: 'hover:bg-amber-500 hover:text-white border-amber-200 text-amber-700' },
-                              { val: 'late', label: 'Late', color: 'hover:bg-sky-500 hover:text-white border-sky-200 text-sky-700' }
-                            ].map(btn => {
-                              const active = status === btn.val;
-                              return (
-                                <button
-                                  key={btn.val}
-                                  onClick={() => handleAttendanceChange(student.id, btn.val as any)}
-                                  className={`px-3 py-1.5 rounded-lg border font-bold text-[10px] uppercase transition-all duration-150 cursor-pointer ${btn.color} ${
-                                    active 
-                                      ? btn.val === 'present' ? 'bg-green-500 text-white shadow-sm' :
-                                        btn.val === 'absent' ? 'bg-red-500 text-white shadow-sm' :
-                                        btn.val === 'sick' ? 'bg-amber-500 text-white shadow-sm' :
-                                        'bg-sky-500 text-white shadow-sm'
-                                      : 'bg-white'
-                                  }`}
-                                >
-                                  {btn.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const alerts=pupils.map(student=>{const at=(records||[]).filter(a=>a.studentId===student.id&&a.date.startsWith(`${scope.year}-`));const ms=marks.filter(m=>m.studentId===student.id&&m.year===scope.year&&m.term===scope.term);return {student,attendance:at.length?Math.round(at.filter(a=>['present','late'].includes(a.status)).length/at.length*100):null,average:ms.length?Math.round(ms.reduce((n,m)=>n+m.score,0)/ms.length):null};}).filter(a=>(a.attendance!==null&&a.attendance<85)||(a.average!==null&&a.average<50));
+  const saving=draft.state==='saving';
+  return <div id="attendance_support_view" className="workspace-page space-y-5"><div><h1 className="text-2xl font-bold text-[#0b2d59]">Attendance</h1><p className="mt-1 text-sm text-slate-500">Mark the register explicitly. Unmarked pupils are never saved as present automatically.</p></div><SaveIndicator state={draft.state} notice={draft.notice}/>{error&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}<button onClick={()=>setRefresh(n=>n+1)} className="ml-3 underline">Reload saved register</button></p>}
+    <div className="panel flex flex-wrap items-end gap-4 p-4"><label className="text-sm text-slate-600">Class<select aria-label="Attendance class" disabled={saving} value={selectedClass} onChange={e=>scope.setClassName(e.target.value as ClassName)} className="scope-select">{classes.map(c=><option key={c}>{c}</option>)}</select></label><label className="text-sm text-slate-600">Register date<input aria-label="Register date" type="date" max={schoolToday()} disabled={saving} value={date} onChange={e=>{setDate(e.target.value);scope.setYear(Number(e.target.value.slice(0,4)));}} className="scope-select"/></label><span className="mr-auto self-center text-sm text-slate-500">{pupils.filter(p=>statuses[p.id]).length} of {pupils.length} marked</span><button disabled={saving||!pupils.length||!records} onClick={()=>{const next={...statuses,...Object.fromEntries(pupils.map(p=>[p.id,'present' as Status]))};setStatuses(next);draft.store(next);}} className="secondary-button">Mark all present</button><button disabled={saving||!pupils.length||!records||!pupils.some(p=>statuses[p.id])} onClick={save} className="primary-button"><Save size={16}/>{saving?'Saving…':'Save register'}</button></div>
+    <section className="panel overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-600"><tr><th className="px-5 py-3">Pupil</th><th>Status</th><th className="py-3">Roll call</th><th className="pr-5">Follow-up</th></tr></thead><tbody className="divide-y divide-slate-100">{pupils.map(p=><tr key={p.id}><td className="px-5 py-4 font-medium text-slate-900">{p.surname} {p.otherNames}</td><td className="capitalize text-slate-600">{statuses[p.id]||'Unmarked'}</td><td className="py-3 pr-3"><div className="flex flex-wrap gap-1.5">{(['present','absent','sick','late'] as Status[]).map(value=><button key={value} disabled={saving||!records} aria-label={`${p.surname} ${p.otherNames}: ${value}`} aria-pressed={statuses[p.id]===value} onClick={()=>change(p.id,value)} className={`rounded-lg border px-3 py-2 text-xs capitalize ${statuses[p.id]===value?'border-[#0b2d59] bg-[#0b2d59] text-white':'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{value}</button>)}</div></td><td className="pr-5"><button disabled={!records} aria-label={`Prepare message for ${p.guardianName||'guardian'}`} onClick={()=>setMessagePupil(p)} className="secondary-button"><MessageCircle size={16}/><span className="hidden lg:inline">Draft message</span></button></td></tr>)}</tbody></table>{!pupils.length&&<p className="p-10 text-center text-sm text-slate-500">No recorded pupils in this class and academic year.</p>}</div></section>
+    <section className="panel p-5"><h2 className="font-semibold text-slate-900">Attendance and academic follow-up</h2><p className="mt-1 text-xs text-slate-500">Saved attendance below 85% in {scope.year}, or recorded average below 50% in Term {scope.term}.</p><div className="mt-4 grid gap-3 sm:grid-cols-2">{alerts.map(a=><div key={a.student.id} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><strong>{a.student.surname} {a.student.otherNames}</strong><p className="mt-1">Attendance: {a.attendance===null?'No records':`${a.attendance}%`} · Average: {a.average===null?'No marks':`${a.average}%`}</p></div>)}</div>{!alerts.length&&<p className="mt-3 text-sm text-slate-500">{records?'No follow-up flags in the records available.':'Attendance records are unavailable.'}</p>}</section>
+    {messagePupil&&<GuardianMessage student={messagePupil} attendance={(records||[]).filter(r=>r.studentId===messagePupil.id)} marks={marks} year={scope.year} term={scope.term} date={date} onClose={()=>setMessagePupil(null)}/>}
+  </div>;
 }

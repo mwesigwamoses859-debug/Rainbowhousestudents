@@ -22,6 +22,10 @@ import {
 import { Student, Mark, Teacher, ClassName } from '../types';
 import { getSubjectsForClass } from '../curriculum';
 import AshinagaLogo from './AshinagaLogo';
+import { useSchoolScope } from '../lib/schoolScope';
+import { recordedClass } from '../lib/dashboardData';
+import { useDraft } from '../lib/drafts';
+import SaveIndicator from './SaveIndicator';
 
 interface SubjectWorkspacesProps {
   students: Student[];
@@ -103,10 +107,14 @@ export default function SubjectWorkspaces({
   teachers,
   onSaveMarks
 }: SubjectWorkspacesProps) {
+  const scope=useSchoolScope();
   const [selectedSubject, setSelectedSubject] = useState<SubjectDef>(SUBJECT_LIST[0]);
-  const [selectedClass, setSelectedClass] = useState<ClassName>('P.7');
-  const [selectedTerm, setSelectedTerm] = useState<1 | 2 | 3>(1);
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const selectedClass=scope.className==='all'?'P.1':scope.className;
+  const setSelectedClass=(c:ClassName)=>scope.setClassName(c);
+  const selectedTerm=scope.term;
+  const setSelectedTerm=scope.setTerm;
+  const selectedYear=scope.year;
+  const draft=useDraft<Record<string,string>>(`${currentTeacher.username}:subject:${selectedSubject.name}:${selectedClass}:${selectedYear}:${selectedTerm}`);
   const [activeTab, setActiveTab] = useState<'marks' | 'syllabus' | 'analytics'>('marks');
   const availableSubjects = SUBJECT_LIST.filter(subject =>
     getSubjectsForClass(selectedClass).includes(subject.name as never)
@@ -138,7 +146,7 @@ export default function SubjectWorkspaces({
 
   // Load scores into edit buffer when selected class/subject/term changes
   useEffect(() => {
-    const classStudents = students.filter(s => s.className === selectedClass);
+    const classStudents = students.filter(s => recordedClass(s,selectedYear,scope.activeYear) === selectedClass);
     const newBuffer: { [studentId: string]: string } = {};
 
     classStudents.forEach(st => {
@@ -151,14 +159,14 @@ export default function SubjectWorkspaces({
       newBuffer[st.id] = existingMark ? String(existingMark.score) : '';
     });
 
-    setScoresBuffer(newBuffer);
+    setScoresBuffer({...newBuffer,...draft.restore()});
     setSaveStatus({ type: '', msg: '' });
   }, [selectedSubject, selectedClass, selectedTerm, selectedYear, students, marks]);
 
   const handleScoreChange = (studentId: string, val: string) => {
     // Only numeric or empty
     if (val === '' || (/^\d+$/.test(val) && Number(val) <= 100)) {
-      setScoresBuffer(prev => ({ ...prev, [studentId]: val }));
+      const next={...scoresBuffer,[studentId]:val};setScoresBuffer(next);draft.store(next);
     }
   };
 
@@ -169,10 +177,11 @@ export default function SubjectWorkspaces({
     }
 
     setIsSaving(true);
+    draft.setState('saving');
     setSaveStatus({ type: '', msg: '' });
 
     try {
-      const classStudents = students.filter(s => s.className === selectedClass);
+      const classStudents = students.filter(s => recordedClass(s,selectedYear,scope.activeYear) === selectedClass);
       const updatedMarksList: { studentId: string; subject: string; score: number; term: 1 | 2 | 3; year: number; teacherName: string }[] = [];
 
       classStudents.forEach(st => {
@@ -192,12 +201,15 @@ export default function SubjectWorkspaces({
       if (updatedMarksList.length === 0) {
         setSaveStatus({ type: 'error', msg: 'No marks entered to save.' });
         setIsSaving(false);
+        draft.setState('unsaved');
         return;
       }
 
       await onSaveMarks(updatedMarksList);
+      draft.saved();
       setSaveStatus({ type: 'success', msg: `Successfully saved ${updatedMarksList.length} pupil marks for ${selectedSubject.name} (${selectedClass} Term ${selectedTerm})!` });
     } catch (err) {
+      draft.setState('failed');
       setSaveStatus({ type: 'error', msg: 'Failed to save marks. Please check connection.' });
     } finally {
       setIsSaving(false);
@@ -217,10 +229,11 @@ export default function SubjectWorkspaces({
     return { grade: 'F9', remark: 'Fail 9', badge: 'bg-rose-100 text-rose-800 border-rose-300' };
   };
 
-  const currentClassStudents = students.filter(s => s.className === selectedClass);
+  const currentClassStudents = students.filter(s => recordedClass(s,selectedYear,scope.activeYear) === selectedClass);
 
   return (
     <div id="subject_workspaces_container" className="p-6 md:p-8 space-y-6 font-sans max-w-7xl mx-auto">
+      <SaveIndicator state={draft.state} notice={draft.notice}/>
       {/* Top Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 md:p-8 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -549,54 +562,7 @@ export default function SubjectWorkspaces({
               </div>
             )}
 
-            {/* TAB 2: SYLLABUS TRACKER */}
-            {activeTab === 'syllabus' && (
-              <div className="space-y-6">
-                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                  <h3 className="font-extrabold text-slate-800 text-sm mb-1 uppercase tracking-wider">
-                    UNEB Primary {selectedSubject.name} Curriculum Syllabus Roadmap ({selectedClass})
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Track lesson plan completion and core competence milestones required for National Examinations.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-800 text-xs">Term 1 Curriculum Coverage</span>
-                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded">100% Complete</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-2">
-                      <div className="bg-emerald-500 h-2 rounded-full w-full"></div>
-                    </div>
-                    <p className="text-[11px] text-slate-500">All core competence units covered and revised for Term 1 examination.</p>
-                  </div>
-
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-800 text-xs">Term 2 Curriculum Coverage</span>
-                      <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 text-[10px] font-black rounded">75% Complete</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-2">
-                      <div className="bg-indigo-600 h-2 rounded-full w-3/4"></div>
-                    </div>
-                    <p className="text-[11px] text-slate-500">Unit 3: Applied concepts and practical exercises currently underway.</p>
-                  </div>
-
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-800 text-xs">Term 3 Final Revision</span>
-                      <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded">Upcoming</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-2">
-                      <div className="bg-amber-400 h-2 rounded-full w-1/4"></div>
-                    </div>
-                    <p className="text-[11px] text-slate-500">PLE mock examinations and national curriculum past paper drills scheduled.</p>
-                  </div>
-                </div>
-              </div>
-            )}
+            {activeTab === 'syllabus' && <div className="rounded-lg border border-slate-200 p-6"><h3 className="font-semibold text-slate-900">Syllabus progress</h3><p className="mt-2 text-sm text-slate-500">No syllabus progress has been recorded for {selectedSubject.name}, {selectedClass}. Completion percentages will appear when a saved syllabus tracker is connected.</p></div>}
 
             {/* TAB 3: ANALYTICS & GRADE BREAKDOWN */}
             {activeTab === 'analytics' && (

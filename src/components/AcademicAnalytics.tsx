@@ -1441,7 +1441,7 @@ Additionally, there are currently ${stats.atRiskCount} candidate(s) categorized 
                             {weakest}
                           </td>
                           <td className="px-3 py-1 text-right font-mono">
-                            {p.student.guardianContact || '+256 702 445588'}
+                            {p.student.guardianContact || 'Not recorded'}
                           </td>
                         </tr>
                       );
@@ -1502,7 +1502,7 @@ Additionally, there are currently ${stats.atRiskCount} candidate(s) categorized 
         <div className="mt-12 pt-6 border-t border-slate-200 flex justify-between items-end">
           <div className="text-left">
             <p className="text-[8px] text-slate-400 font-mono uppercase font-black">Authenticated Management Review</p>
-            <p className="text-[9px] text-slate-700 font-bold uppercase mt-1">EMIS Sync ID: ASH-PLE-REFORM-{selectedCohortClass.replace('.', '')}</p>
+            <p className="text-[9px] text-slate-700 font-bold uppercase mt-1">School report reference: ASH-PLE-REFORM-{selectedCohortClass.replace('.', '')}</p>
           </div>
 
           <div className="text-right">
@@ -1847,7 +1847,7 @@ Additionally, there are currently ${stats.atRiskCount} candidate(s) categorized 
                                       <td className="px-2 py-0.5 text-center font-bold text-amber-700">{p.division}</td>
                                       <td className="px-2 py-0.5 text-center font-mono font-bold">{p.aggregate}</td>
                                       <td className="px-2 py-0.5 text-center">{weakest}</td>
-                                      <td className="px-2 py-0.5 text-right font-mono">{p.student.guardianContact || '+256 702 445588'}</td>
+                                      <td className="px-2 py-0.5 text-right font-mono">{p.student.guardianContact || 'Not recorded'}</td>
                                     </tr>
                                   );
                                 })}

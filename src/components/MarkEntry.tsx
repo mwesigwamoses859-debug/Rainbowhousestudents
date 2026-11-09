@@ -3,6 +3,10 @@ import { BookOpenCheck, CheckCircle, AlertTriangle, HelpCircle, Save, Printer, S
 import { Student, Mark, ClassName, Teacher, GradeResult } from '../types';
 import { getSubjectsForClass } from '../curriculum';
 import AshinagaLogo from './AshinagaLogo';
+import { useSchoolScope } from '../lib/schoolScope';
+import { recordedClass } from '../lib/dashboardData';
+import { useDraft } from '../lib/drafts';
+import SaveIndicator from './SaveIndicator';
 
 interface MarkEntryProps {
   students: Student[];
@@ -13,6 +17,7 @@ interface MarkEntryProps {
 }
 
 export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdmin }: MarkEntryProps) {
+  const scope = useSchoolScope();
   // Available classes for active teacher
   const classesList: ClassName[] = ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7'];
   const filteredClasses = isAdmin
@@ -22,7 +27,8 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
       : teacher.classes;
 
   // Selected parameters
-  const [selectedClass, setSelectedClass] = useState<ClassName>(filteredClasses[0] || 'P.1');
+  const selectedClass = scope.className !== 'all' && filteredClasses.includes(scope.className) ? scope.className : filteredClasses[0] || 'P.1';
+  const setSelectedClass = (value:ClassName) => scope.setClassName(value);
   const filteredSubjects = useMemo(
     () => getSubjectsForClass(selectedClass).filter(subject =>
       isAdmin || (
@@ -39,8 +45,10 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
     : teacher.assignments?.find(item => item.className === selectedClass && item.subject === selectedSubject)?.activeTerms
       || teacher.activeTerms
       || [1, 2, 3];
-  const [selectedTerm, setSelectedTerm] = useState<1 | 2 | 3>(allowedTerms[0] || 1);
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const selectedTerm = scope.term;
+  const setSelectedTerm = scope.setTerm;
+  const selectedYear = scope.year;
+  const setSelectedYear = scope.setYear;
   const [assessmentSettings, setAssessmentSettings] = useState({
     botWeight: 20,
     motWeight: 30,
@@ -99,11 +107,12 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
 
   // Buffer score state for editing: { studentId: { bot: string, mot: string, eot: string, score: string } }
   const [scoreInputs, setScoreInputs] = useState<Record<string, { bot: string; mot: string; eot: string; score: string }>>({});
+  const draft = useDraft<Record<string, { bot:string; mot:string; eot:string; score:string }>>(`${teacher.username}:marks:${selectedClass}:${selectedSubject}:${selectedYear}:${selectedTerm}`);
   const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
   const [saving, setSaving] = useState(false);
 
   // Filter students in the active class
-  const classStudents = students.filter(s => s.className === selectedClass);
+  const classStudents = students.filter(s => recordedClass(s,selectedYear,scope.activeYear) === selectedClass);
 
   // Load saved marks whenever the parameters change
   useEffect(() => {
@@ -122,44 +131,23 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
         score: savedMark ? String(savedMark.score) : ''
       };
     });
-    setScoreInputs(inputs);
-    setStatusMessage({ type: '', text: '' });
+    const restored = draft.restore();
+    setScoreInputs({...inputs,...restored});
   }, [selectedClass, selectedSubject, selectedTerm, selectedYear, students, marks]);
+  useEffect(()=>setStatusMessage({type:'',text:''}),[selectedClass,selectedSubject,selectedTerm,selectedYear]);
 
   // Handle individual exam mark change and auto-compute combined score
-  const handleExamChange = (studentId: string, field: 'bot' | 'mot' | 'eot' | 'score', val: string) => {
-    if (val === '' || /^\d+$/.test(val)) {
-      const num = Number(val);
-      if (val === '' || (num >= 0 && num <= assessmentSettings.maximumScore)) {
-        setScoreInputs(prev => {
-          const current = prev[studentId] || { bot: '', mot: '', eot: '', score: '' };
-          const updated = { ...current, [field]: val };
-
-          // If updating BOT, MOT, or EOT, compute weighted final score if available
-          if (field !== 'score') {
-            const b = updated.bot !== '' ? Number(updated.bot) : null;
-            const m = updated.mot !== '' ? Number(updated.mot) : null;
-            const e = updated.eot !== '' ? Number(updated.eot) : null;
-
-            if (b !== null || m !== null || e !== null) {
-              let weightedSum = 0;
-              let totalWeight = 0;
-              if (b !== null) { weightedSum += b * (assessmentSettings.botWeight / 100); totalWeight += assessmentSettings.botWeight / 100; }
-              if (m !== null) { weightedSum += m * (assessmentSettings.motWeight / 100); totalWeight += assessmentSettings.motWeight / 100; }
-              if (e !== null) { weightedSum += e * (assessmentSettings.eotWeight / 100); totalWeight += assessmentSettings.eotWeight / 100; }
-
-              if (totalWeight > 0) {
-                // Normalize score to 100% scale
-                const computed = Math.round(weightedSum / totalWeight);
-                updated.score = String(computed);
-              }
-            }
-          }
-
-          return { ...prev, [studentId]: updated };
-        });
-      }
+  const handleExamChange = (studentId:string,field:'bot'|'mot'|'eot'|'score',val:string) => {
+    if (val !== '' && (!/^\d+$/.test(val) || Number(val)>assessmentSettings.maximumScore)) return;
+    const current=scoreInputs[studentId] || {bot:'',mot:'',eot:'',score:''};
+    const updated={...current,[field]:val};
+    if(field!=='score') {
+      const values=[['bot',assessmentSettings.botWeight],['mot',assessmentSettings.motWeight],['eot',assessmentSettings.eotWeight]] as const;
+      const entered=values.filter(([name])=>updated[name]!=='');
+      const weight=entered.reduce((sum,[,w])=>sum+w,0);
+      updated.score=weight?String(Math.round(entered.reduce((sum,[name,w])=>sum+Number(updated[name])*w,0)/weight)):'';
     }
+    const next={...scoreInputs,[studentId]:updated};setScoreInputs(next);draft.store(next);
   };
 
   // Grade converter logic (Ugandan system)
@@ -182,6 +170,7 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
 
   const handleBulkSave = async () => {
     setSaving(true);
+    draft.setState('saving');
     setStatusMessage({ type: '', text: '' });
 
     // Client-side Subject-Locked validation checks
@@ -189,16 +178,19 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
       if (!filteredClasses.includes(selectedClass)) {
         setStatusMessage({ type: 'error', text: `Access Denied: Grade ${selectedClass} is not assigned to your account.` });
         setSaving(false);
+        draft.setState('unsaved');
         return;
       }
       if (!filteredSubjects.includes(selectedSubject)) {
         setStatusMessage({ type: 'error', text: `Access Denied: Subject ${selectedSubject} is not assigned to your account.` });
         setSaving(false);
+        draft.setState('unsaved');
         return;
       }
       if (!allowedTerms.includes(selectedTerm)) {
         setStatusMessage({ type: 'error', text: `Access Denied: Term ${selectedTerm} is not currently active/unlocked for your account.` });
         setSaving(false);
+        draft.setState('unsaved');
         return;
       }
     }
@@ -229,20 +221,24 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
     if (marksToSave.length === 0) {
       setStatusMessage({ type: 'warning', text: 'No marks entered to save.' });
       setSaving(false);
+      draft.setState('unsaved');
       return;
     }
 
     try {
       await onSaveMarks(marksToSave);
+      draft.saved();
       setStatusMessage({ type: 'success', text: `Successfully updated ${marksToSave.length} marks for Class ${selectedClass}!` });
     } catch (err) {
-      setStatusMessage({ type: 'error', text: 'Failed to save marks. Please check your connection and try again.' });
+      draft.setState('failed');
+      setStatusMessage({ type: 'error', text: 'Marks could not be saved. Your draft is retained in this tab. Retry when connected.' });
     } finally {
       setSaving(false);
     }
   };
 
   const handleSubmitForApproval = async () => {
+    if (draft.state !== 'saved') {setStatusMessage({type:'warning',text:'Save your edited marks before submitting for approval.'});return;}
     setStatusMessage({ type: '', text: '' });
     try {
       const response = await fetch('/api/mark-submissions', {
@@ -270,6 +266,7 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
 
   return (
     <div id="mark_entry_view" className="p-8 space-y-6 font-sans max-w-7xl mx-auto">
+      <SaveIndicator state={draft.state} notice={draft.notice}/>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-sky-100 pb-5">
         <div className="flex items-center gap-3">
@@ -400,8 +397,7 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
             onChange={(e) => setSelectedYear(Number(e.target.value))}
             className="w-full px-3.5 py-2.5 border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer font-semibold"
           >
-            <option value={2026}>2026</option>
-            <option value={2025}>2025</option>
+            {[...new Set([scope.year, scope.activeYear, ...scope.years.map(y=>y.year)])].sort((a,b)=>b-a).map(year=><option key={year} value={year}>{year}</option>)}
           </select>
         </div>
       </div>
@@ -493,7 +489,7 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
                           placeholder="BOT"
                           maxLength={3}
                           value={data.bot}
-                          disabled={isLocked}
+                          disabled={isLocked || saving}
                           onChange={(e) => handleExamChange(student.id, 'bot', e.target.value)}
                           className="w-16 px-2 py-1 border border-slate-200 rounded-lg text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800 bg-blue-50/30"
                         />
@@ -506,7 +502,7 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
                           placeholder="MOT"
                           maxLength={3}
                           value={data.mot}
-                          disabled={isLocked}
+                          disabled={isLocked || saving}
                           onChange={(e) => handleExamChange(student.id, 'mot', e.target.value)}
                           className="w-16 px-2 py-1 border border-slate-200 rounded-lg text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800 bg-indigo-50/30"
                         />
@@ -519,7 +515,7 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
                           placeholder="EOT"
                           maxLength={3}
                           value={data.eot}
-                          disabled={isLocked}
+                          disabled={isLocked || saving}
                           onChange={(e) => handleExamChange(student.id, 'eot', e.target.value)}
                           className="w-16 px-2 py-1 border border-slate-200 rounded-lg text-center text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800 bg-amber-50/30"
                         />
@@ -532,7 +528,7 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
                           placeholder="Final"
                           maxLength={3}
                           value={data.score}
-                          disabled={isLocked}
+                          disabled={isLocked || saving}
                           onChange={(e) => handleExamChange(student.id, 'score', e.target.value)}
                           className="w-16 px-2 py-1 border-2 border-indigo-200 rounded-lg text-center text-xs font-black focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-indigo-900 bg-indigo-50/80"
                         />
@@ -579,7 +575,7 @@ export default function MarkEntry({ students, marks, onSaveMarks, teacher, isAdm
           {/* Footer action */}
           <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
             <p className="text-[11px] text-slate-400">
-              *Make sure to click "Save Class Marks Ledger" to commit these entries to the server database.
+              Press Save Draft to save these marks to the school database.
             </p>
             <div className="flex flex-wrap gap-2">
               <button

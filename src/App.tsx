@@ -1,32 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Teacher, Student, Mark, ClassName } from './types';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
-import Dashboard from './components/Dashboard';
-import TeacherDashboard from './components/TeacherDashboard';
-import SchoolOperationsCenter from './components/SchoolOperationsCenter';
+import ConnectionStatus from './components/ConnectionStatus';
+import { SchoolScopeContext, ScopeFilters, useSchoolScopeState } from './lib/schoolScope';
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const SchoolOperationsCenter = lazy(() => import('./components/SchoolOperationsCenter'));
 import ForcePasswordChange from './components/ForcePasswordChange';
-import ClassList from './components/ClassList';
-import MarkEntry from './components/MarkEntry';
-import ReportCardView from './components/ReportCardView';
-import GraduationList from './components/GraduationList';
-import ExcelUpload from './components/ExcelUpload';
-import AttendanceSupport from './components/AttendanceSupport';
-import StudentIdCards from './components/StudentIdCards';
-import SchoolTimetable from './components/SchoolTimetable';
-import TeacherAssignmentHub from './components/TeacherAssignmentHub';
-import AutoPromotionEngine from './components/AutoPromotionEngine';
-import BackupRecovery from './components/BackupRecovery';
+const ClassList = lazy(() => import('./components/ClassList'));
+const MarkEntry = lazy(() => import('./components/MarkEntry'));
+const ReportCardView = lazy(() => import('./components/ReportCardView'));
+const GraduationList = lazy(() => import('./components/GraduationList'));
+const ExcelUpload = lazy(() => import('./components/ExcelUpload'));
+const AttendanceSupport = lazy(() => import('./components/AttendanceSupport'));
+const StudentIdCards = lazy(() => import('./components/StudentIdCards'));
+const SchoolTimetable = lazy(() => import('./components/SchoolTimetable'));
+const TeacherAssignmentHub = lazy(() => import('./components/TeacherAssignmentHub'));
+const AutoPromotionEngine = lazy(() => import('./components/AutoPromotionEngine'));
+const BackupRecovery = lazy(() => import('./components/BackupRecovery'));
 import StudentProfileModal from './components/StudentProfileModal';
-import DocumentGenerator from './components/DocumentGenerator';
-import AiAssistant from './components/AiAssistant';
-import AcademicAnalytics from './components/AcademicAnalytics';
-import ReportVerification from './components/ReportVerification';
+const DocumentGenerator = lazy(() => import('./components/DocumentGenerator'));
+const AiAssistant = lazy(() => import('./components/AiAssistant'));
+const AcademicAnalytics = lazy(() => import('./components/AcademicAnalytics'));
+const ReportVerification = lazy(() => import('./components/ReportVerification'));
 import AshinagaLogo from './components/AshinagaLogo';
-import SubjectWorkspaces from './components/SubjectWorkspaces';
-import EmailGatewayModal from './components/EmailGatewayModal';
-import QuickActionFAB from './components/QuickActionFAB';
-import HistoricalCensusArchive from './components/HistoricalCensusArchive';
+const SubjectWorkspaces = lazy(() => import('./components/SubjectWorkspaces'));
+const HistoricalCensusArchive = lazy(() => import('./components/HistoricalCensusArchive'));
 import { 
   ShieldAlert, 
   BookOpen, 
@@ -56,7 +55,8 @@ import {
   ShieldCheck,
   FileKey,
   Settings,
-  BookmarkPlus
+  BookmarkPlus,
+  Menu
 } from 'lucide-react';
 
 export default function App() {
@@ -64,12 +64,16 @@ export default function App() {
     staff.role === 'Headteacher' || staff.role === 'DOS' ? 'administrator' : 'class_teacher';
   const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const scope = useSchoolScopeState(teacher);
+  const [mobileNavigation, setMobileNavigation] = useState(false);
+  const [operationsInitialSection, setOperationsInitialSection] = useState<'assessment'|'approvals'|'audit'>('assessment');
+  const [lastDataRefresh, setLastDataRefresh] = useState('');
   
   // Secondary sub-tab states for grouped views
   const [studentsSubTab, setStudentsSubTab] = useState<'list' | 'upload'>('list');
   const [academicsSubTab, setAcademicsSubTab] = useState<'marks' | 'timetable' | 'teachers' | 'promotion' | 'analytics'>('marks');
   const [examsSubTab, setExamsSubTab] = useState<'reports' | 'graduation' | 'idcards' | 'docgen' | 'verification' | 'census'>('reports');
-  const [settingsSubTab, setSettingsSubTab] = useState<'upload' | 'backup' | 'audit'>('upload');
+  const [settingsSubTab, setSettingsSubTab] = useState<'upload' | 'backup' | 'audit'>('backup');
 
   // Data State
   const [students, setStudents] = useState<Student[]>([]);
@@ -80,7 +84,6 @@ export default function App() {
 
   // Bell Notifications Dropdown State
   const [showNotifications, setShowNotifications] = useState(false);
-  const [isEmailGatewayOpen, setIsEmailGatewayOpen] = useState(false);
 
   // Floating Quick Actions FAB triggers
   const [autoOpenAddStudent, setAutoOpenAddStudent] = useState(false);
@@ -105,24 +108,7 @@ export default function App() {
   const [selectedProfileStudent, setSelectedProfileStudent] = useState<Student | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [currentRole, setCurrentRole] = useState<string>('administrator');
-  const [auditLogs, setAuditLogs] = useState<any[]>([
-    { id: 1, timestamp: '2026-07-17 10:15:30', user: 'Admin Mukasa (administrator)', action: 'Approved Term 2 P.7 Mathematics marks', ip: '192.168.1.14' },
-    { id: 2, timestamp: '2026-07-17 09:44:12', user: 'Florence Namatovu (community_worker)', action: 'Registered home visit log for John Mukasa (st-1)', ip: '102.16.88.42' },
-    { id: 3, timestamp: '2026-07-16 16:30:00', user: 'Head Teacher Kibirige (head_teacher)', action: 'Generated completion certificates for Class P.7 candidates', ip: '192.168.1.2' },
-    { id: 4, timestamp: '2026-07-16 11:22:15', user: 'Bursar Nabakooza (bursar)', action: 'Allocated uniform & school meal support to Patience Atwine (st-6)', ip: '192.168.1.5' },
-  ]);
-
-  const addAuditLog = (action: string) => {
-    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const newLog = {
-      id: Date.now(),
-      timestamp,
-      user: teacher ? `${teacher.name} (${currentRole})` : `Guest (${currentRole})`,
-      action,
-      ip: '192.168.1.10'
-    };
-    setAuditLogs(prev => [newLog, ...prev]);
-  };
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   // Report Card selection carrier
   const [selectedReportCardStudent, setSelectedReportCardStudent] = useState<Student | null>(null);
@@ -253,6 +239,11 @@ export default function App() {
       setStudents(studentsData);
       setMarks(marksData);
       setTeachers(teachersData);
+      setLastDataRefresh(new Date().toLocaleTimeString('en-UG', {hour:'2-digit',minute:'2-digit',timeZone:'Africa/Kampala'}));
+      if (teacher?.role === 'Headteacher' || teacher?.role === 'DOS') {
+        const auditResponse = await fetch('/api/audit-logs', {headers:authHeaders});
+        if (auditResponse.ok) setAuditLogs((await auditResponse.json()).map((row:any) => ({id:row.id,timestamp:new Date(row.created_at).toLocaleString('en-UG',{timeZone:'Africa/Kampala'}),user:row.actor_username,action:row.action,ip:row.ip_address || '—'})));
+      }
     } catch (err) {
       setError('Connection to backend failed. Please check that the server is online.');
     } finally {
@@ -528,7 +519,7 @@ export default function App() {
         body: JSON.stringify({ marks: marksToSave }),
       });
 
-      if (!response.ok) throw new Error();
+      if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.message || 'Marks could not be saved.'); }
 
       // Refresh marks list from server to ensure accurate syncing
       const marksResponse = await fetch('/api/marks', {
@@ -539,7 +530,6 @@ export default function App() {
         setMarks(marksData);
       }
     } catch (err) {
-      alert('Failed to save marks. Please check your network and try again.');
       throw err;
     }
   };
@@ -555,6 +545,9 @@ export default function App() {
     const permittedTab = !isAdmin && !['dashboard', 'classes', 'marks', 'attendance', 'reports'].includes(tab)
       ? 'marks'
       : tab;
+    if (permittedTab === 'backup') {setActiveTab('upload');setSettingsSubTab('backup');return;}
+    if (permittedTab === 'approvals') {setActiveTab('operations');setOperationsInitialSection('approvals');return;}
+    if (permittedTab === 'operations') setOperationsInitialSection('assessment');
     setActiveTab(permittedTab);
     if (permittedTab === 'classes') setStudentsSubTab('list');
     if (permittedTab === 'marks') setAcademicsSubTab('marks');
@@ -649,6 +642,7 @@ export default function App() {
   }
 
   return (
+    <SchoolScopeContext.Provider value={scope}>
     <div className="min-h-screen bg-[#F4F7FA] flex flex-col font-sans text-slate-800">
       
       {/* Dynamic QR Verification Modal from URL Query */}
@@ -742,55 +736,12 @@ export default function App() {
       )}
 
       {/* 1. Header Navigation Banner with Clean White High-Contrast Theme */}
-      <header className="bg-white text-slate-900 px-8 py-3 flex items-center justify-between shadow-sm relative z-40 select-none no-print border-b-2 border-amber-400">
+      <header className="bg-white text-slate-900 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 shadow-sm relative z-40 select-none no-print border-b border-slate-200">
         
-        {/* Left Section: Shield Logo and Title */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center p-1 bg-slate-900 rounded-xl shadow-sm">
-            <AshinagaLogo size={40} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-display font-black text-base lg:text-lg tracking-tight leading-none text-slate-900">
-                Ashinaga Uganda Rainbow House
-              </h1>
-              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black rounded uppercase flex items-center gap-1 shadow-2xs">
-                <span>🇺🇬</span>
-                <span>Uganda Node</span>
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-500 mt-0.5 font-extrabold uppercase tracking-widest flex items-center gap-1.5">
-              <span>National EMIS Database</span>
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full inline-block animate-pulse"></span>
-              <span className="text-emerald-700 font-black">Online & Secured</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Center Section: Main Navigation Tabs */}
-        <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-          {primaryTabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id || 
-              (tab.id === 'classes' && activeTab === 'upload') ||
-              (tab.id === 'marks' && activeTab === 'timetable') ||
-              (tab.id === 'reports' && (activeTab === 'graduation' || activeTab === 'idcards'));
-            
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleSetTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-extrabold tracking-wide transition-all cursor-pointer ${
-                  isActive
-                    ? 'bg-slate-900 text-white shadow-md border border-slate-800 font-black'
-                    : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{tab.name}</span>
-              </button>
-            );
-          })}
+        <div className="flex min-w-0 items-center gap-3">
+          <button aria-label="Open main navigation" onClick={() => setMobileNavigation(true)} className="rounded-lg border border-slate-200 p-2 md:hidden"><Menu size={20}/></button>
+          <AshinagaLogo size={36} className="shrink-0" />
+          <div className="min-w-0"><h1 className="text-base font-bold leading-tight text-[#0b2d59]">Ashinaga Uganda Rainbow House</h1><div className="mt-1"><ConnectionStatus/></div></div>
         </div>
 
         {/* Right Section: Notification Bell and User Profile */}
@@ -799,6 +750,7 @@ export default function App() {
           {/* Notification Bell Dropdown Button */}
           <div className="relative">
             <button 
+              aria-label="Show pupil alerts"
               onClick={() => setShowNotifications(!showNotifications)}
               className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full transition-colors relative cursor-pointer border border-slate-200"
             >
@@ -826,7 +778,7 @@ export default function App() {
                   {notificationAlerts.length === 0 ? (
                     <div className="p-6 text-center text-slate-400 font-medium text-xs">
                       <CheckCircle className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
-                      All pupil audits are fully compliant!
+                      No pupil alerts in the records checked.
                     </div>
                   ) : (
                     notificationAlerts.map((alert) => {
@@ -859,7 +811,7 @@ export default function App() {
           </div>
 
           {/* Server-assigned role (display only) */}
-          <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-slate-800">
+          <div className="hidden lg:flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-slate-800">
             <ShieldCheck className="h-4 w-4 text-emerald-600" />
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Signed in as</span>
             <span className="text-xs font-black text-slate-900">{teacher.role}</span>
@@ -874,15 +826,7 @@ export default function App() {
               </p>
             </div>
             <div className="relative">
-              <img 
-                src={teacher.username === 'admin' 
-                  ? "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=150&h=150&fit=crop" 
-                  : "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=150&h=150&fit=crop"
-                } 
-                alt="Avatar" 
-                className="w-9 h-9 rounded-full object-cover border-2 border-sky-400"
-                referrerPolicy="no-referrer"
-              />
+              <div aria-label="Staff initials" className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-50 text-sm font-bold text-[#0b2d59]">{teacher.name.split(' ').map(word=>word[0]).slice(0,2).join('')}</div>
               <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#0b2d59] rounded-full"></span>
             </div>
           </div>
@@ -897,20 +841,17 @@ export default function App() {
         {/* Sidebar - Navigation bar */}
         <Sidebar 
           activeTab={activeTab} 
-          setActiveTab={(tab) => {
-            setActiveTab(tab);
-            // Default sub-tabs
-            if (tab === 'classes') setStudentsSubTab('list');
-            if (tab === 'marks') setAcademicsSubTab('marks');
-            if (tab === 'reports') setExamsSubTab('reports');
-          }} 
+          setActiveTab={handleSetTab}
+          open={mobileNavigation}
+          onClose={() => setMobileNavigation(false)}
           teacher={teacher} 
           onLogout={handleLogout} 
         />
 
         {/* Main content area */}
-        <main className="flex-1 flex flex-col justify-between overflow-x-hidden relative min-h-[calc(100vh-70px)]">
+        <main className="flex-1 flex flex-col justify-between min-w-0 overflow-x-hidden relative min-h-[calc(100vh-70px)]">
           
+          <ScopeFilters classes={activeTeacherClasses}/>
           {loading ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white m-6 rounded-2xl border border-slate-100 shadow-sm">
               <RefreshCw className="h-10 w-10 text-[#0b2d59] animate-spin mb-3.5" />
@@ -933,28 +874,20 @@ export default function App() {
           ) : (
             <div className="flex-1 pb-24 md:pb-16">
               
+              <Suspense fallback={<div role="status" className="p-8 text-sm text-slate-500">Loading workspace…</div>}>
               {/* Active Tab Router */}
               
               {/* 1. Dashboard Tab */}
               {activeTab === 'dashboard' && (
-                isAdmin ? <Dashboard
+                <Dashboard
                   students={students} 
                   marks={marks} 
                   teacher={teacher || undefined}
                   isAdmin={isAdmin}
+                  onOpenProfile={(student)=>{setSelectedProfileStudent(student);setIsProfileModalOpen(true);}}
                   onAddStudentQuickAction={handleQuickAddStudent}
                   onRegisterMarkQuickAction={handleQuickRegisterMark}
                   onGenerateIdCardQuickAction={handleQuickGenerateIdCard}
-                  setActiveTab={(tab) => {
-                    setActiveTab(tab);
-                    if (tab === 'classes') setStudentsSubTab('list');
-                    if (tab === 'marks') setAcademicsSubTab('marks');
-                    if (tab === 'reports') setExamsSubTab('reports');
-                  }} 
-                /> : <TeacherDashboard
-                  teacher={teacher}
-                  students={students}
-                  marks={marks}
                   setActiveTab={handleSetTab}
                 />
               )}
@@ -1231,8 +1164,8 @@ export default function App() {
                       marks={marks}
                       selectedStudent={selectedReportCardStudent}
                       teacher={teacher}
-                      initialYear={reportCardInitialYear}
-                      initialTerm={reportCardInitialTerm}
+                      initialYear={scope.year}
+                      initialTerm={scope.term}
                     />
                   )}
 
@@ -1285,7 +1218,7 @@ export default function App() {
               )}
 
               {activeTab === 'operations' && isAdmin && (
-                <SchoolOperationsCenter teacher={teacher} students={students} marks={marks} />
+                <SchoolOperationsCenter key={operationsInitialSection} initialSection={operationsInitialSection} teacher={teacher} students={students} marks={marks} />
               )}
 
               {/* AI Assistant Tab */}
@@ -1298,17 +1231,6 @@ export default function App() {
                 <div className="p-8 space-y-6">
                   {/* Secondary Inner Toggles */}
                   <div className="flex bg-white/80 p-1 rounded-xl gap-1 self-start w-fit border border-slate-200 no-print">
-                    <button
-                      onClick={() => setSettingsSubTab('upload')}
-                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                        settingsSubTab === 'upload'
-                          ? 'bg-[#0b2d59] text-white shadow-sm'
-                          : 'text-slate-500 hover:text-slate-800'
-                      }`}
-                    >
-                      <FileSpreadsheet className="h-4 w-4" />
-                      <span>Spreadsheet Excel Upload</span>
-                    </button>
                     {isAdmin && (
                       <button
                         onClick={() => setSettingsSubTab('backup')}
@@ -1335,17 +1257,8 @@ export default function App() {
                     </button>
                   </div>
 
-                  {settingsSubTab === 'upload' ? (
-                    <ExcelUpload 
-                      students={students}
-                      onBulkAddStudents={handleBulkAddStudents}
-                      onSuccessRedirect={() => {
-                        setActiveTab('classes');
-                        setStudentsSubTab('list');
-                      }}
-                    />
-                  ) : settingsSubTab === 'backup' && isAdmin ? (
-                    <BackupRecovery onRestoreSuccess={fetchData} />
+                  {settingsSubTab === 'backup' && isAdmin ? (
+                    <BackupRecovery onRestoreSuccess={fetchData} teacher={teacher} />
                   ) : settingsSubTab === 'audit' ? (
                     <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm space-y-4">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -1398,36 +1311,23 @@ export default function App() {
                 </div>
               )}
 
+              </Suspense>
             </div>
           )}
 
-          {/* Core Footer */}
-          <footer className="bg-slate-900 h-16 flex items-center px-8 justify-between text-white no-print mt-auto shrink-0 font-sans z-10 border-t border-slate-800">
-            <div className="flex gap-4 text-xs font-bold items-center">
-              <span className="opacity-60 uppercase">System Context:</span>
-              <span className="text-yellow-400">Academic Year 2026</span>
-              <span className="text-sky-300">Term 1 Node</span>
-            </div>
-            <div className="flex gap-3 text-xs text-slate-400 font-mono items-center">
-              <span className="hidden sm:inline">Ashinaga Uganda Rainbow House © 2026</span>
-              <span className="bg-emerald-500 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded uppercase">EMIS Sync Active</span>
-              <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></div>
-            </div>
+          <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-4 text-xs text-slate-500 no-print">
+            <span>Academic year {scope.year} · Term {scope.term}</span>
+            <span>Records last refreshed {lastDataRefresh || 'not yet'} · National EMIS not connected</span>
           </footer>
 
         </main>
 
       </div>
 
-      {/* Email Gateway Audit & Dispatch Modal */}
-      <EmailGatewayModal
-        isOpen={isEmailGatewayOpen}
-        onClose={() => setIsEmailGatewayOpen(false)}
-        currentTeacher={teacher!}
-      />
       {isProfileModalOpen && selectedProfileStudent && (
         <StudentProfileModal 
           student={selectedProfileStudent}
+          teacher={teacher}
           isOpen={isProfileModalOpen}
           marks={marks}
           onUpdateStudent={handleUpdateStudent}
@@ -1437,50 +1337,17 @@ export default function App() {
           }}
           onOpenReportCard={(student, year, term) => {
             setSelectedReportCardStudent(student);
-            setReportCardInitialYear(year);
-            setReportCardInitialTerm(term);
-            setActiveTab('exams');
+            if(year)scope.setYear(year);
+            if(term)scope.setTerm(term);
+            setActiveTab('reports');
             setExamsSubTab('reports');
             setIsProfileModalOpen(false);
           }}
         />
       )}
 
-      {/* Global Floating Quick Actions Button (FAB) */}
-      {isAdmin && (
-        <QuickActionFAB 
-          onAddStudent={handleQuickAddStudent}
-          onRegisterMark={handleQuickRegisterMark}
-          onGenerateIdCard={handleQuickGenerateIdCard}
-        />
-      )}
-
-      {/* Ergonomic Mobile Bottom Tab Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#06182c] border-t border-[#0f243c] h-16 flex justify-around items-center px-2 shadow-[0_-5px_20px_rgba(0,0,0,0.3)] no-print">
-        {primaryTabs.map((item) => ({ ...item, action: () => handleSetTab(item.id) })).map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id || 
-            (tab.id === 'classes' && activeTab === 'upload') ||
-            (tab.id === 'marks' && activeTab === 'timetable') ||
-            (tab.id === 'reports' && (activeTab === 'graduation' || activeTab === 'idcards'));
-
-          return (
-            <button
-              key={tab.id}
-              onClick={tab.action}
-              className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-center transition-all duration-150 cursor-pointer ${
-                isActive 
-                  ? 'text-[#FF5E4D] font-black' 
-                  : 'text-slate-300 font-bold hover:text-white'
-              }`}
-            >
-              <Icon className={`h-5 w-5 shrink-0 mb-1 ${isActive ? 'text-[#FF5E4D]' : 'text-slate-400'}`} />
-              <span className="text-[10px] tracking-wider uppercase font-sans block leading-none">{tab.name}</span>
-            </button>
-          );
-        })}
-      </div>
 
     </div>
+    </SchoolScopeContext.Provider>
   );
 }

@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { Student, Mark, Teacher, AcademicYear, HistoricalReportCard } from '../types';
 import { getStudentClassForYear, getSubjectsForClass } from '../curriculum';
 import AshinagaLogo from './AshinagaLogo';
+import {useSchoolScope} from '../lib/schoolScope';
 
 interface ReportCardViewProps {
   students: Student[];
@@ -22,6 +23,8 @@ export default function ReportCardView({
   initialYear,
   initialTerm
 }: ReportCardViewProps) {
+  const scope=useSchoolScope();
+  useEffect(()=>{if(initialYear)setActiveYear(initialYear);if(initialTerm)setActiveTerm(initialTerm);},[initialYear,initialTerm]);
   const [activeStudentId, setActiveStudentId] = useState<string>('');
   const [activeTerm, setActiveTerm] = useState<1 | 2 | 3>(initialTerm || 1);
   const [activeYear, setActiveYear] = useState<number>(initialYear || 2026);
@@ -429,7 +432,7 @@ export default function ReportCardView({
           <div>
             <select
               value={activeYear}
-              onChange={(e) => setActiveYear(Number(e.target.value))}
+              onChange={(e) => {setActiveYear(Number(e.target.value));scope.setYear(Number(e.target.value));}}
               className={`px-3.5 py-2.5 border-2 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all font-black cursor-pointer ${
                 isYearClosed ? 'border-amber-300 text-amber-900 bg-amber-50/50' : 'border-slate-200 text-slate-800'
               }`}

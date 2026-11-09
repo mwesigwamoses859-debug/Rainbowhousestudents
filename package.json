@@ -11,7 +11,9 @@
     "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
     "build:worker": "vite build",
     "cf:migrate": "wrangler d1 migrations apply rainbow-house-students-db --remote",
-    "cf:deploy": "npm run build:worker && wrangler deploy"
+    "cf:deploy": "npm run build:worker && wrangler deploy",
+    "dev:preview": "node scripts/preview.mjs",
+    "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

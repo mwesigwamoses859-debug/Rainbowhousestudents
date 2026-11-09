@@ -20,6 +20,7 @@ import HistoricalCensusArchive from './HistoricalCensusArchive';
 
 interface SchoolOperationsCenterProps {
   teacher: Teacher;
+  initialSection?: Section;
   students?: Student[];
   marks?: Mark[];
 }
@@ -31,8 +32,8 @@ const authHeaders = (teacher: Teacher, json = false) => ({
   Authorization: `Bearer ${teacher.authToken || ''}`,
 });
 
-export default function SchoolOperationsCenter({ teacher, students = [], marks = [] }: SchoolOperationsCenterProps) {
-  const [section, setSection] = useState<Section>('assessment');
+export default function SchoolOperationsCenter({ teacher, students = [], marks = [], initialSection = 'assessment' }: SchoolOperationsCenterProps) {
+  const [section, setSection] = useState<Section>(initialSection);
   const [settings, setSettings] = useState({
     botWeight: 20,
     motWeight: 30,

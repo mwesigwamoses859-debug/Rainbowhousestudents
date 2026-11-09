@@ -7,12 +7,12 @@
   --font-serif: "Playfair Display", serif;
 
   /* Ultra Rounded Corners throughout the application */
-  --radius-sm: 0.5rem;
-  --radius-md: 0.875rem;
-  --radius-lg: 1.25rem;
-  --radius-xl: 1.75rem;
-  --radius-2xl: 2.25rem;
-  --radius-3xl: 3rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.25rem;
 
   /* Redefining color palette with highly vibrant, playful and high-contrast hues */
   --color-indigo-50: #eef2ff;
@@ -123,3 +123,16 @@ button, .btn-bounce {
   }
 }
 
+
+/* Compact school workspace */
+.workspace-page { padding: 1.25rem; max-width: 1440px; margin-inline: auto; }
+.panel { background: white; border: 1px solid #e2e8f0; border-radius: .75rem; box-shadow: 0 1px 2px rgb(15 23 42 / .025); }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid #f1f5f9; font-size: 1rem; font-weight: 600; color: #0f172a; }
+.primary-button,.secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; padding: .6rem .9rem; border-radius: .5rem; font-size: .875rem; font-weight: 600; cursor: pointer; min-height: 2.5rem; }
+.primary-button { color: white; background: #0b2d59; border: 1px solid #0b2d59; }
+.primary-button:hover { background: #164877; }
+.secondary-button { color: #334155; background: white; border: 1px solid #cbd5e1; }
+.secondary-button:hover { background: #f8fafc; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.scope-select { display: block; margin-top: .25rem; min-width: 7rem; padding: .4rem .6rem; border: 1px solid #cbd5e1; border-radius: .4rem; background: white; color: #334155; font-size: .875rem; }
+@media(max-width: 640px) { .workspace-page { padding: 1rem; } main > div.p-8, #mark_entry_view, #attendance_support_view { padding: 1rem; } .scope-filters > span { display: none; } .scope-filters { padding: .65rem 1rem; gap: .65rem; } .scope-select { min-width: 5.5rem; } }

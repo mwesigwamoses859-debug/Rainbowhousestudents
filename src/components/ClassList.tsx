@@ -27,6 +27,8 @@ import { checkNameSimilarity } from '../utils/nameSimilarity';
 import { evaluateScholarshipEligibility } from '../utils/scholarshipEligibility';
 import AshinagaLogo from './AshinagaLogo';
 import StudentQrCodeModal from './StudentQrCodeModal';
+import PupilRegistrationForm from './PupilRegistrationForm';
+import { useSchoolScope } from '../lib/schoolScope';
 
 interface ClassListProps {
   students: Student[];
@@ -61,10 +63,10 @@ export default function ClassList({
     ? ['P.1', 'P.2', 'P.3', 'P.4', 'P.5', 'P.6', 'P.7']
     : teacherClasses;
   
+  const scope = useSchoolScope();
   // States
-  const [selectedClass, setSelectedClass] = useState<ClassName>(
-    teacherClasses && teacherClasses.length > 0 && !isAdmin ? teacherClasses[0] : 'P.1'
-  );
+  const selectedClass = scope.className !== 'all' && classesList.includes(scope.className) ? scope.className : classesList[0] || 'P.1';
+  const setSelectedClass=(value:ClassName)=>scope.setClassName(value);
   const [searchQuery, setSearchQuery] = useState('');
   const [genderFilter, setGenderFilter] = useState<'All' | 'Male' | 'Female'>('All');
   const [scholarshipFilter, setScholarshipFilter] = useState<'All' | 'Yes' | 'No' | 'Eligible'>('All');
@@ -87,8 +89,7 @@ export default function ClassList({
   // Auto-open Add Student modal when triggered from Quick Actions FAB
   useEffect(() => {
     if (autoOpenAddModal) {
-      setEditingStudent(null);
-      setShowFormModal(true);
+      handleOpenAddModal();
       if (onCloseAutoOpenAddModal) {
         onCloseAutoOpenAddModal();
       }
@@ -317,7 +318,7 @@ export default function ClassList({
       surname: '',
       otherNames: '',
       gender: 'Male',
-      dateOfBirth: '2015-01-01',
+      dateOfBirth: '',
       className: selectedClass,
       yearOfEntry: new Date().getFullYear(),
       photo: '',
@@ -477,7 +478,7 @@ export default function ClassList({
           <AshinagaLogo size={50} className="shrink-0 bg-white p-1 rounded-xl shadow-xs border border-slate-100" />
           <div>
             <h1 className="font-display text-2xl font-black text-slate-800">Student Database</h1>
-            <p className="text-xs text-slate-400 mt-1">Manage and view pupil details separately across classes P.1 to P.7</p>
+            <p className="text-xs text-slate-400 mt-1">Manage pupil records, guardian contacts and class lists.</p>
           </div>
         </div>
         
@@ -937,315 +938,14 @@ export default function ClassList({
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-2xl border border-slate-100 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl relative font-sans">
             <button
+              aria-label="Close pupil registration"
               onClick={() => setShowFormModal(false)}
               className="absolute top-4 right-4 p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-lg transition-colors cursor-pointer"
             >
               <X className="h-5 w-5" />
             </button>
 
-            <form onSubmit={handleFormSubmit} className="p-6 md:p-8 space-y-6">
-              <div className="border-b border-slate-100 pb-4">
-                <h2 className="font-display font-bold text-lg text-slate-800">
-                  {editingStudent ? 'Edit Student Details' : `Register New Pupil to Class ${selectedClass}`}
-                </h2>
-                <p className="text-slate-400 text-xs mt-1">Fill in the student's personal details and guardian contacts.</p>
-              </div>
-
-              {formError && (
-                <div className="p-3 bg-red-50 text-red-700 border border-red-100 rounded-lg text-xs font-medium">
-                  {formError}
-                </div>
-              )}
-
-              {similarityWarning && (
-                <div className={`p-3 border rounded-xl text-xs font-semibold flex items-start gap-2.5 transition-all duration-200 ${
-                  similarityWarning.type === 'exact_class'
-                    ? 'bg-red-50 text-red-800 border-red-200 shadow-sm'
-                    : similarityWarning.type === 'exact_school'
-                    ? 'bg-amber-50/70 text-amber-800 border-amber-200 shadow-sm'
-                    : 'bg-indigo-50 text-indigo-800 border-indigo-200 shadow-sm'
-                }`}>
-                  <span className="text-base mt-0.5 leading-none">⚠️</span>
-                  <div className="space-y-1">
-                    <p className="font-extrabold">{similarityWarning.message}</p>
-                    {similarityWarning.matchStudent && (
-                      <div className="text-[10px] opacity-90 font-mono flex gap-x-2 flex-wrap">
-                        <span>Student ID: {similarityWarning.matchStudent.id}</span>
-                        <span>•</span>
-                        <span>Guardian: {similarityWarning.matchStudent.guardianName || 'N/A'}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Form Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Surname *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Mukasa"
-                    value={formData.surname}
-                    onChange={(e) => setFormData(prev => ({ ...prev, surname: e.target.value }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Other Names *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. John Bosco"
-                    value={formData.otherNames}
-                    onChange={(e) => setFormData(prev => ({ ...prev, otherNames: e.target.value }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Gender *</label>
-                  <select
-                    value={formData.gender}
-                    onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value as Gender }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Date of Birth *</label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.dateOfBirth}
-                    onChange={(e) => setFormData(prev => ({ ...prev, dateOfBirth: e.target.value }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Class Name *</label>
-                  <select
-                    value={formData.className}
-                    onChange={(e) => setFormData(prev => ({ ...prev, className: e.target.value as ClassName }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
-                  >
-                    {classesList.map(c => (
-                      <option key={c} value={c}>Class {c}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Year of Entry *</label>
-                  <input
-                    type="number"
-                    required
-                    value={formData.yearOfEntry}
-                    onChange={(e) => setFormData(prev => ({ ...prev, yearOfEntry: Number(e.target.value) }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Nansana Zone Residence *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Gganda, Nabweru, Kabulengwa"
-                    value={formData.zoneInNansana}
-                    onChange={(e) => setFormData(prev => ({ ...prev, zoneInNansana: e.target.value }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                {/* Scholarship Toggle */}
-                <div className="flex items-center gap-3.5 h-full mt-5">
-                  <input
-                    type="checkbox"
-                    id="scholarship_checkbox"
-                    checked={formData.hasScholarship}
-                    onChange={(e) => setFormData(prev => ({ ...prev, hasScholarship: e.target.checked }))}
-                    className="h-4.5 w-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                  />
-                  <label htmlFor="scholarship_checkbox" className="text-xs font-semibold text-slate-600 select-none cursor-pointer">
-                    Eligible for Sponsorship / Scholarship ⭐
-                  </label>
-                </div>
-
-                <div className="border-t border-slate-100 pt-4 md:col-span-2">
-                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Guardian & Community Worker Contacts</h3>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Guardian Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Father, Mother, Uncle"
-                    value={formData.guardianName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, guardianName: e.target.value }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Relationship to Child</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Mother, Father, Aunt"
-                    value={formData.guardianRelationship}
-                    onChange={(e) => setFormData(prev => ({ ...prev, guardianRelationship: e.target.value }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Guardian Contact-1 *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. +256 702 445588"
-                    value={formData.guardianContact}
-                    onChange={(e) => setFormData(prev => ({ ...prev, guardianContact: e.target.value }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Guardian Contact-2</label>
-                  <input
-                    type="text"
-                    value={formData.guardianContact2}
-                    onChange={(e) => setFormData(prev => ({ ...prev, guardianContact2: e.target.value }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Community Worker Name</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Namatovu Florence"
-                    value={formData.communityWorker}
-                    onChange={(e) => setFormData(prev => ({ ...prev, communityWorker: e.target.value }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Community Worker Contact</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. +256 772 112233"
-                    value={formData.workerContact}
-                    onChange={(e) => setFormData(prev => ({ ...prev, workerContact: e.target.value }))}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Next of Kin</label>
-                  <input type="text" value={formData.nextOfKin} onChange={(e) => setFormData(prev => ({ ...prev, nextOfKin: e.target.value }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Next of Kin Contact</label>
-                  <input type="text" value={formData.nextOfKinContact} onChange={(e) => setFormData(prev => ({ ...prev, nextOfKinContact: e.target.value }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Number in Household</label>
-                  <input type="number" min="0" value={formData.numberInHousehold} onChange={(e) => setFormData(prev => ({ ...prev, numberInHousehold: Number(e.target.value) }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Deceased</label>
-                  <input type="text" placeholder="e.g. No, Father, Both parents" value={formData.deceased} onChange={(e) => setFormData(prev => ({ ...prev, deceased: e.target.value }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Cause of Death</label>
-                  <input type="text" value={formData.causeOfDeath} onChange={(e) => setFormData(prev => ({ ...prev, causeOfDeath: e.target.value }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">School</label>
-                  <input type="text" value={formData.school} onChange={(e) => setFormData(prev => ({ ...prev, school: e.target.value }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">Scholarship Details</label>
-                  <input type="text" placeholder="e.g. Yes, Full, Partial, Sponsor name" value={formData.scholarshipDetails} onChange={(e) => setFormData(prev => ({ ...prev, scholarshipDetails: e.target.value, hasScholarship: Boolean(e.target.value && !/^no$/i.test(e.target.value)) }))} className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs text-slate-800" />
-                </div>
-
-                {/* Photo upload section */}
-                <div className="md:col-span-2 border-t border-slate-100 pt-4">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Student Photo</label>
-                  <div className="flex flex-col sm:flex-row items-center gap-4 bg-slate-50 p-4 rounded-xl">
-                    <div className="h-16 w-16 rounded-xl bg-slate-200 shrink-0 overflow-hidden border border-slate-200 relative">
-                      {photoPreview ? (
-                        <img src={photoPreview} alt="Preview" className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="h-full w-full flex items-center justify-center text-slate-400 text-xs text-center font-semibold">
-                          No Photo
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 w-full space-y-2 text-center sm:text-left">
-                      <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handlePhotoChange}
-                          className="hidden"
-                          id="photo_file_input"
-                        />
-                        <label
-                          htmlFor="photo_file_input"
-                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700 text-xs font-semibold rounded-lg transition-all cursor-pointer"
-                        >
-                          <Upload className="h-3.5 w-3.5" />
-                          Upload File
-                        </label>
-
-                        <button
-                          type="button"
-                          onClick={startCamera}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
-                        >
-                          <Camera className="h-3.5 w-3.5 text-amber-300" />
-                          Snap Photo with Camera
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-slate-400">PNG, JPEG or live camera snapshot. Automatically saved to profile.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Submit Buttons */}
-              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3.5">
-                <button
-                  type="button"
-                  onClick={() => setShowFormModal(false)}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-semibold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-100 transition-all cursor-pointer font-sans"
-                >
-                  {editingStudent ? 'Save Changes' : 'Register Child'}
-                </button>
-              </div>
-            </form>
+            <PupilRegistrationForm data={formData} setData={setFormData} classes={classesList} editing={!!editingStudent} photoPreview={photoPreview} onPhotoChange={handlePhotoChange} onCamera={startCamera} onSubmit={handleFormSubmit} onCancel={() => setShowFormModal(false)} error={formError} warning={similarityWarning?.message} />
           </div>
         </div>
       )}

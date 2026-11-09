@@ -368,7 +368,7 @@ export default function DocumentGenerator({ students, marks }: DocumentGenerator
                         </div>
                         <div>
                           <span className="text-[9px] text-slate-400 font-extrabold uppercase block">Emergency Contact</span>
-                          <span className="font-bold text-slate-800">{currentStudent.guardianContact || '+256 702 445588'}</span>
+                          <span className="font-bold text-slate-800">{currentStudent.guardianContact || 'Not recorded'}</span>
                         </div>
                         <div>
                           <span className="text-[9px] text-slate-400 font-extrabold uppercase block">Year of Intake</span>
@@ -403,7 +403,7 @@ export default function DocumentGenerator({ students, marks }: DocumentGenerator
               <div className="mt-12 pt-6 border-t border-slate-100 flex items-end justify-between">
                 <div>
                   <p className="text-[9px] text-slate-400 font-mono uppercase">Validated Security Node</p>
-                  <p className="text-[10px] text-slate-600 font-bold uppercase mt-1">EMIS Sync Reference: ASH-{currentStudent?.id.toUpperCase()}</p>
+                  <p className="text-[10px] text-slate-600 font-bold uppercase mt-1">School registry reference: ASH-{currentStudent?.id.toUpperCase()}</p>
                 </div>
 
                 <div className="text-right space-y-1">

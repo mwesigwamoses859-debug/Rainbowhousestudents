@@ -1,4 +1,5 @@
 import { isSubjectForClass } from '../src/curriculum';
+import { handleOperations } from './operations';
 
 type StaffRow = {
   username: string;
@@ -587,10 +588,19 @@ async function api(request: Request, env: Env): Promise<Response> {
   if (request.method === 'POST' && url.pathname === '/api/auth/login') return passwordLogin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/auth/send-code') return sendCode(request, env);
   if (request.method === 'POST' && url.pathname === '/api/auth/verify-code') return verifyCode(request, env);
-  if (request.method === 'GET' && url.pathname === '/api/health') return json({ ok: true, storage: 'D1' });
+  if (request.method === 'GET' && url.pathname === '/api/health') {
+    await env.DB.prepare('SELECT 1 AS connected').first();
+    return json({ ok: true, storage: 'D1', checkedAt: new Date().toISOString(), emis: { configured: false, lastSuccessfulSync: null } });
+  }
 
   const session = await getSession(request, env);
   if (!session) return json({ success: false, message: 'Your session has expired. Please sign in again.' }, 401);
+
+  if (/^\/api\/(backups(?:\/|$)|pupils\/|support$)/.test(url.pathname)) {
+    const response = await handleOperations(request, env, session,
+      isAdministrator(session.role) ? new Set<string>() : await getTeacherAllowedClasses(env, session.sub));
+    if (response) return response;
+  }
 
   if (request.method === 'POST' && url.pathname === '/api/auth/change-password') {
     const body = await readBody(request);
