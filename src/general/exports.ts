@@ -19,7 +19,8 @@ export async function combinedLearnerPdf(
   const font = await pdf.embedFont(StandardFonts.Helvetica),
     bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   let page = pdf.addPage([595.28, 841.89]),
-    y = 790;
+    y = 790,
+    textWidth = student.photo.startsWith("data:image/") ? 400 : 490;
   const safe = (s: string) =>
     String(s)
       .normalize("NFKD")
@@ -34,7 +35,7 @@ export async function combinedLearnerPdf(
     let row = "";
     for (const word of words) {
       const next = row ? `${row} ${word}` : word;
-      if (f.widthOfTextAtSize(next, size) > 490 && row) {
+      if (f.widthOfTextAtSize(next, size) > textWidth && row) {
         if (y < 55) {
           page = pdf.addPage([595.28, 841.89]);
           y = 790;
@@ -68,7 +69,28 @@ export async function combinedLearnerPdf(
   line(`Registration number: ${student.registrationNumber}`, 11, true);
   line(`Learner: ${fullName(student)}`, 11);
   line("Confidential - authorised staff use only", 9);
-  y -= 8;
+  const passport = student.photo.match(
+    /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/,
+  );
+  if (passport) {
+    try {
+      const photo =
+        passport[1] === "png"
+          ? await pdf.embedPng(student.photo)
+          : await pdf.embedJpg(student.photo);
+      const scale = Math.min(70 / photo.width, 90 / photo.height);
+      page.drawImage(photo, {
+        x: 475 + (70 - photo.width * scale) / 2,
+        y: 705,
+        width: photo.width * scale,
+        height: photo.height * scale,
+      });
+    } catch {
+      line("Passport photo: please upload a clear JPEG or PNG", 9);
+    }
+  }
+  textWidth = 490;
+  y = Math.min(y - 8, passport ? 680 : y - 8);
   for (const section of FORM_SECTIONS.filter((s) => s.fields.length)) {
     line(section.title, 12, true);
     for (const field of section.fields) {

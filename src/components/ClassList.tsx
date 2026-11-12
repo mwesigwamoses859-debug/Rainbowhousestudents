@@ -41,6 +41,7 @@ interface ClassListProps {
   onOpenProfile: (student: Student) => void;
   teacherClasses: ClassName[];
   isAdmin: boolean;
+  onRegisterLearner?:(className:ClassName)=>void;
   autoOpenAddModal?: boolean;
   onCloseAutoOpenAddModal?: () => void;
 }
@@ -56,6 +57,7 @@ export default function ClassList({
   onOpenProfile,
   teacherClasses,
   isAdmin,
+  onRegisterLearner,
   autoOpenAddModal,
   onCloseAutoOpenAddModal
 }: ClassListProps) {
@@ -313,6 +315,7 @@ export default function ClassList({
   };
 
   const handleOpenAddModal = () => {
+    if(isAdmin&&onRegisterLearner){onRegisterLearner(selectedClass);return;}
     setEditingStudent(null);
     setFormData({
       surname: '',

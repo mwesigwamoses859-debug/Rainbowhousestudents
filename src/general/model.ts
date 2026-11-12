@@ -236,3 +236,17 @@ export function addDays(date: string, days: number) {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
+
+export type RegisterNavigationRequest =
+  | {
+      key: string;
+      kind: "school-record";
+      schoolStudentId: string;
+      tab?: "Overview" | "Documents";
+    }
+  | {
+      key: string;
+      kind: "registration";
+      terakoya: boolean;
+      className?: string;
+    };

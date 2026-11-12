@@ -2,6 +2,7 @@
 // random signing key. No production credentials, databases or outbound mail.
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { build } from 'esbuild';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { createHmac, randomBytes } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,8 @@ const uniLearner={...careLearner,id:'preview-university-learner',surname:'Univer
 for(const l of [careLearner,uniLearner])await db.prepare('INSERT INTO general_students VALUES (?,?,?,?,?,?,?)').bind(l.id,l.id,null,JSON.stringify(l),1,Date.now(),Date.now()).run();
 const lastSaturday=new Date();lastSaturday.setUTCDate(lastSaturday.getUTCDate()-(lastSaturday.getUTCDay()+1)%7);
 await db.prepare('INSERT INTO general_care_attendance VALUES (?,?,?,?,?,?)').bind(careLearner.id,lastSaturday.toISOString().slice(0,10),'Present','','preview-staff',new Date().toISOString()).run();
+const samplePdf=await PDFDocument.create();const samplePage=samplePdf.addPage();const sampleFont=await samplePdf.embedFont(StandardFonts.Helvetica);samplePage.drawText('SYNTHETIC SCHOOL DOCUMENT - ISOLATED QA',{x:40,y:750,size:14,font:sampleFont});const sampleBytes=await samplePdf.save();
+await db.prepare('INSERT INTO pupil_documents VALUES (?,?,?,?,?,?,?,?)').bind('preview-school-document',pupil.id,'Synthetic school document.pdf','application/pdf',sampleBytes.length,Buffer.from(sampleBytes).toString('base64'),'preview-staff',new Date().toISOString()).run();
 console.log(`Isolated Rainbow House preview ready on port ${previewPort}. Synthetic data only.`);
 process.on('SIGTERM',async()=>{await mf.dispose();process.exit(0);});
 process.on('SIGINT',async()=>{await mf.dispose();process.exit(0);});

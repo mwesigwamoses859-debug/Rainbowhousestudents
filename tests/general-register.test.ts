@@ -284,6 +284,84 @@ test("master register, guardian history, private uploads, Care Program rules and
       ).status,
       403,
     );
+    // Both profiles use the same learner and original file, with role checks.
+    const linkedRecord = await call(`general/students/by-school/${id}`);
+    assert.equal(linkedRecord.status, 200);
+    assert.equal(linkedRecord.data.id, id);
+    assert.equal(
+      (
+        await call(
+          `general/students/by-school/${id}`,
+          "GET",
+          undefined,
+          "teacher",
+        )
+      ).status,
+      403,
+    );
+    const schoolProfile = (await call(`pupils/${id}/overview`)).data;
+    assert.equal(schoolProfile.generalRecord.id, id);
+    const sharedFile = schoolProfile.documents.find(
+      (d: any) => d.id === `general:${upload.data.id}`,
+    );
+    assert.ok(sharedFile);
+    assert.equal(sharedFile.source, "general");
+    const download = async (path: string, sub = "admin") => {
+      const response = await mf.dispatchFetch(
+        `https://example.test/api/${path}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token(sub, sub === "admin" ? "Headteacher" : "Subject Teacher")}`,
+          },
+        },
+      );
+      return { status: response.status, text: await response.text() };
+    };
+    assert.equal(
+      (
+        await download(
+          `pupils/${id}/documents/${encodeURIComponent(sharedFile.id)}`,
+        )
+      ).text,
+      "%PDF-1.4\n% Synthetic only\n%%EOF",
+    );
+    assert.equal(
+      (
+        await download(
+          `pupils/${id}/documents/${encodeURIComponent(sharedFile.id)}`,
+          "teacher",
+        )
+      ).status,
+      403,
+    );
+    const schoolUpload = await call(`pupils/${id}/documents`, "POST", {
+      name: "school-document.pdf",
+      mime: "application/pdf",
+      data: btoa("%PDF-1.4\n% School fixture\n%%EOF"),
+    });
+    assert.equal(schoolUpload.status, 201);
+    const allFiles = (await call(`general/students/${id}/documents`)).data;
+    const originalSchoolFile = allFiles.find(
+      (d: any) => d.id === `school:${schoolUpload.data.id}`,
+    );
+    assert.ok(originalSchoolFile);
+    assert.equal(originalSchoolFile.source, "terakoya");
+    assert.equal(
+      (
+        await download(
+          `general/students/${id}/documents/${encodeURIComponent(originalSchoolFile.id)}`,
+        )
+      ).text,
+      "%PDF-1.4\n% School fixture\n%%EOF",
+    );
+    assert.equal(
+      (
+        await download(
+          `general/students/unknown/documents/${encodeURIComponent(originalSchoolFile.id)}`,
+        )
+      ).status,
+      404,
+    );
     const sat = "2026-11-07";
     r = await call(`general/care/roster?date=${sat}`);
     assert.equal(r.status, 200);
@@ -399,6 +477,29 @@ test("master register, guardian history, private uploads, Care Program rules and
       (await call(`general/students/${id}/care-attendance`)).data.length,
       1,
     );
+    const second = await call("general/students", "POST", {
+      ...fixture,
+      surname: "Different",
+      otherNames: "Pupil",
+      enrolTerakoya: true,
+    });
+    assert.equal(second.status, 201);
+    assert.equal(
+      (
+        await download(
+          `general/students/${second.data.id}/documents/${encodeURIComponent(originalSchoolFile.id)}`,
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await download(
+          `pupils/${second.data.schoolStudentId}/documents/${encodeURIComponent(sharedFile.id)}`,
+        )
+      ).status,
+      404,
+    );
     // Existing school records automatically appear without duplicate master rows.
     const legacy = {
       id: "school-only",
@@ -415,7 +516,7 @@ test("master register, guardian history, private uploads, Care Program rules and
       .bind(legacy.id, JSON.stringify(legacy), 1, 1)
       .run();
     const all = (await call("general/students")).data;
-    assert.equal(all.length, 2);
+    assert.equal(all.length, 3);
     assert.equal(
       all.find((r: any) => r.id === "school-only").intakeType,
       "Continuing learner",
@@ -444,7 +545,7 @@ test("master register, guardian history, private uploads, Care Program rules and
       .bind(uniSchool.id, JSON.stringify(uniSchool), 1, 1)
       .run();
     const linked = (await call("general/students")).data;
-    assert.equal(linked.length, 3);
+    assert.equal(linked.length, 4);
     assert.equal(
       linked.find((r: any) => r.id === university.data.id).schoolStudentId,
       "school-match",

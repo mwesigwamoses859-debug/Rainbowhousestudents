@@ -24,6 +24,7 @@ import {
   fullName,
   ageOn,
   DOCUMENT_CATEGORIES,
+  RegisterNavigationRequest,
 } from "./model";
 import { generalApi } from "./api";
 import RegistrationForm from "./RegistrationForm";
@@ -45,12 +46,18 @@ interface Props {
   teacher: Teacher;
   onNavigate: (tab: string) => void;
   onSchoolDataChange: () => void;
+  onOpenSchoolRecord: (schoolStudentId: string) => Promise<void>;
+  request?: RegisterNavigationRequest | null;
+  onRequestHandled: () => void;
 }
 export default function GeneralRegister({
   section,
   teacher,
   onNavigate,
   onSchoolDataChange,
+  onOpenSchoolRecord,
+  request,
+  onRequestHandled,
 }: Props) {
   const [students, setStudents] = useState<GeneralStudent[]>([]),
     [settings, setSettings] = useState<RegisterSettings>(DEFAULT_SETTINGS),
@@ -67,7 +74,10 @@ export default function GeneralRegister({
       student?: GeneralStudent;
       documents?: GeneralDocument[];
       step?: number;
+      terakoya?: boolean;
+      className?: string;
     } | null>(null),
+    [profileTab, setProfileTab] = useState("Overview"),
     [busy, setBusy] = useState(false),
     [progression, setProgression] = useState<any>(null);
   const api = generalApi(teacher);
@@ -91,6 +101,34 @@ export default function GeneralRegister({
   useEffect(() => {
     void load();
   }, []);
+  useEffect(() => {
+    if (!request || loading) return;
+    let cancelled = false;
+    if (request.kind === "registration") {
+      setEditing({ terakoya: request.terakoya, className: request.className });
+      onRequestHandled();
+    } else {
+      api<GeneralStudent>(
+        `students/by-school/${encodeURIComponent(request.schoolStudentId)}`,
+      )
+        .then((s) => {
+          if (!cancelled) {
+            setProfileTab(request.tab || "Overview");
+            setSelected(s);
+            setError("");
+          }
+        })
+        .catch((e) => {
+          if (!cancelled) setError(e.message);
+        })
+        .finally(() => {
+          if (!cancelled) onRequestHandled();
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [request?.key, loading]);
   const zones = Array.from(
     new Set(students.map((s) => s.zone).filter(Boolean)),
   ).sort();
@@ -119,6 +157,7 @@ export default function GeneralRegister({
   const open = async (id: string) => {
     try {
       setError("");
+      setProfileTab("Overview");
       setSelected(
         await api<GeneralStudent>(`students/${encodeURIComponent(id)}`),
       );
@@ -777,8 +816,10 @@ export default function GeneralRegister({
           student={selected}
           teacher={teacher}
           onClose={() => setSelected(null)}
-          onEdit={(documents, step) =>
-            setEditing({ student: selected, documents, step })
+          initialTab={profileTab}
+          onOpenSchoolRecord={onOpenSchoolRecord}
+          onEdit={(documents, step, terakoya) =>
+            setEditing({ student: selected, documents, step, terakoya })
           }
         />
       )}{" "}
@@ -788,6 +829,8 @@ export default function GeneralRegister({
           student={editing.student}
           documents={editing.documents}
           initialStep={editing.step}
+          initialTerakoya={editing.terakoya}
+          initialClassName={editing.className}
           onClose={() => setEditing(null)}
           onSaved={saved}
         />

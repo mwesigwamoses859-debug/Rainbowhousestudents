@@ -1,3 +1,4 @@
+import {PUPIL_DOCUMENT_TABLE,schoolDocuments,schoolDocument} from './learner-documents';
 import { ensureGeneralSchema } from './general-register';
 import { RECOVERY_TABLES, Snapshot, encryptSnapshot, decryptSnapshot, quoteIdentifier, recoveryInsertPlans, schemaColumns } from './recovery';
 
@@ -11,7 +12,7 @@ export const OPERATIONS_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS school_backup_chunks (backup_id TEXT NOT NULL, part INTEGER NOT NULL, content TEXT NOT NULL, PRIMARY KEY (backup_id, part))`,
   `CREATE TABLE IF NOT EXISTS school_backup_state (id INTEGER PRIMARY KEY CHECK (id=1), last_attempt TEXT, last_error TEXT)`,
   `CREATE TABLE IF NOT EXISTS pupil_support_notes (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, note TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS pupil_documents (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, data TEXT NOT NULL, uploaded_by TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  PUPIL_DOCUMENT_TABLE,
   `CREATE TABLE IF NOT EXISTS support_records (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, payload TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL)`,
 ];
 const initialized = new WeakSet<object>();
@@ -149,9 +150,11 @@ export async function handleOperations(request: Request, env: RecoveryEnv, sessi
     const attendance = await env.DB.prepare('SELECT date,status,recorded_by AS recordedBy FROM attendance WHERE student_id=? ORDER BY date DESC').bind(pupilId).all();
     const reports = await env.DB.prepare('SELECT id,academic_year,term,class_name,average_score,division FROM historical_report_cards WHERE student_id=? ORDER BY academic_year DESC,term DESC').bind(pupilId).all();
     const notes = admin(session) ? await env.DB.prepare('SELECT id,note,created_by,created_at FROM pupil_support_notes WHERE student_id=? ORDER BY created_at DESC').bind(pupilId).all() : {results:[]};
-    const documents = admin(session) ? await env.DB.prepare('SELECT id,name,mime,size,uploaded_by,created_at FROM pupil_documents WHERE student_id=? ORDER BY created_at DESC').bind(pupilId).all() : {results:[]};
+    if(admin(session))await ensureGeneralSchema(env.DB);
+    const generalRecord=admin(session)?await env.DB.prepare('SELECT id,registration_number AS registrationNumber FROM general_students WHERE school_student_id=?').bind(pupilId).first():null;
+    const documents=admin(session)?await schoolDocuments(env.DB,pupilId):[];
     const support = admin(session) ? await env.DB.prepare('SELECT payload FROM support_records WHERE student_id=? ORDER BY created_at DESC').bind(pupilId).all<{payload:string}>() : {results:[]};
-    return json({attendance:attendance.results,reports:reports.results,notes:notes.results,documents:documents.results,support:support.results.map((r:any)=>JSON.parse(r.payload)),canViewSupport:admin(session)});
+    return json({attendance:attendance.results,reports:reports.results,notes:notes.results,documents,generalRecord,support:support.results.map((r:any)=>JSON.parse(r.payload)),canViewSupport:admin(session)});
   }
   if (!admin(session)) return json({message:'Authorised administration staff only.'},403);
   if (pupilMatch?.[2] === 'notes' && request.method === 'POST') {
@@ -177,7 +180,8 @@ export async function handleOperations(request: Request, env: RecoveryEnv, sessi
     return json({success:true,id},201);
   }
   if (pupilMatch?.[2] === 'documents' && pupilMatch[3] && request.method === 'GET') {
-    const document=await env.DB.prepare('SELECT name,mime,data FROM pupil_documents WHERE id=? AND student_id=?').bind(pupilMatch[3],pupilId).first<any>();
+    await ensureGeneralSchema(env.DB);
+    const document=await schoolDocument(env.DB,pupilId,decodeURIComponent(pupilMatch[3]));
     if (!document) return json({message:'Document not found.'},404);
     return new Response(Uint8Array.from(atob(document.data),c=>c.charCodeAt(0)),{headers:{'Content-Type':document.mime,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(document.name)}`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
   }

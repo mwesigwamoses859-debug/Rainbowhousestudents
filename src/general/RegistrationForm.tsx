@@ -27,6 +27,8 @@ export default function RegistrationForm({
   student,
   documents = [],
   initialStep = 0,
+  initialTerakoya = false,
+  initialClassName,
   onSaved,
   onClose,
 }: {
@@ -34,18 +36,29 @@ export default function RegistrationForm({
   student?: GeneralStudent;
   documents?: GeneralDocument[];
   initialStep?: number;
+  initialTerakoya?: boolean;
+  initialClassName?: string;
   onSaved: (s: GeneralStudent) => void;
   onClose: () => void;
 }) {
-  const [data, setData] = useState<GeneralStudent>(() =>
-    student ? structuredClone(student) : blankStudent(),
-  );
+  const [data, setData] = useState<GeneralStudent>(() => {
+    const record = student ? structuredClone(student) : blankStudent();
+    if (initialTerakoya) {
+      record.school = "Terakoya Primary School";
+      record.inSchool = "Yes";
+      if (!student) {
+        record.educationLevel = "Primary";
+        record.grade = initialClassName || "P.1";
+      }
+    }
+    return record;
+  });
   const [step, setStep] = useState(initialStep),
     [pending, setPending] = useState<Pending[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [camera, setCamera] = useState(false),
-    [enrolTerakoya, setEnrolTerakoya] = useState(false),
+    [enrolTerakoya, setEnrolTerakoya] = useState(initialTerakoya),
     [dirty, setDirty] = useState(false),
     [preview, setPreview] = useState(student?.photo || "");
   const form = useRef<HTMLFormElement>(null);
@@ -235,7 +248,11 @@ export default function RegistrationForm({
               General Register · Ashinaga Uganda
             </p>
             <h2 className="mt-1 text-xl font-bold text-[#0b2d59]">
-              {student ? "Update learner record" : "Register a learner"}
+              {student
+                ? "Update learner record"
+                : initialTerakoya
+                  ? "Register a Terakoya learner"
+                  : "Register a learner"}
             </h2>
             <p className="mt-1 text-xs text-slate-500">
               {data.registrationNumber ||

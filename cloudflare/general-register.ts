@@ -1,4 +1,9 @@
 import {
+  PUPIL_DOCUMENT_TABLE,
+  registrationDocuments,
+  registrationDocument,
+} from "./learner-documents";
+import {
   blankStudent,
   DEFAULT_SETTINGS,
   GeneralStudent,
@@ -18,6 +23,7 @@ type Session = { sub: string; role: string };
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 export const GENERAL_SCHEMA = [
+  PUPIL_DOCUMENT_TABLE,
   `CREATE TABLE IF NOT EXISTS general_students (id TEXT PRIMARY KEY,registration_number TEXT UNIQUE NOT NULL,school_student_id TEXT UNIQUE,payload TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS general_register_counter (id INTEGER PRIMARY KEY CHECK(id=1),value INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS general_guardian_history (id TEXT PRIMARY KEY,student_id TEXT NOT NULL,before_value TEXT,after_value TEXT NOT NULL,reason TEXT NOT NULL,changed_by TEXT NOT NULL,created_at TEXT NOT NULL)`,
@@ -473,6 +479,26 @@ export async function handleGeneralRegister(
       ),
     );
   }
+  const schoolRecordMatch = path.match(
+    /^\/api\/general\/students\/by-school\/([^/]+)$/,
+  );
+  if (schoolRecordMatch && request.method === "GET") {
+    await importSchoolLearners(env.DB);
+    const row = await env.DB.prepare(
+      "SELECT * FROM general_students WHERE school_student_id=?",
+    )
+      .bind(decodeURIComponent(schoolRecordMatch[1]))
+      .first();
+    return row
+      ? json(parseStudent(row))
+      : json(
+          {
+            message:
+              "This school pupil is unavailable. Refresh the Terakoya register.",
+          },
+          404,
+        );
+  }
   const studentMatch = path.match(/^\/api\/general\/students(?:\/([^/]+))?$/);
   if (studentMatch?.[1] && request.method === "GET") {
     const row = await env.DB.prepare(
@@ -600,7 +626,34 @@ export async function handleGeneralRegister(
           { message: "Only primary learners can be enrolled in Terakoya." },
           400,
         );
-      s.schoolStudentId = s.id;
+      const matches = await env.DB.prepare(
+        "SELECT id FROM students WHERE lower(trim(json_extract(payload,'$.surname')))=lower(trim(?)) AND lower(trim(json_extract(payload,'$.otherNames')))=lower(trim(?)) AND json_extract(payload,'$.dateOfBirth')=? LIMIT 2",
+      )
+        .bind(s.surname, s.otherNames, s.dateOfBirth)
+        .all<{ id: string }>();
+      if (matches.results.length > 1)
+        return json(
+          {
+            message:
+              "More than one school record matches. Resolve the duplicate school records before enrolling this learner.",
+          },
+          409,
+        );
+      const schoolId = matches.results[0]?.id || s.id;
+      const linked = await env.DB.prepare(
+        "SELECT id FROM general_students WHERE school_student_id=? AND id<>?",
+      )
+        .bind(schoolId, s.id)
+        .first();
+      if (linked)
+        return json(
+          {
+            message:
+              "This school pupil is already linked to another master record. Open that record instead.",
+          },
+          409,
+        );
+      s.schoolStudentId = schoolId;
       s.school = "Terakoya Primary School";
       s.inSchool = "Yes";
     }
@@ -709,19 +762,17 @@ export async function handleGeneralRegister(
       return json(r.results);
     }
     if (detail[2] === "documents" && !detail[3] && request.method === "GET") {
-      const r = await env.DB.prepare(
-        "SELECT id,student_id,category,name,mime,size,uploaded_by,created_at FROM general_documents WHERE student_id=? ORDER BY created_at",
-      )
-        .bind(id)
-        .all();
-      return json(r.results);
+      return json(
+        await registrationDocuments(env.DB, id, row.school_student_id),
+      );
     }
     if (detail[2] === "documents" && detail[3] && request.method === "GET") {
-      const doc = await env.DB.prepare(
-        "SELECT * FROM general_documents WHERE id=? AND student_id=?",
-      )
-        .bind(detail[3], id)
-        .first<any>();
+      const doc = await registrationDocument(
+        env.DB,
+        id,
+        row.school_student_id,
+        decodeURIComponent(detail[3]),
+      );
       if (!doc) return json({ message: "Document not found." }, 404);
       return new Response(
         Uint8Array.from(atob(doc.data), (c) => c.charCodeAt(0)),

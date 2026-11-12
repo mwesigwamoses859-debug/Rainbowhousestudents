@@ -7,6 +7,8 @@ import {
   Paperclip,
   History,
   Phone,
+  School,
+  ArrowRight,
 } from "lucide-react";
 import {
   GeneralStudent,
@@ -24,13 +26,21 @@ export default function LearnerOverview({
   teacher,
   onEdit,
   onClose,
+  initialTab = "Overview",
+  onOpenSchoolRecord,
 }: {
   student: GeneralStudent;
   teacher: Teacher;
-  onEdit: (documents: GeneralDocument[], step?: number) => void;
+  onEdit: (
+    documents: GeneralDocument[],
+    step?: number,
+    enrolTerakoya?: boolean,
+  ) => void;
   onClose: () => void;
+  initialTab?: string;
+  onOpenSchoolRecord?: (schoolStudentId: string) => Promise<void>;
 }) {
-  const [tab, setTab] = useState("Overview"),
+  const [tab, setTab] = useState(initialTab),
     [documents, setDocuments] = useState<GeneralDocument[]>([]),
     [history, setHistory] = useState<any[]>([]),
     [careHistory, setCareHistory] = useState<any[]>([]),
@@ -84,7 +94,7 @@ export default function LearnerOverview({
       aria-label="Learner overview"
     >
       <div className="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
-        <div className="border-b border-slate-200 p-5">
+        <div className="shrink-0 border-b border-slate-200 p-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex gap-4">
               {student.photo && (
@@ -115,6 +125,52 @@ export default function LearnerOverview({
               <X size={20} />
             </button>
           </div>
+          <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <strong className="text-[#0b2d59]">
+                  {student.schoolStudentId
+                    ? "Linked Terakoya school record"
+                    : "Ashinaga master learner record"}
+                </strong>
+                <p className="mt-1 text-xs text-slate-600">
+                  {student.schoolStudentId
+                    ? "School attendance, marks, reports and registration documents are connected to this learner."
+                    : "One registration follows this learner through primary, secondary and university."}
+                </p>
+              </div>
+              {student.schoolStudentId && onOpenSchoolRecord ? (
+                <button
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    setError("");
+                    try {
+                      await onOpenSchoolRecord(student.schoolStudentId!);
+                    } catch (e: any) {
+                      setError(e.message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <School size={16} />
+                  Open Terakoya record
+                  <ArrowRight size={14} />
+                </button>
+              ) : student.educationLevel === "Primary" &&
+                !student.schoolStudentId ? (
+                <button
+                  className="secondary-button"
+                  onClick={() => onEdit(documents, 2, true)}
+                >
+                  <School size={16} />
+                  Enrol in Terakoya
+                </button>
+              ) : null}
+            </div>
+          </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               className="primary-button"
@@ -134,7 +190,7 @@ export default function LearnerOverview({
           </div>
         </div>
         <div
-          className="flex overflow-x-auto border-b border-slate-200 px-5"
+          className="flex shrink-0 overflow-x-auto border-b border-slate-200 px-5"
           role="tablist"
           aria-label="Learner record sections"
         >
@@ -158,7 +214,7 @@ export default function LearnerOverview({
             </button>
           ))}
         </div>
-        <div className="space-y-5 overflow-y-auto p-5 sm:p-7">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-7">
           {error && (
             <p
               role="alert"
@@ -252,6 +308,9 @@ export default function LearnerOverview({
                       >
                         <FileText size={15} />
                         {d.name} · {Math.ceil(d.size / 1024)} KB
+                        {d.id.startsWith("school:")
+                          ? " · Terakoya document"
+                          : ""}
                         <Download size={13} />
                       </button>
                     ))}

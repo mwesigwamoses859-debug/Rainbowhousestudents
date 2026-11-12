@@ -85,6 +85,16 @@ photo updates synchronise to the linked school record. Family health fields and
 personal registration documents are available only to active Headteacher/DOS
 accounts; they are excluded from Care Program Excel rosters.
 
+Each linked learner has an **Open Terakoya record** link in the General Register
+and an **Open General Register** link in the school pupil overview. Administrator
+school registration opens the same six-step master form with the selected class
+and Terakoya enrolment prefilled. An existing primary master record can be
+enrolled from its overview without creating a second master record. Exact school
+name/date-of-birth matches are reused, and ambiguous matches require review.
+Registration documents are shared by reference between the two workspaces;
+existing school files remain accessible and are included in the combined PDF.
+The passport photo is also placed on the registration PDF when available.
+
 - The six registration steps mirror the supplied Rainbow House form. New intake
   is age 6–14 on the registration date. Continuing learners can be recorded beyond
   that range with a source/reason, and records are retained as learners grow.

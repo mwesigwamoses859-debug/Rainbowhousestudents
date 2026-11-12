@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { Teacher, Student, Mark, ClassName } from './types';
+import type { RegisterNavigationRequest } from './general/model';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import ConnectionStatus from './components/ConnectionStatus';
@@ -66,6 +67,7 @@ export default function App() {
   const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [activeTab, setActiveTab] = useState<string>('general-dashboard');
   const scope = useSchoolScopeState(teacher);
+  const [generalRequest,setGeneralRequest] = useState<RegisterNavigationRequest|null>(null);
   const [mobileNavigation, setMobileNavigation] = useState(false);
   const [operationsInitialSection, setOperationsInitialSection] = useState<'assessment'|'approvals'|'audit'>('assessment');
   const [lastDataRefresh, setLastDataRefresh] = useState('');
@@ -90,6 +92,7 @@ export default function App() {
   const [autoOpenAddStudent, setAutoOpenAddStudent] = useState(false);
 
   const handleQuickAddStudent = () => {
+    if(teacher?.role==='Headteacher'||teacher?.role==='DOS'){startTerakoyaRegistration();return;}
     setActiveTab('classes');
     setStudentsSubTab('list');
     setAutoOpenAddStudent(true);
@@ -110,6 +113,24 @@ export default function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [currentRole, setCurrentRole] = useState<string>('administrator');
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+
+  const startTerakoyaRegistration=(className?:ClassName)=>{
+    setGeneralRequest({key:crypto.randomUUID(),kind:'registration',terakoya:true,className:className||(scope.className==='all'?'P.1':scope.className)});
+    setAutoOpenAddStudent(false);setActiveTab('general-students');
+  };
+  const openGeneralRecord=(pupil:Student,tab:'Overview'|'Documents'='Overview')=>{
+    setIsProfileModalOpen(false);setSelectedProfileStudent(null);
+    setGeneralRequest({key:crypto.randomUUID(),kind:'school-record',schoolStudentId:pupil.id,tab});
+    setActiveTab('general-students');
+  };
+  const openSchoolRecord=async(schoolStudentId:string)=>{
+    const response=await fetch('/api/students',{headers:{Authorization:`Bearer ${teacher?.authToken||''}`}});
+    if(!response.ok)throw new Error('The linked school record could not be loaded. Please sign in again or refresh.');
+    const pupils:Student[]=await response.json();const pupil=pupils.find(s=>s.id===schoolStudentId);
+    if(!pupil)throw new Error('This linked school record is no longer available. The master registration is retained.');
+    setStudents(pupils);if(['P.1','P.2','P.3','P.4','P.5','P.6','P.7'].includes(pupil.className))scope.setClassName(pupil.className);
+    setSelectedProfileStudent(pupil);setIsProfileModalOpen(true);setStudentsSubTab('list');setActiveTab('classes');
+  };
 
   // Report Card selection carrier
   const [selectedReportCardStudent, setSelectedReportCardStudent] = useState<Student | null>(null);
@@ -941,6 +962,7 @@ export default function App() {
                       }}
                       teacherClasses={activeTeacherClasses}
                       isAdmin={isAdmin}
+                      onRegisterLearner={isAdmin?startTerakoyaRegistration:undefined}
                       autoOpenAddModal={autoOpenAddStudent}
                       onCloseAutoOpenAddModal={() => setAutoOpenAddStudent(false)}
                     />
@@ -958,7 +980,7 @@ export default function App() {
 
               {/* 2.5 Subject Portals Tab */}
               
-              {isGeneral && <GeneralRegister section={activeTab} teacher={teacher} onNavigate={handleSetTab} onSchoolDataChange={()=>{fetch('/api/students',{headers:{Authorization:`Bearer ${teacher.authToken||''}`}}).then(r=>r.ok?r.json():null).then(data=>{if(data)setStudents(data);}).catch(()=>{});}}/>}
+              {isGeneral && <GeneralRegister section={activeTab} teacher={teacher} onNavigate={handleSetTab} onOpenSchoolRecord={openSchoolRecord} request={generalRequest} onRequestHandled={()=>setGeneralRequest(null)} onSchoolDataChange={()=>{fetch('/api/students',{headers:{Authorization:`Bearer ${teacher.authToken||''}`}}).then(r=>r.ok?r.json():null).then(data=>{if(data)setStudents(data);}).catch(()=>{});}}/>}
 
               {activeTab === 'subjects' && (
                 <SubjectWorkspaces 
@@ -1339,6 +1361,7 @@ export default function App() {
           isOpen={isProfileModalOpen}
           marks={marks}
           onUpdateStudent={handleUpdateStudent}
+          onOpenGeneralRecord={openGeneralRecord}
           onClose={() => {
             setIsProfileModalOpen(false);
             setSelectedProfileStudent(null);
