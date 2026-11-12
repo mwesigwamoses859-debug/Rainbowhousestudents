@@ -5,6 +5,8 @@ export const RECOVERY_TABLES = [
   'students', 'marks', 'attendance', 'assessment_settings', 'academic_years',
   'mark_submissions', 'promotion_history', 'historical_report_cards',
   'academic_year_archives', 'pupil_support_notes', 'pupil_documents', 'support_records',
+  'general_students', 'general_register_counter', 'general_guardian_history', 'general_documents',
+  'general_settings', 'general_care_days', 'general_care_attendance', 'general_progression_history', 'care_sessions',
 ] as const;
 
 export type Snapshot = { version: 1; createdAt: string; tables: Record<string, Record<string, unknown>[]> };
@@ -71,10 +73,21 @@ export function recoveryInsertPlans(table: string, rows: Record<string, unknown>
   for (const row of rows) {
     if (Object.keys(row).sort().join('|') !== expected) throw new Error('Inconsistent columns in backup.');
     const rowSize = encoder.encode(JSON.stringify(row)).byteLength;
-    if (rowSize > 1400000) throw new Error('A backup row exceeds the safe restoration limit.');
+    if (rowSize > 1900000) throw new Error('A backup row exceeds the safe restoration limit.');
     if (size + rowSize > 500000) flush();
     group.push(row); size += rowSize;
   }
   flush();
   return plans;
+}
+
+// sqlite_master is supported by D1. Parse its CREATE TABLE column definitions
+// without depending on SQLite's table-valued PRAGMA functions (not supported).
+export function schemaColumns(sql:string):string[]{
+ const body=sql.slice(sql.indexOf('(')+1,sql.lastIndexOf(')'));let depth=0,quote='',part='',definitions:string[]=[];
+ for(let i=0;i<body.length;i++){const c=body[i];if(quote){part+=c;if(c===quote){if(body[i+1]===quote){part+=body[++i];}else quote='';}continue;}
+ if(c==='\''||c==='"'||c==='`'){quote=c;part+=c;continue;}if(c==='['){quote=']';part+=c;continue;}if(c==='(')depth++;if(c===')')depth--;if(c===','&&depth===0){definitions.push(part.trim());part='';}else part+=c;}
+ if(part.trim())definitions.push(part.trim());
+ const columns=definitions.filter(d=>! /^(CONSTRAINT|PRIMARY|FOREIGN|UNIQUE|CHECK)\b/i.test(d)).map(d=>{const match=d.match(/^(?:"([A-Za-z_][A-Za-z0-9_]*)"|`([A-Za-z_][A-Za-z0-9_]*)`|\[([A-Za-z_][A-Za-z0-9_]*)\]|([A-Za-z_][A-Za-z0-9_]*))\s+/);if(!match)throw new Error('The table schema cannot be safely included in this backup.');return match[1]||match[2]||match[3]||match[4];});
+ if(!columns.length)throw new Error('The table schema has no recoverable columns.');return columns;
 }

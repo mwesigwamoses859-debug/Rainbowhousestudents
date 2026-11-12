@@ -1,5 +1,6 @@
 import { isSubjectForClass } from '../src/curriculum';
 import { handleOperations } from './operations';
+import { handleGeneralRegister, scheduledGeneralProgression } from './general-register';
 
 type StaffRow = {
   username: string;
@@ -596,6 +597,11 @@ async function api(request: Request, env: Env): Promise<Response> {
   const session = await getSession(request, env);
   if (!session) return json({ success: false, message: 'Your session has expired. Please sign in again.' }, 401);
 
+  if (url.pathname.startsWith('/api/general/')) {
+    const response = await handleGeneralRegister(request, env, session);
+    if(response) return response;
+  }
+
   if (/^\/api\/(backups(?:\/|$)|pupils\/|support$)/.test(url.pathname)) {
     const response = await handleOperations(request, env, session,
       isAdministrator(session.role) ? new Set<string>() : await getTeacherAllowedClasses(env, session.sub));
@@ -1091,6 +1097,10 @@ async function api(request: Request, env: Env): Promise<Response> {
       skippedCount: skipped.length
     }, 201);
   }
+  if (url.pathname.startsWith('/api/care-sessions')) {
+    const careStaff = await env.DB.prepare('SELECT role FROM staff WHERE username=? AND active=1').bind(session.sub).first<{role:string}>();
+    if(!careStaff || !isAdministrator(careStaff.role)) return json({message:'Authorised administration staff only.'},403);
+  }
   // Terakoya Care Program API Endpoints
   if (request.method === 'GET' && url.pathname === '/api/care-sessions') {
     try {
@@ -1143,6 +1153,8 @@ async function api(request: Request, env: Env): Promise<Response> {
 
   if (request.method === 'POST' && url.pathname === '/api/care-sessions') {
     try {
+      const clone = await request.clone().json() as any;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(String(clone.date||'')) || new Date(`${clone.date}T12:00:00Z`).getUTCDay()!==6 || !String(clone.title||'').trim()) return json({message:'Enter a title and a valid Saturday date.'},400);
       await env.DB.prepare(`
         CREATE TABLE IF NOT EXISTS care_sessions (
           id TEXT PRIMARY KEY,
@@ -1566,6 +1578,7 @@ async function api(request: Request, env: Env): Promise<Response> {
 }
 
 export default {
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) { ctx.waitUntil(scheduledGeneralProgression(env)); },
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
     try {

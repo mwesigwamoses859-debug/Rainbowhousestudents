@@ -26,7 +26,7 @@ const ReportVerification = lazy(() => import('./components/ReportVerification'))
 import AshinagaLogo from './components/AshinagaLogo';
 const SubjectWorkspaces = lazy(() => import('./components/SubjectWorkspaces'));
 const HistoricalCensusArchive = lazy(() => import('./components/HistoricalCensusArchive'));
-const CareProgram = lazy(() => import('./components/CareProgram'));
+const GeneralRegister = lazy(() => import('./general/GeneralRegister'));
 import { 
   ShieldAlert, 
   BookOpen, 
@@ -64,7 +64,7 @@ export default function App() {
   const systemRoleFor = (staff: Teacher) =>
     staff.role === 'Headteacher' || staff.role === 'DOS' ? 'administrator' : 'class_teacher';
   const [teacher, setTeacher] = useState<Teacher | null>(null);
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>('general-dashboard');
   const scope = useSchoolScopeState(teacher);
   const [mobileNavigation, setMobileNavigation] = useState(false);
   const [operationsInitialSection, setOperationsInitialSection] = useState<'assessment'|'approvals'|'audit'>('assessment');
@@ -204,6 +204,7 @@ export default function App() {
         const parsed = JSON.parse(savedTeacher);
         setTeacher(parsed);
         setCurrentRole(systemRoleFor(parsed));
+        if(systemRoleFor(parsed)!=='administrator')setActiveTab('dashboard');
       } catch (err) {
         localStorage.removeItem('school_sms_teacher');
       }
@@ -261,6 +262,7 @@ export default function App() {
   // Auth Handlers
   const handleLoginSuccess = (loggedInTeacher: Teacher) => {
     setTeacher(loggedInTeacher);
+    setActiveTab(systemRoleFor(loggedInTeacher)==='administrator'?'general-dashboard':'dashboard');
     localStorage.setItem('school_sms_teacher', JSON.stringify(loggedInTeacher));
     setCurrentRole(systemRoleFor(loggedInTeacher));
     setActiveTab('dashboard');
@@ -543,7 +545,8 @@ export default function App() {
 
   // Custom Navigation setter to sync subtabs
   const handleSetTab = (tab: string) => {
-    const permittedTab = !isAdmin && !['dashboard', 'classes', 'careprogram', 'marks', 'attendance', 'reports'].includes(tab)
+    if(tab==='careprogram')tab='general-care';
+    const permittedTab = !isAdmin && !['dashboard', 'classes', 'marks', 'attendance', 'reports'].includes(tab)
       ? 'marks'
       : tab;
     if (permittedTab === 'backup') {setActiveTab('upload');setSettingsSubTab('backup');return;}
@@ -573,6 +576,7 @@ export default function App() {
   }
 
   const isAdmin = teacher.role === 'Headteacher' || teacher.role === 'DOS' || teacher.username === 'admin';
+  const isGeneral = isAdmin && activeTab.startsWith('general-');
   const primaryTabs = isAdmin
     ? [
       { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
@@ -852,7 +856,7 @@ export default function App() {
         {/* Main content area */}
         <main className="flex-1 flex flex-col justify-between min-w-0 overflow-x-hidden relative min-h-[calc(100vh-70px)]">
           
-          <ScopeFilters classes={activeTeacherClasses}/>
+          {!isGeneral && <ScopeFilters classes={activeTeacherClasses}/>}
           {loading ? (
             <div className="flex-1 flex flex-col items-center justify-center p-12 bg-white m-6 rounded-2xl border border-slate-100 shadow-sm">
               <RefreshCw className="h-10 w-10 text-[#0b2d59] animate-spin mb-3.5" />
@@ -954,16 +958,7 @@ export default function App() {
 
               {/* 2.5 Subject Portals Tab */}
               
-              {/* Care Program Tab */}
-              {activeTab === 'careprogram' && (
-                <div className="p-8 space-y-6">
-                  <CareProgram 
-                    students={students}
-                    teacher={teacher!}
-                    isAdmin={isAdmin}
-                  />
-                </div>
-              )}
+              {isGeneral && <GeneralRegister section={activeTab} teacher={teacher} onNavigate={handleSetTab} onSchoolDataChange={()=>{fetch('/api/students',{headers:{Authorization:`Bearer ${teacher.authToken||''}`}}).then(r=>r.ok?r.json():null).then(data=>{if(data)setStudents(data);}).catch(()=>{});}}/>}
 
               {activeTab === 'subjects' && (
                 <SubjectWorkspaces 
@@ -1329,7 +1324,7 @@ export default function App() {
           )}
 
           <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-5 py-4 text-xs text-slate-500 no-print">
-            <span>Academic year {scope.year} · Term {scope.term}</span>
+            <span>{isGeneral?'Ashinaga Uganda · General Register':`Terakoya Primary School · Academic year ${scope.year} · Term ${scope.term}`}</span>
             <span>Records last refreshed {lastDataRefresh || 'not yet'} · National EMIS not connected</span>
           </footer>
 

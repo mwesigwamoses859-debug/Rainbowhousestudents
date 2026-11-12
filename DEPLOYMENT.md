@@ -73,3 +73,60 @@ shown as saved school records.
 Miniflare instance with a random signing key, synthetic pupils and no connection
 to production D1. Its orange test button can simulate failed mark/attendance
 saves. This script is not part of the deployed Worker or frontend build.
+
+## General Register and Terakoya workspaces
+
+The General Register is the master Ashinaga learner record. Terakoya retains its
+school tools, daily school attendance, assessments and reports. Migration 0009 is
+additive and the General Register routes initialise its tables idempotently.
+Existing school pupils are linked once using their original ID. New primary
+registrations can explicitly enrol the learner in Terakoya. Guardian/contact and
+photo updates synchronise to the linked school record. Family health fields and
+personal registration documents are available only to active Headteacher/DOS
+accounts; they are excluded from Care Program Excel rosters.
+
+- The six registration steps mirror the supplied Rainbow House form. New intake
+  is age 6–14 on the registration date. Continuing learners can be recorded beyond
+  that range with a source/reason, and records are retained as learners grow.
+- Guardian and next-of-kin changes require a reason and retain previous details.
+- PDF/JPEG/PNG attachments are limited to 1 MB per file and 10 MB per learner.
+  A missing/requested/not-applicable checklist permits registration before all
+  documents arrive. Camera capture is optional and stops the camera on closing.
+- The combined PDF is generated in the authorised staff browser. It includes the
+  registration data, checklist and original PDF/image attachments. An unreadable
+  or encrypted attachment stops the bundle rather than silently omitting it.
+- Saturday attendance is separate from daily school attendance and activity
+  participation. Unmarked is not present. Distinct saved Saturday visits drive
+  recognition totals. The default rule is a 14-day interval; scheduled-zone,
+  invitation-only and weekly rules can be selected in Progression & rules.
+- A not-due check-in requires a recorded staff override reason. The server
+  validates the rule, Saturday date, future-date restriction and sheet revision.
+  Excel downloads retain red not-due rows and include a conditional formatting
+  rule; the next-Saturday export recomputes eligibility from saved attendance.
+- Attendance drafts are scoped to the staff account and Saturday, kept only in
+  browser session storage for 24 hours. Saves run in small atomic batches, preserve
+  remaining edits after failure and report Unsaved / Saving / Saved / Failed.
+- The existing care timetable, room activities, ground rules and evaluation
+  module is preserved under Care activities & plans. These activity notes are
+  not counted as official Saturday check-in records. Generated fallback sessions
+  and assumed attendance have been removed; saves now require acknowledgement.
+- Encrypted recovery snapshots also cover all General Register tables and the
+  care session archive. Older snapshots without the new tables cannot overwrite
+  a database containing the expanded register. Create a fresh checkpoint after
+  deployment. Large snapshots still use the documented 8 MB recovery limit.
+
+## Annual master progression
+
+Wrangler installs an hourly scheduled trigger (`20 * * * *`, UTC). From January
+1, it advances up to 12 due master study records per invocation, once per learner
+and academic year. Its schedule catches up after downtime and it does not require
+marks or the learner to attend that week. Each learner and the whole programme
+can be paused from progression. An administrator can preview/apply a due batch.
+
+The master sequence is P.1–P.7, S.1–S.6, university Year 1 onward. P.7→S.1,
+S.4→S.5, S.6→university and final university year completion are flagged for
+staff confirmation. Confirm the actual institution/course, then clear the
+transition flag. Unknown university course duration is explicitly recorded as 0;
+set the actual duration to recognise final-year completion. These master study
+moves do not claim an admission or change Terakoya class decisions, marks or
+report-card histories. School class promotion remains in the Terakoya workspace.

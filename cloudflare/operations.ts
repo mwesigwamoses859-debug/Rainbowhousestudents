@@ -1,4 +1,5 @@
-import { RECOVERY_TABLES, Snapshot, encryptSnapshot, decryptSnapshot, quoteIdentifier, recoveryInsertPlans } from './recovery';
+import { ensureGeneralSchema } from './general-register';
+import { RECOVERY_TABLES, Snapshot, encryptSnapshot, decryptSnapshot, quoteIdentifier, recoveryInsertPlans, schemaColumns } from './recovery';
 
 type Session = { sub: string; role: string };
 type RecoveryEnv = Env & { BACKUP_ENCRYPTION_KEY?: string };
@@ -15,9 +16,10 @@ export const OPERATIONS_SCHEMA = [
 ];
 const initialized = new WeakSet<object>();
 export async function ensureOperationsSchema(db: D1Database) {
-  if (initialized.has(db)) return;
+  if (initialized.has(db)) return 0;
   await db.batch(OPERATIONS_SCHEMA.map(sql => db.prepare(sql)));
   initialized.add(db);
+  return OPERATIONS_SCHEMA.length;
 }
 
 async function audit(env: Env, session: Session, action: string, id: string) {
@@ -27,20 +29,33 @@ const keyFor = (env: RecoveryEnv, source: string) => source === 'dedicated' ? en
 const metadata = (row: any) => ({ id: row.id, filename: `${row.id}.aes`, timestamp: row.created_at, size: row.size, recordCount: row.record_count, note: row.note, status: 'complete', encrypted: true, cipher: 'AES-256-GCM', verifiedAt: row.verified_at });
 
 async function createBackup(env: RecoveryEnv, session: Session, note: string) {
-  const available = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all<{ name: string }>();
-  const tables = RECOVERY_TABLES.filter(table => available.results.some(r => r.name === table));
-  const rows = await env.DB.batch(tables.map(table => env.DB.prepare(`SELECT * FROM ${quoteIdentifier(table)} ORDER BY rowid`)));
-  const snapshot: Snapshot = { version: 1, createdAt: new Date().toISOString(), tables: Object.fromEntries(tables.map((table, index) => [table, rows[index].results as Record<string,unknown>[]])) };
+  // Read eligible tables in small compound queries, retaining one row per record.
+  // This keeps the query budget available for the safety checkpoint and restore.
+  const schemas=await env.DB.prepare("SELECT name,sql FROM sqlite_master WHERE type='table'").all<{name:string;sql:string}>();
+  const tables=RECOVERY_TABLES.filter(table=>schemas.results.some(s=>s.name===table));
+  const queries=tables.map(table=>{
+    const columns=schemaColumns(schemas.results.find(s=>s.name===table)!.sql);
+    let record=`json_object(${columns.slice(0,16).map(c=>`'${c}',${quoteIdentifier(c)}`).join(',')})`;
+    for(let i=16;i<columns.length;i+=15)record=`json_set(${record},${columns.slice(i,i+15).map(c=>`'$.${c}',${quoteIdentifier(c)}`).join(',')})`;
+    return `SELECT '${table}' AS source,${record} AS record FROM ${quoteIdentifier(table)}`;
+  });
+  const reads:D1PreparedStatement[]=[];
+  for(let i=0;i<queries.length;i+=5)reads.push(env.DB.prepare(queries.slice(i,i+5).join(' UNION ALL ')));
+  const results=reads.length?await env.DB.batch<{source:string;record:string}>(reads):[];
+  const rows={results:results.flatMap(r=>r.results)};
+  const contents:Snapshot['tables']=Object.fromEntries(tables.map(table=>[table,[]]));
+  for(const row of rows.results)contents[row.source].push(JSON.parse(row.record));
+  const snapshot:Snapshot={version:1,createdAt:new Date().toISOString(),tables:contents};
   const keySource = env.BACKUP_ENCRYPTION_KEY ? 'dedicated' : 'session';
   const sealed = await encryptSnapshot(snapshot, keyFor(env, keySource));
   const id = `backup-${crypto.randomUUID()}`;
-  const count = rows.reduce((total, result) => total + result.results.length, 0);
+  const count = rows.results.length;
   const inserts = [env.DB.prepare('INSERT INTO school_backups (id,created_at,note,size,record_count,iv,checksum,key_source,created_by) VALUES (?,?,?,?,?,?,?,?,?)').bind(id, snapshot.createdAt, note.slice(0,180), sealed.size, count, sealed.iv, sealed.checksum, keySource, session.sub)];
   for (let offset=0, part=0; offset < sealed.content.length; offset += 500000, part++) inserts.push(env.DB.prepare('INSERT INTO school_backup_chunks (backup_id,part,content) VALUES (?,?,?)').bind(id, part, sealed.content.slice(offset, offset+500000)));
   inserts.push(env.DB.prepare('INSERT INTO school_backup_state (id,last_attempt,last_error) VALUES (1,?,NULL) ON CONFLICT(id) DO UPDATE SET last_attempt=excluded.last_attempt,last_error=NULL').bind(snapshot.createdAt));
   inserts.push(env.DB.prepare(`INSERT INTO audit_logs (id,actor_username,actor_role,action,entity_type,entity_id,created_at) VALUES (?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),session.sub,session.role,'BACKUP_CREATED','recovery_or_pupil_record',id,Date.now()));
   await env.DB.batch(inserts);
-  return { id, timestamp: snapshot.createdAt, recordCount: count, queryCost: tables.length + inserts.length + 2 };
+  return { id, timestamp: snapshot.createdAt, recordCount: count, queryCost: reads.length + inserts.length + 2 };
 }
 
 async function readBackup(env: RecoveryEnv, id: string) {
@@ -63,7 +78,8 @@ export async function handleOperations(request: Request, env: RecoveryEnv, sessi
   if (!staff) return json({message:'Your staff account is unavailable. Please sign in again.'},401);
   session = {...session,role:staff.role};
   if (url.pathname.startsWith('/api/backups') && !admin(session)) return json({message:'Administrator access required.'},403);
-  await ensureOperationsSchema(env.DB);
+  let schemaQueryCost=await ensureOperationsSchema(env.DB);
+  if(url.pathname.startsWith('/api/backups')) schemaQueryCost+=await ensureGeneralSchema(env.DB);
 
   if (url.pathname === '/api/backups' && request.method === 'GET') {
     const result = await env.DB.prepare('SELECT id,created_at,note,size,record_count,verified_at FROM school_backups ORDER BY created_at DESC LIMIT 100').all();
@@ -72,13 +88,14 @@ export async function handleOperations(request: Request, env: RecoveryEnv, sessi
   if (url.pathname === '/api/backups/status' && request.method === 'GET') {
     const latest = await env.DB.prepare('SELECT id,created_at,verified_at FROM school_backups ORDER BY created_at DESC LIMIT 1').first();
     const state = await env.DB.prepare('SELECT last_attempt,last_error FROM school_backup_state WHERE id=1').first();
-    return json({ lastSuccessfulBackup: latest, state, keySource: env.BACKUP_ENCRYPTION_KEY ? 'dedicated' : 'session', scope:'Pupil, academic, attendance, support and document records. Staff credentials and audit history are retained during restoration.' });
+    return json({ lastSuccessfulBackup: latest, state, keySource: env.BACKUP_ENCRYPTION_KEY ? 'dedicated' : 'session', scope:'Master learner register, guardian history, Care Program sessions and attendance, school pupil, academic, support and document records. Staff credentials and audit history are retained during restoration.' });
   }
   if (url.pathname === '/api/backups' && request.method === 'POST') {
     try {
       const body = await request.json() as any;
       return json({success:true,...await createBackup(env,session,String(body.note||'Manual recovery checkpoint'))},201);
-    } catch {
+    } catch(error) {
+      console.error('Backup creation failed',error);
       await env.DB.prepare('INSERT INTO school_backup_state (id,last_attempt,last_error) VALUES (1,?,?) ON CONFLICT(id) DO UPDATE SET last_attempt=excluded.last_attempt,last_error=excluded.last_error').bind(new Date().toISOString(),'The last backup failed. Retry or contact your system administrator.').run();
       return json({message:'Backup could not be completed. No restore point was saved. Check server storage and recovery-key configuration.'},500);
     }
@@ -110,7 +127,7 @@ export async function handleOperations(request: Request, env: RecoveryEnv, sessi
     if (plan.length > 32) return json({message:'This recovery requires a larger maintenance operation. Restore a separate copy first; no live records have been changed.'},422);
     // Keep a checkpoint of the current database before the atomic replacement.
     const safeguard = await createBackup(env,session,`Automatic checkpoint before restoring ${row.id}`);
-    if (safeguard.queryCost + plan.length + 6 > 48) return json({message:'A safety checkpoint was saved, but this snapshot is too large for an online restore. Use a separate maintenance copy. Live records were not changed.'},422);
+    if (safeguard.queryCost + plan.length + 6 + schemaQueryCost > 48) return json({message:'A safety checkpoint was saved, but this snapshot is too large for an online restore. Use a separate maintenance copy. Live records were not changed.'},422);
     try { await env.DB.batch(plan); } catch { return json({message:'The recovery transaction failed and was rolled back. Current records are retained; check schema compatibility in a separate copy.'},500); }
     return json({success:true,safeguardBackupId:safeguard.id});
   }

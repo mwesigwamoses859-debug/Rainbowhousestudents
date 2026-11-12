@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   HeartHandshake, 
   Calendar, 
@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { Student, Teacher, CareSession, CareSessionAttendee, CareRoomGroup, CareMood, ClassName } from '../types';
 import AshinagaLogo from './AshinagaLogo';
+import {nextSaturday} from '../general/model';
 
 interface CareProgramProps {
   students: Student[];
@@ -69,11 +70,17 @@ const SATURDAY_TIMETABLE = [
 ];
 
 export default function CareProgram({ students, teacher, isAdmin }: CareProgramProps) {
+  const [saveError,setSaveError]=useState('');
+  const [saveState,setSaveState]=useState('Saved');
+  const saveQueue=useRef(Promise.resolve());
+  const latestUnsaved=useRef<CareSession|null>(null);
   const [sessions, setSessions] = useState<CareSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'roster' | 'timetable' | 'guide' | 'rules' | 'evaluation'>('roster');
   
+  useEffect(()=>{const stop=(e:BeforeUnloadEvent)=>{if(latestUnsaved.current){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',stop);return()=>window.removeEventListener('beforeunload',stop);},[]);
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>('All');
@@ -87,80 +94,45 @@ export default function CareProgram({ students, teacher, isAdmin }: CareProgramP
   // Form state for creating / editing a session
   const [sessionForm, setSessionForm] = useState({
     id: '',
-    date: new Date().toISOString().split('T')[0],
+    date: nextSaturday(),
     title: 'Saturday Care Program',
     cohort: 'Upper primary',
     theme: 'Responsibility – I Can Be Counted On!',
     facilitator: teacher.name || 'Community Worker',
-    staffDelegation: 'Leader: Florence N. | Room 1: David M. | Room 2: Sarah K. | Room 3: John B. | Kitchen: Nakato',
+    staffDelegation: '',
     learningNotes: 'Theme: Responsibility. Energizer "Captain Responsibility", Stop-Think-Choose framework, and drawing My Responsibility Shield.',
     lunchMenu: 'Hot Posho with slow-simmered beans, steamed Doodo greens, fresh ripe bananas, and treated drinking water.',
     playActivities: 'Pass the Responsibility Ball, outdoor football, team skipping rope, and psychosocial circle games.',
     cleaningDuties: 'Compound sweep, wiping desks in Sitting & Talking rooms, washing cups/plates, and zero-litter inspection.',
-    evaluationNotes: 'Survey conducted with Upper Primary pupils. Strong engagement in Stop-Think-Choose discussion.',
-    generalNotes: 'Smooth attendance. Volunteers and community workers collaborated effectively across all 3 stations.',
-    status: 'in-progress' as 'planned' | 'in-progress' | 'completed'
+    evaluationNotes: '',
+    generalNotes: '',
+    status: 'planned' as 'planned' | 'in-progress' | 'completed'
   });
 
   // Fetch care sessions from API
   const fetchSessions = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/care-sessions');
+      const res = await fetch('/api/care-sessions', {headers:{Authorization:`Bearer ${teacher.authToken||''}`}});
+      if(!res.ok)throw new Error('Care activity sessions could not be loaded. Please retry.');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setSessions(data);
           if (!selectedSessionId) {
-            setSelectedSessionId(data[0].id);
+            setSelectedSessionId(data[0]?.id||'');
           }
           return;
         }
       }
     } catch (e) {
-      console.warn('Could not load remote care sessions:', e);
+      setSaveError('Care sessions could not be loaded from the server. Refresh to retry.');
     } finally {
       setLoading(false);
     }
 
-    // Default fallback initial session if none exist
-    const defaultDate = new Date().toISOString().split('T')[0];
-    const initialSession: CareSession = {
-      id: `care-${Date.now()}`,
-      date: defaultDate,
-      title: 'Saturday Care Program – Upper primary',
-      cohort: 'Upper primary',
-      theme: 'Responsibility – I Can Be Counted On!',
-      facilitator: teacher.name || 'Florence Namatovu',
-      staffDelegation: 'Head: Florence Namatovu | Group 1 (Sitting Room): Moses | Group 2 (Talking Room): Grace | Group 3 (Terakoya): Dennis | Kitchen: Joy',
-      learningNotes: 'Objectives: Explain responsibility; identify duties at home, school & community; Stop-Think-Choose; My Responsibility Shield.',
-      lunchMenu: 'Hot Posho, rich bean stew, steamed greens, clean drinking water, and seasonal bananas.',
-      playActivities: 'Captain Responsibility Says!, Pass the Responsibility Ball, dodgeball, and creative shield presentations.',
-      cleaningDuties: 'Sitting room & Talking room swept, Terakoya veranda scrubbed, cups/plates washed, no litter left.',
-      evaluationNotes: '3:45 PM Debrief: Children loved the Responsibility Shield. Group 2 recommended more soft balls for next Saturday.',
-      generalNotes: 'Upper primary attended in high spirits with name tags prominently visible.',
-      status: 'in-progress',
-      attendees: students.map((s, idx) => {
-        const rooms: CareRoomGroup[] = ['Sitting Room', 'Talking Room', 'Outside Terakoya'];
-        return {
-          studentId: s.id,
-          studentName: `${s.surname} ${s.otherNames}`,
-          className: s.className,
-          attended: true,
-          roomGroup: rooms[idx % 3],
-          attendedLearning: true,
-          receivedLunch: true,
-          participatedPlay: true,
-          participatedCleaning: true,
-          surveyCompleted: true,
-          checkoutMood: (['joyful', 'peaceful', 'neutral', 'joyful'][idx % 4] as CareMood),
-          notes: ''
-        };
-      })
-    };
+    // An empty or unavailable register must not manufacture attendance or session reports.
 
-    setSessions([initialSession]);
-    setSelectedSessionId(initialSession.id);
   };
 
   useEffect(() => {
@@ -171,36 +143,35 @@ export default function CareProgram({ students, teacher, isAdmin }: CareProgramP
     return sessions.find(s => s.id === selectedSessionId) || sessions[0] || null;
   }, [sessions, selectedSessionId]);
 
-  // Persist session changes to backend
-  const saveSessionToBackend = async (sessionToSave: CareSession) => {
-    try {
-      await fetch('/api/care-sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sessionToSave)
-      });
-    } catch (e) {
-      console.error('Error saving care session:', e);
-    }
+  // Keep whole-session activity edits ordered and show server acknowledgement.
+  const saveSessionToBackend = (sessionToSave: CareSession) => {
+    latestUnsaved.current=sessionToSave;setSaveState('Saving');setSaveError('');
+    saveQueue.current=saveQueue.current.then(async()=>{
+      try{
+        const response=await fetch('/api/care-sessions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${teacher.authToken||''}`},body:JSON.stringify(sessionToSave)});
+        if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.message||data.error||'Activity session could not be saved.');}
+        if(latestUnsaved.current===sessionToSave){latestUnsaved.current=null;setSaveState('Saved');}
+      }catch(error:any){setSaveState('Failed');setSaveError(error.message+' Keep this page open and retry the save.');}
+    });
   };
 
   // Open modal to create new session
   const handleOpenNewSessionModal = () => {
     setSessionForm({
       id: '',
-      date: new Date().toISOString().split('T')[0],
+      date: nextSaturday(),
       title: 'Saturday Care Program – Upper primary',
       cohort: 'Upper primary',
       theme: 'Responsibility – I Can Be Counted On!',
       facilitator: teacher.name || 'Community Worker',
-      staffDelegation: 'Leader: Florence | Room 1: Sitting Room | Room 2: Talking Room | Room 3: Outside Terakoya',
+      staffDelegation: '',
       learningNotes: 'Responsibility concept, Stop-Think-Choose steps, and My Responsibility Shield drawing.',
       lunchMenu: 'Hot Posho, bean stew, steamed greens, and fresh bananas.',
       playActivities: 'Captain Responsibility Says!, Pass the Ball, outdoor sports, and circle pledge.',
       cleaningDuties: 'Compound sweep, room tidying, washing plates/cups, and hygiene inspection.',
-      evaluationNotes: 'Survey findings and staff debriefing notes.',
+      evaluationNotes: '',
       generalNotes: '',
-      status: 'in-progress'
+      status: 'planned'
     });
     setShowSessionModal(true);
   };
@@ -307,8 +278,9 @@ export default function CareProgram({ students, teacher, isAdmin }: CareProgramP
   const handleDeleteSession = async (id: string) => {
     if (!confirm('Are you sure you want to remove this Care Program session record?')) return;
     try {
-      await fetch(`/api/care-sessions/${id}`, { method: 'DELETE' });
-    } catch (e) {}
+      const response=await fetch(`/api/care-sessions/${id}`, { method: 'DELETE',headers:{Authorization:`Bearer ${teacher.authToken||''}`} });
+      if(!response.ok)throw new Error('Activity session could not be removed.');
+    } catch (e:any) {setSaveError(e.message);return;}
     const updated = sessions.filter(s => s.id !== id);
     setSessions(updated);
     if (selectedSessionId === id && updated.length > 0) {
@@ -339,8 +311,6 @@ export default function CareProgram({ students, teacher, isAdmin }: CareProgramP
         updatedRecord.participatedCleaning = false;
         updatedRecord.surveyCompleted = false;
         updatedRecord.checkoutMood = '';
-      } else if (field !== 'attended' && value === true && !updatedRecord.attended) {
-        updatedRecord.attended = true;
       }
 
       updatedAttendees[existingAttendeeIndex] = updatedRecord;
@@ -350,7 +320,7 @@ export default function CareProgram({ students, teacher, isAdmin }: CareProgramP
         studentId,
         studentName: student ? `${student.surname} ${student.otherNames}` : 'Unknown',
         className: student?.className,
-        attended: field === 'attended' ? value : true,
+        attended: field === 'attended' ? value : false,
         roomGroup: field === 'roomGroup' ? value : 'Sitting Room',
         attendedLearning: field === 'attendedLearning' ? value : false,
         receivedLunch: field === 'receivedLunch' ? value : false,
@@ -525,6 +495,7 @@ export default function CareProgram({ students, teacher, isAdmin }: CareProgramP
 
   return (
     <div id="care_program_container" className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto font-sans">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm"><span role="status">Activity session: {saveState}</span>{saveError&&<p role="alert" className="text-red-800">{saveError}</p>}{saveState==='Failed'&&<button className="secondary-button" onClick={()=>{if(latestUnsaved.current)saveSessionToBackend(latestUnsaved.current);}}>Retry session save</button>}</div>
       
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-[#032b5e] via-[#094074] to-[#1d2d44] text-white rounded-3xl p-6 md:p-8 shadow-xl relative overflow-hidden">

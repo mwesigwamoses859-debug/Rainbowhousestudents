@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { build } from 'esbuild';
-import { encryptSnapshot } from '../cloudflare/recovery.ts';
+import { encryptSnapshot, RECOVERY_TABLES } from '../cloudflare/recovery.ts';
 
 const secret='isolated-test-recovery-secret-not-a-production-value';
 const token=(sub:string,role:string)=>{const payload=Buffer.from(JSON.stringify({sub,role,exp:Date.now()+3600000})).toString('base64url');return `${payload}.${createHmac('sha256',secret).update(payload).digest('hex')}`;};
@@ -67,7 +67,7 @@ test('authenticated backup, integrity validation, atomic restore and private pup
     assert.equal('data' in overview.documents[0],false);
     // A validly encrypted but structurally incomplete row must roll back all
     // live-table deletes when a database constraint rejects its restoration.
-    const broken=await encryptSnapshot({version:1,createdAt:new Date().toISOString(),tables:{students:[{id:'broken'}],marks:[],attendance:[],assessment_settings:[],academic_years:[],mark_submissions:[],promotion_history:[],historical_report_cards:[],academic_year_archives:[],pupil_support_notes:[],pupil_documents:[],support_records:[]}},secret);
+    const broken=await encryptSnapshot({version:1,createdAt:new Date().toISOString(),tables:{...Object.fromEntries(RECOVERY_TABLES.map(t=>[t,[]])),students:[{id:'broken'}]}},secret);
     const brokenId='backup-00000000-0000-0000-0000-000000000000';
     await db.prepare('INSERT INTO school_backups (id,created_at,note,size,record_count,iv,checksum,key_source,created_by) VALUES (?,?,?,?,?,?,?,?,?)').bind(brokenId,new Date().toISOString(),'Constraint rollback fixture',broken.size,1,broken.iv,broken.checksum,'session','admin').run();
     await db.prepare('INSERT INTO school_backup_chunks VALUES (?,?,?)').bind(brokenId,0,broken.content).run();
